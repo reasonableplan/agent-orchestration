@@ -138,14 +138,14 @@ describe('DirectorAgent', () => {
 
   // ===== handleUserInput =====
 
-  it('handles create_epic action from Claude', async () => {
+  it('handles create_epic action from Claude with named task ids', async () => {
     mockClaude = createMockClaude({
       action: 'create_epic',
       title: 'Login Feature',
       description: 'Implement login',
       tasks: [
-        { title: 'Create branch', agent: 'git', description: 'Branch for login', dependencies: [] },
-        { title: 'Backend API', agent: 'backend', description: 'Login endpoint', dependencies: [0] },
+        { id: 'branch', title: 'Create branch', agent: 'git', description: 'Branch for login', dependencies: [] },
+        { id: 'api', title: 'Backend API', agent: 'backend', description: 'Login endpoint', dependencies: ['branch'] },
       ],
     });
     agent = new DirectorAgent(deps, { claudeClient: mockClaude });
@@ -160,6 +160,13 @@ describe('DirectorAgent', () => {
     }));
     expect(stateStore.createTask).toHaveBeenCalledTimes(2);
     expect(gitService.createIssue).toHaveBeenCalledTimes(2);
+
+    // 두 번째 issue의 body에 Epic 컨텍스트와 의존성 정보가 포함되어야 함
+    const secondCall = vi.mocked(gitService.createIssue).mock.calls[1][0] as { body: string; dependencies: number[] };
+    expect(secondCall.body).toContain('**Epic:** Login Feature');
+    expect(secondCall.body).toContain('**Depends on:** #101');
+    expect(secondCall.dependencies).toEqual([101]); // branch task의 issue number
+
     expect(gitService.moveIssueToColumn).toHaveBeenCalledWith(expect.any(Number), 'Ready');
     expect(stateStore.updateEpic).toHaveBeenCalledWith(expect.any(String), { status: 'active' });
     expect(messageBus.publish).toHaveBeenCalledWith(expect.objectContaining({
@@ -243,6 +250,84 @@ describe('DirectorAgent', () => {
 
   // ===== Review Handler =====
 
+  it('calls Claude review on successful task and approves', async () => {
+    // mockClaude의 chatJSON이 handleUserInput + reviewWithClaude 모두에서 호출됨
+    // 첫 호출은 beforeEach default, 두 번째는 review
+    const reviewClaude = {
+      chatJSON: vi.fn()
+        .mockResolvedValue({ data: { approved: true, reason: 'Looks good' }, usage: { inputTokens: 50, outputTokens: 20 } }),
+    };
+    agent = new DirectorAgent(deps, { claudeClient: reviewClaude });
+
+    vi.mocked(stateStore.getTask).mockResolvedValueOnce(
+      makeTask({ id: 'task-gh-50', title: 'API endpoint', description: 'Build login API', githubIssueNumber: 50 }),
+    );
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await (agent as never as { onReviewRequest: (m: Message) => Promise<void> })
+      .onReviewRequest(makeReviewMessage('task-gh-50', true));
+
+    // Claude review가 호출되었는지 확인
+    expect(reviewClaude.chatJSON).toHaveBeenCalledWith(
+      expect.stringContaining('code reviewer'),
+      expect.stringContaining('API endpoint'),
+    );
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Approved task'));
+    // 승인 시 Done으로 이동 + 의존성 체인 트리거
+    expect(stateStore.updateTask).toHaveBeenCalledWith('task-gh-50', expect.objectContaining({
+      status: 'done', boardColumn: 'Done',
+    }));
+    expect(gitService.moveIssueToColumn).toHaveBeenCalledWith(50, 'Done');
+    consoleSpy.mockRestore();
+  });
+
+  it('retries task when Claude review rejects', async () => {
+    const reviewClaude = {
+      chatJSON: vi.fn()
+        .mockResolvedValue({ data: { approved: false, reason: 'Missing tests' }, usage: { inputTokens: 50, outputTokens: 20 } }),
+    };
+    agent = new DirectorAgent(deps, { claudeClient: reviewClaude });
+
+    vi.mocked(stateStore.getTask).mockResolvedValueOnce(
+      makeTask({ id: 'task-gh-50', retryCount: 0, githubIssueNumber: 50 }),
+    );
+
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await (agent as never as { onReviewRequest: (m: Message) => Promise<void> })
+      .onReviewRequest(makeReviewMessage('task-gh-50', true));
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Review rejected'));
+    expect(stateStore.updateTask).toHaveBeenCalledWith('task-gh-50', expect.objectContaining({
+      retryCount: 1, status: 'ready', boardColumn: 'Ready',
+    }));
+    consoleSpy.mockRestore();
+  });
+
+  it('auto-approves when Claude review call fails', async () => {
+    const reviewClaude = {
+      chatJSON: vi.fn().mockRejectedValue(new Error('API unavailable')),
+    };
+    agent = new DirectorAgent(deps, { claudeClient: reviewClaude });
+
+    vi.mocked(stateStore.getTask).mockResolvedValueOnce(
+      makeTask({ id: 'task-gh-50', githubIssueNumber: 50 }),
+    );
+
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await (agent as never as { onReviewRequest: (m: Message) => Promise<void> })
+      .onReviewRequest(makeReviewMessage('task-gh-50', true));
+
+    // 리뷰 실패 시 자동 승인 (작업 차단 방지) → Done으로 이동
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('auto-approving'));
+    expect(stateStore.updateTask).toHaveBeenCalledWith('task-gh-50', expect.objectContaining({
+      status: 'done', boardColumn: 'Done',
+    }));
+    expect(gitService.moveIssueToColumn).toHaveBeenCalledWith(50, 'Done');
+    consoleSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
   it('retries failed task when under max retries', async () => {
     vi.mocked(stateStore.getTask).mockResolvedValueOnce({
       id: 'task-gh-50', retryCount: 1, githubIssueNumber: 50,
@@ -257,7 +342,7 @@ describe('DirectorAgent', () => {
     expect(gitService.moveIssueToColumn).toHaveBeenCalledWith(50, 'Ready');
   });
 
-  it('does not retry when max retries exceeded', async () => {
+  it('marks task as failed when max retries exceeded', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(stateStore.getTask).mockResolvedValueOnce({
       id: 'task-gh-50', retryCount: 3, githubIssueNumber: 50,
@@ -266,7 +351,11 @@ describe('DirectorAgent', () => {
     await (agent as never as { onReviewRequest: (m: Message) => Promise<void> })
       .onReviewRequest(makeReviewMessage('task-gh-50', false));
 
-    expect(stateStore.updateTask).not.toHaveBeenCalled();
+    // 최대 재시도 초과 시 Failed로 마킹
+    expect(stateStore.updateTask).toHaveBeenCalledWith('task-gh-50', expect.objectContaining({
+      status: 'failed', boardColumn: 'Failed',
+    }));
+    expect(gitService.moveIssueToColumn).toHaveBeenCalledWith(50, 'Failed');
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('failed after max retries'));
     consoleSpy.mockRestore();
   });
