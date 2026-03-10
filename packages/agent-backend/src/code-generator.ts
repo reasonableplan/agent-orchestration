@@ -30,6 +30,10 @@ export class CodeGenerator {
     );
     log.info({ inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }, 'Claude usage');
 
+    if (!data || !Array.isArray(data.files) || typeof data.summary !== 'string') {
+      throw new Error('Invalid Claude response shape: missing "files" array or "summary" string');
+    }
+
     return data;
   }
 

@@ -94,7 +94,6 @@ export class ClaudeClient {
     if (msg.includes('timeout') || msg.includes('timed out')) return true;
     if (msg.includes('network') || msg.includes('econnreset') || msg.includes('socket')) return true;
     if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('529')) return true;
-    if (msg.includes('401') || msg.includes('403') || msg.includes('invalid')) return false;
     return false;
   }
 }

@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { createLogger, type GeneratedCode, type Task } from '@agent/core';
 import type { FrontendTaskType } from './task-router.js';
 
@@ -38,6 +38,10 @@ export class CodeGenerator {
       userMessage,
     );
     log.info({ inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }, 'Claude usage');
+
+    if (!data || !Array.isArray(data.files) || typeof data.summary !== 'string') {
+      throw new Error('Invalid Claude response shape: missing "files" array or "summary" string');
+    }
 
     return data;
   }
@@ -153,7 +157,7 @@ Use action "update" for modified files.`,
       const absPath = resolve(resolvedWorkDir, filePath);
 
       // Sandbox: workDir 밖 경로 차단
-      if (!absPath.startsWith(resolvedWorkDir)) continue;
+      if (!absPath.startsWith(resolvedWorkDir + sep)) continue;
 
       try {
         const content = await readFile(absPath, 'utf-8');

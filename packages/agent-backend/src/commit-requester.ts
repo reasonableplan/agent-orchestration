@@ -25,13 +25,12 @@ export class CommitRequester {
       throw new Error('No files to commit');
     }
 
-    const epicId = task.epicId ?? 'unknown';
     const fileList = writtenFiles.map((f) => `- \`${f}\``).join('\n');
 
     const issueNumber = await this.gitService.createIssue({
       title: `[GIT] Commit: ${summary}`,
       body: [
-        `**Epic:** ${epicId}`,
+        ...(task.epicId ? [`**Epic:** ${task.epicId}`] : []),
         `**Source Task:** #${task.githubIssueNumber ?? task.id}`,
         '',
         '### Files',
