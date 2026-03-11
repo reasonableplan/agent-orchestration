@@ -15,9 +15,9 @@ export const LOGICAL_H = MAP_ROWS * TILE_SIZE; // 512
 export const CANVAS_W = LOGICAL_W * RENDER_SCALE; // 1536
 export const CANVAS_H = LOGICAL_H * RENDER_SCALE; // 1024
 
-// Character sprite size (LPC standard proportions)
-export const CHAR_W = 24;
-export const CHAR_H = 32;
+// Character sprite size (RPG Maker proportions — 3-head tall)
+export const CHAR_W = 32;
+export const CHAR_H = 48;
 
 // Wall rows (rows 0-4 are wall, 5-15 are floor)
 export const WALL_ROWS = 5;
@@ -154,8 +154,15 @@ export const FURNITURE: FurniturePlacement[] = [
   { type: 'window', col: 3, row: 1, w: 4, h: 3 },
   { type: 'window', col: 9, row: 1, w: 4, h: 3 },
   // Wall posters
-  { type: 'poster-ship', col: 7, row: 2, w: 1, h: 2 },
-  { type: 'poster-code', col: 14, row: 2, w: 1, h: 2 },
+  { type: 'poster-indie', col: 7, row: 1, w: 2, h: 2 },
+  { type: 'poster-jam', col: 13, row: 1, w: 2, h: 2 },
   // Water cooler
   { type: 'cooler', col: 23, row: 12, w: 1, h: 2 },
+  // Arcade machine (left of director area)
+  { type: 'arcade', col: 8, row: 5, w: 2, h: 3 },
+  // Fridge + microwave (left wall area)
+  { type: 'fridge', col: 0, row: 8, w: 1, h: 3 },
+  // Extra plants
+  { type: 'plant', col: 23, row: 5, w: 1, h: 2 },
+  { type: 'plant-small', col: 6, row: 5, w: 1, h: 1 },
 ];

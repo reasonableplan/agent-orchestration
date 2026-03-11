@@ -88,8 +88,8 @@ function hitTest(
 ): string | null {
   // Check agents in reverse Y-order (front-most first)
   const entries = [...animStates.entries()].sort((a, b) => b[1].spring.y - a[1].spring.y);
-  const padX = (CHAR_W + 8) / 2;
-  const padY = CHAR_H + 8;
+  const padX = (CHAR_W + 16) / 2;
+  const padY = CHAR_H + 16;
 
   for (const [id, state] of entries) {
     const cx = state.spring.x;
@@ -191,7 +191,7 @@ function drawSelectionHighlight(
   ctx.lineWidth = 2 * S;
   ctx.globalAlpha = alpha;
   ctx.setLineDash([4 * S, 3 * S]);
-  ctx.strokeRect(x - 16 * S, y - 38 * S, 32 * S, 50 * S);
+  ctx.strokeRect(x - 20 * S, y - 56 * S, 40 * S, 68 * S);
   ctx.setLineDash([]);
   ctx.globalAlpha = 1;
 }
@@ -358,11 +358,12 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
 
           const frame = frames[Math.min(frameIdx, frames.length - 1)];
           // Draw centered at (cx, cy) — character bottom at cy
-          // Cached canvas is (CHAR_W+8)*SCALE wide, (CHAR_H+12)*SCALE tall
+          // Cached canvas is (CHAR_W+16)*SCALE wide, (CHAR_H+16)*SCALE tall
+          // Character drawn at translate(8,12) inside the cache
           ctx.drawImage(
             frame,
-            cx - ((CHAR_W + 8) * RENDER_SCALE) / 2,
-            cy - (CHAR_H + 8) * RENDER_SCALE,
+            cx - ((CHAR_W + 16) * RENDER_SCALE) / 2,
+            cy - (CHAR_H + 12) * RENDER_SCALE,
           );
         }
 
