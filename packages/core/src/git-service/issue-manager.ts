@@ -29,14 +29,15 @@ export class IssueManager {
     }
 
     const { data: issue } = await withRetry(
-      () => this.ctx.octokit.rest.issues.create({
-        owner: this.ctx.owner,
-        repo: this.ctx.repo,
-        title: spec.title,
-        body,
-        labels: spec.labels,
-        milestone: spec.milestone,
-      }),
+      () =>
+        this.ctx.octokit.rest.issues.create({
+          owner: this.ctx.owner,
+          repo: this.ctx.repo,
+          title: spec.title,
+          body,
+          labels: spec.labels,
+          milestone: spec.milestone,
+        }),
       {},
       'createIssue',
     );
@@ -51,14 +52,15 @@ export class IssueManager {
 
   async updateIssue(issueNumber: number, updates: Partial<IssueSpec>): Promise<void> {
     await withRetry(
-      () => this.ctx.octokit.rest.issues.update({
-        owner: this.ctx.owner,
-        repo: this.ctx.repo,
-        issue_number: issueNumber,
-        ...(updates.title && { title: updates.title }),
-        ...(updates.body && { body: updates.body }),
-        ...(updates.labels && { labels: updates.labels }),
-      }),
+      () =>
+        this.ctx.octokit.rest.issues.update({
+          owner: this.ctx.owner,
+          repo: this.ctx.repo,
+          issue_number: issueNumber,
+          ...(updates.title && { title: updates.title }),
+          ...(updates.body && { body: updates.body }),
+          ...(updates.labels && { labels: updates.labels }),
+        }),
       {},
       'updateIssue',
     );
@@ -66,12 +68,13 @@ export class IssueManager {
 
   async closeIssue(issueNumber: number): Promise<void> {
     await withRetry(
-      () => this.ctx.octokit.rest.issues.update({
-        owner: this.ctx.owner,
-        repo: this.ctx.repo,
-        issue_number: issueNumber,
-        state: 'closed',
-      }),
+      () =>
+        this.ctx.octokit.rest.issues.update({
+          owner: this.ctx.owner,
+          repo: this.ctx.repo,
+          issue_number: issueNumber,
+          state: 'closed',
+        }),
       {},
       'closeIssue',
     );
@@ -79,12 +82,13 @@ export class IssueManager {
 
   async addComment(issueNumber: number, body: string): Promise<void> {
     await withRetry(
-      () => this.ctx.octokit.rest.issues.createComment({
-        owner: this.ctx.owner,
-        repo: this.ctx.repo,
-        issue_number: issueNumber,
-        body,
-      }),
+      () =>
+        this.ctx.octokit.rest.issues.createComment({
+          owner: this.ctx.owner,
+          repo: this.ctx.repo,
+          issue_number: issueNumber,
+          body,
+        }),
       {},
       'addComment',
     );
@@ -219,9 +223,7 @@ export class IssueManager {
       { itemId },
     );
 
-    const statusValue = result.node.fieldValues.nodes.find(
-      (fv) => fv.field?.name === 'Status',
-    );
+    const statusValue = result.node.fieldValues.nodes.find((fv) => fv.field?.name === 'Status');
     return statusValue?.name ?? 'Backlog';
   }
 }

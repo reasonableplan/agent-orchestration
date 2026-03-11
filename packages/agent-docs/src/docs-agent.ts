@@ -36,10 +36,12 @@ export class DocsAgent extends BaseAgent {
     };
     super(config, deps);
 
-    const claude = docsConfig.claudeClient ?? new ClaudeClient(
-      { model: config.claudeModel, maxTokens: config.maxTokens, temperature: config.temperature },
-      docsConfig.claudeApiKey,
-    );
+    const claude =
+      docsConfig.claudeClient ??
+      new ClaudeClient(
+        { model: config.claudeModel, maxTokens: config.maxTokens, temperature: config.temperature },
+        docsConfig.claudeApiKey,
+      );
 
     this.docGenerator = new DocGenerator(claude, docsConfig.workDir);
     this.commitRequester = new CommitRequester(deps.gitService);
@@ -74,7 +76,10 @@ export class DocsAgent extends BaseAgent {
   private async handleDocTask(task: Task, taskType: DocsTaskType): Promise<TaskResult> {
     // 1. Claude로 문서 생성
     const generated = await this.docGenerator.generate(task, taskType);
-    this.log.info({ fileCount: generated.files.length, summary: generated.summary }, 'Docs generated');
+    this.log.info(
+      { fileCount: generated.files.length, summary: generated.summary },
+      'Docs generated',
+    );
 
     // 2. analyze 타입은 파일 생성 없이 결과만 반환
     if (taskType === 'analyze') {
@@ -111,7 +116,10 @@ export class DocsAgent extends BaseAgent {
     try {
       await this.commitRequester.requestCommit(task, writtenFiles, generated.summary);
     } catch (error) {
-      this.log.warn({ err: error instanceof Error ? error.message : error }, 'Failed to create commit request');
+      this.log.warn(
+        { err: error instanceof Error ? error.message : error },
+        'Failed to create commit request',
+      );
     }
 
     return {

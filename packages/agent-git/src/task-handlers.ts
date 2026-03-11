@@ -42,7 +42,10 @@ export class TaskHandlers {
 
   async handleBranchTask(task: Task): Promise<TaskResult> {
     if (task.reviewNote) {
-      log.info({ reviewNote: task.reviewNote, attempt: task.retryCount + 1 }, 'Retrying with Director feedback');
+      log.info(
+        { reviewNote: task.reviewNote, attempt: task.retryCount + 1 },
+        'Retrying with Director feedback',
+      );
     }
 
     const branchName = this.extractBranchName(task);
@@ -71,7 +74,10 @@ export class TaskHandlers {
 
   async handleCommitTask(task: Task): Promise<TaskResult> {
     if (task.reviewNote) {
-      log.info({ reviewNote: task.reviewNote, attempt: task.retryCount + 1 }, 'Retrying with Director feedback');
+      log.info(
+        { reviewNote: task.reviewNote, attempt: task.retryCount + 1 },
+        'Retrying with Director feedback',
+      );
     }
 
     const epicId = task.epicId ?? 'unknown';
@@ -89,7 +95,11 @@ export class TaskHandlers {
     const { stdout: statusOut } = await this.gitCli.exec(workDir, 'status', '--porcelain');
     if (!statusOut.trim()) {
       log.info({ title: task.title }, 'Nothing to commit');
-      return { success: true, data: { committed: false, reason: 'nothing-to-commit' }, artifacts: [] };
+      return {
+        success: true,
+        data: { committed: false, reason: 'nothing-to-commit' },
+        artifacts: [],
+      };
     }
 
     await this.gitCli.exec(workDir, 'commit', '-m', message);
@@ -113,7 +123,10 @@ export class TaskHandlers {
 
   async handlePRTask(task: Task): Promise<TaskResult> {
     if (task.reviewNote) {
-      log.info({ reviewNote: task.reviewNote, attempt: task.retryCount + 1 }, 'Retrying with Director feedback');
+      log.info(
+        { reviewNote: task.reviewNote, attempt: task.retryCount + 1 },
+        'Retrying with Director feedback',
+      );
     }
 
     const epicId = task.epicId ?? 'unknown';
@@ -153,15 +166,12 @@ export class TaskHandlers {
     const codeIssues = epicIssues.filter(
       (i) => !i.labels.some((l) => l.startsWith('type:commit') || l.startsWith('type:pr')),
     );
-    const commitIssues = epicIssues.filter((i) =>
-      i.labels.some((l) => l === 'type:commit'),
-    );
+    const commitIssues = epicIssues.filter((i) => i.labels.some((l) => l === 'type:commit'));
 
     const allCodeDone = codeIssues.length > 0 && codeIssues.every((i) => i.column === 'Done');
-    const allCommitsDone = commitIssues.length > 0 && commitIssues.every((i) => i.column === 'Done');
-    const noPRExists = !epicIssues.some((i) =>
-      i.labels.some((l) => l === 'type:pr'),
-    );
+    const allCommitsDone =
+      commitIssues.length > 0 && commitIssues.every((i) => i.column === 'Done');
+    const noPRExists = !epicIssues.some((i) => i.labels.some((l) => l === 'type:pr'));
 
     if (allCodeDone && allCommitsDone && noPRExists) {
       log.info({ epicId }, 'All commits done, triggering PR');

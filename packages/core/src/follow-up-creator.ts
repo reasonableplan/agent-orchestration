@@ -18,10 +18,7 @@ export class FollowUpCreator {
    * FollowUp 목록을 기반으로 후속 이슈를 생성한다.
    * 중복 이슈를 방지하기 위해 제목 기반 검사를 수행한다.
    */
-  async createFollowUps(
-    task: Task,
-    followUps: FollowUp[],
-  ): Promise<number[]> {
+  async createFollowUps(task: Task, followUps: FollowUp[]): Promise<number[]> {
     const createdIssues: number[] = [];
 
     for (const followUp of followUps) {
@@ -51,7 +48,10 @@ export class FollowUpCreator {
       const existingIssues = await this.gitService.getEpicIssues(task.epicId);
       const duplicate = existingIssues.find((i) => i.title === followUp.title);
       if (duplicate) {
-        log.info({ title: followUp.title, existingIssue: duplicate.issueNumber }, 'Skipping duplicate follow-up');
+        log.info(
+          { title: followUp.title, existingIssue: duplicate.issueNumber },
+          'Skipping duplicate follow-up',
+        );
         return null;
       }
     }
@@ -72,7 +72,10 @@ export class FollowUpCreator {
       dependencies: task.githubIssueNumber ? [task.githubIssueNumber] : [],
     });
 
-    log.info({ issueNumber, title: followUp.title, targetAgent: followUp.targetAgent }, 'Follow-up issue created');
+    log.info(
+      { issueNumber, title: followUp.title, targetAgent: followUp.targetAgent },
+      'Follow-up issue created',
+    );
     return issueNumber;
   }
 

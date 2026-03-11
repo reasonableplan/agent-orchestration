@@ -40,27 +40,61 @@ export function detectTaskType(task: Task): FrontendTaskType {
   if (text.includes('test') || text.includes('테스트')) return 'test.create';
 
   // 2. hook (useXxx 패턴은 원본 케이스로 매칭)
-  if (text.includes('hook') || text.includes('훅') || /\buse[A-Z]/.test(original)) return 'hook.create';
+  if (text.includes('hook') || text.includes('훅') || /\buse[A-Z]/.test(original))
+    return 'hook.create';
 
   // 3. store (Zustand 등) — \bstore\b로 restore 등 false positive 방지
-  if (/\bstore\b/.test(text) || text.includes('zustand') || text.includes('state management') || text.includes('상태관리')) return 'store.create';
+  if (
+    /\bstore\b/.test(text) ||
+    text.includes('zustand') ||
+    text.includes('state management') ||
+    text.includes('상태관리')
+  )
+    return 'store.create';
 
   // 4. page vs component (구체적 키워드)
-  if (text.includes('page') || text.includes('페이지') || text.includes('route') || text.includes('라우트')) {
-    return text.includes('modify') || text.includes('수정') || text.includes('변경') ? 'page.modify' : 'page.create';
+  if (
+    text.includes('page') ||
+    text.includes('페이지') ||
+    text.includes('route') ||
+    text.includes('라우트')
+  ) {
+    return text.includes('modify') || text.includes('수정') || text.includes('변경')
+      ? 'page.modify'
+      : 'page.create';
   }
 
-  if (text.includes('component') || text.includes('컴포넌트') || text.includes('modal') || text.includes('widget')) {
-    return text.includes('modify') || text.includes('수정') || text.includes('변경') ? 'component.modify' : 'component.create';
+  if (
+    text.includes('component') ||
+    text.includes('컴포넌트') ||
+    text.includes('modal') ||
+    text.includes('widget')
+  ) {
+    return text.includes('modify') || text.includes('수정') || text.includes('변경')
+      ? 'component.modify'
+      : 'component.create';
   }
 
   // 5. style — 가장 넓은 키워드이므로 마지막에 배치
-  if (text.includes('style') || text.includes('스타일') || text.includes('css') || text.includes('tailwind')) return 'style.generate';
+  if (
+    text.includes('style') ||
+    text.includes('스타일') ||
+    text.includes('css') ||
+    text.includes('tailwind')
+  )
+    return 'style.generate';
 
   return 'unknown';
 }
 
 const VALID_TYPES: Set<string> = new Set([
-  'component.create', 'component.modify', 'page.create', 'page.modify',
-  'hook.create', 'store.create', 'style.generate', 'test.create', 'analyze',
+  'component.create',
+  'component.modify',
+  'page.create',
+  'page.modify',
+  'hook.create',
+  'store.create',
+  'style.generate',
+  'test.create',
+  'analyze',
 ]);

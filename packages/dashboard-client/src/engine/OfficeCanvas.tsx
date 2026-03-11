@@ -42,8 +42,12 @@ function updateSpring(s: SpringState, dt: number): void {
   s.y += s.vy * factor;
 
   // Snap when close enough
-  if (Math.abs(dx) < SNAP_THRESHOLD && Math.abs(dy) < SNAP_THRESHOLD &&
-      Math.abs(s.vx) < SNAP_THRESHOLD && Math.abs(s.vy) < SNAP_THRESHOLD) {
+  if (
+    Math.abs(dx) < SNAP_THRESHOLD &&
+    Math.abs(dy) < SNAP_THRESHOLD &&
+    Math.abs(s.vx) < SNAP_THRESHOLD &&
+    Math.abs(s.vy) < SNAP_THRESHOLD
+  ) {
     s.x = s.targetX;
     s.y = s.targetY;
     s.vx = 0;
@@ -63,9 +67,9 @@ interface AgentAnimState {
 }
 
 const WALK_FRAME_DURATION = 180; // ms per walk frame
-const ARM_FRAME_DURATION = 250;  // ms per arm frame
-const BLINK_INTERVAL = 3500;     // ms between blinks
-const BLINK_DURATION = 150;      // ms blink lasts
+const ARM_FRAME_DURATION = 250; // ms per arm frame
+const BLINK_INTERVAL = 3500; // ms between blinks
+const BLINK_DURATION = 150; // ms blink lasts
 
 function createAgentAnimState(slot: number): AgentAnimState {
   const pos = getAgentPixelPosition(slot, 'idle');
@@ -95,8 +99,12 @@ function hitTest(
     const cx = state.spring.x;
     const cy = state.spring.y;
     // Hit box around character (logical coords)
-    if (logicalX >= cx - padX && logicalX <= cx + padX &&
-        logicalY >= cy - padY && logicalY <= cy + 8) {
+    if (
+      logicalX >= cx - padX &&
+      logicalX <= cx + padX &&
+      logicalY >= cy - padY &&
+      logicalY <= cy + 8
+    ) {
       return id;
     }
   }
@@ -104,7 +112,13 @@ function hitTest(
 }
 
 // ---- Name badge drawing (receives physical coords) ----
-function drawNameBadge(ctx: CanvasRenderingContext2D, x: number, y: number, agentId: string, domain: string) {
+function drawNameBadge(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  agentId: string,
+  domain: string,
+) {
   const label = getAgentLabel(agentId, domain);
   const colors = AGENT_COLORS[domain];
   const accent = colors?.accent ?? '#FFFFFF';
@@ -179,12 +193,7 @@ function drawStatusIndicator(
 }
 
 // ---- Selection highlight (receives physical coords) ----
-function drawSelectionHighlight(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  time: number,
-) {
+function drawSelectionHighlight(ctx: CanvasRenderingContext2D, x: number, y: number, time: number) {
   const S = RENDER_SCALE;
   const alpha = 0.4 + 0.3 * Math.sin(time * 0.004);
   ctx.strokeStyle = '#FFD700';
@@ -232,7 +241,6 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
         animStatesRef.current.set(agent.id, createAgentAnimState(agent.slot));
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Ensure anim states exist for new agents
@@ -345,7 +353,8 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
           if (state.isBlinking) {
             frameIdx = frames.length - 1; // last frame is blink
           } else {
-            const walkFrames = (agent.status === 'delivering' || agent.status === 'searching') ? 4 : 1;
+            const walkFrames =
+              agent.status === 'delivering' || agent.status === 'searching' ? 4 : 1;
             const armFrames = agent.status === 'working' ? 2 : 1;
             if (armFrames > 1) {
               frameIdx = state.armFrame;
@@ -407,8 +416,8 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
         offsetY = (rect.height - renderH) / 2;
       }
       // Convert to logical coords (divide by RENDER_SCALE) for hit testing
-      const canvasX = ((e.clientX - rect.left - offsetX) / renderW) * CANVAS_W / RENDER_SCALE;
-      const canvasY = ((e.clientY - rect.top - offsetY) / renderH) * CANVAS_H / RENDER_SCALE;
+      const canvasX = (((e.clientX - rect.left - offsetX) / renderW) * CANVAS_W) / RENDER_SCALE;
+      const canvasY = (((e.clientY - rect.top - offsetY) / renderH) * CANVAS_H) / RENDER_SCALE;
 
       const hitId = hitTest(canvasX, canvasY, animStatesRef.current);
       onAgentClick(hitId);

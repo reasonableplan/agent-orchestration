@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
 import type { Server } from 'http';
 import { createLogger, MESSAGE_TYPES } from '@agent/core';
-import type { DashboardEvent, DashboardCommand, DashboardDependencies, DashboardStateStore } from './types.js';
+import type { DashboardEvent, DashboardCommand, DashboardDependencies } from './types.js';
 import { EventMapper } from './event-mapper.js';
 
 const log = createLogger('WSHandler');
@@ -226,6 +226,12 @@ export class WSHandler {
   }
 
   private async handleTaskMove(payload: { taskId: string; toColumn: string }): Promise<void> {
+    const VALID_COLUMNS = new Set(['Backlog', 'Ready', 'In Progress', 'Review', 'Failed', 'Done']);
+    if (!VALID_COLUMNS.has(payload.toColumn)) {
+      log.warn({ toColumn: payload.toColumn }, 'Invalid board column, ignoring task move');
+      return;
+    }
+
     await this.deps.stateStore.updateTask(payload.taskId, {
       boardColumn: payload.toColumn,
     });

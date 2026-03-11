@@ -19,7 +19,10 @@ export type DashboardEvent =
   | { type: 'board-update'; payload: { taskId: string; column: string; task: TaskRow } }
   | { type: 'bubble-update'; payload: { agentId: string; content: string | null; type?: string } }
   | { type: 'epic-update'; payload: { epicId: string; title: string; progress: number } }
-  | { type: 'toast'; payload: { type: 'success' | 'error' | 'info'; title: string; message: string } }
+  | {
+      type: 'toast';
+      payload: { type: 'success' | 'error' | 'info'; title: string; message: string };
+    }
   | { type: 'message-log'; payload: { message: Message } };
 
 // ===== Server Dependencies =====

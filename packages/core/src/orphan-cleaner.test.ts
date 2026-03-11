@@ -69,8 +69,18 @@ describe('OrphanCleaner', () => {
     db._queueSelectResults(
       [{ id: 'backend', status: 'idle', lastHeartbeat: staleHeartbeat }],
       [
-        { id: 'task-1', title: 'API endpoint', assignedAgent: 'backend', boardColumn: 'In Progress' },
-        { id: 'task-2', title: 'Other task', assignedAgent: 'frontend', boardColumn: 'In Progress' },
+        {
+          id: 'task-1',
+          title: 'API endpoint',
+          assignedAgent: 'backend',
+          boardColumn: 'In Progress',
+        },
+        {
+          id: 'task-2',
+          title: 'Other task',
+          assignedAgent: 'frontend',
+          boardColumn: 'In Progress',
+        },
       ],
     );
 

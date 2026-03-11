@@ -14,14 +14,8 @@ export function useWebSocket() {
 
   const handleEvent = useCallback((event: DashboardEvent) => {
     const { type, payload } = event;
-    const {
-      setInitialState,
-      updateAgent,
-      updateTask,
-      updateEpic,
-      addMessage,
-      addToast,
-    } = useOfficeStore.getState();
+    const { setInitialState, updateAgent, updateTask, updateEpic, addMessage, addToast } =
+      useOfficeStore.getState();
 
     switch (type) {
       case 'init':
@@ -37,7 +31,10 @@ export function useWebSocket() {
       case 'agent.bubble':
         if (payload.agentId && typeof payload.agentId === 'string') {
           updateAgent(payload.agentId, {
-            bubble: payload.bubble as { content: string; type: 'task' | 'thinking' | 'info' | 'error' } | null,
+            bubble: payload.bubble as {
+              content: string;
+              type: 'task' | 'thinking' | 'info' | 'error';
+            } | null,
           });
         }
         break;
@@ -107,8 +104,7 @@ export function useWebSocket() {
 
   const connect = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl =
-      import.meta.env.VITE_WS_URL ?? `${protocol}//${window.location.host}/ws`;
+    const wsUrl = import.meta.env.VITE_WS_URL ?? `${protocol}//${window.location.host}/ws`;
 
     try {
       const ws = new WebSocket(wsUrl);

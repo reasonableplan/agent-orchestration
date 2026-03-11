@@ -60,10 +60,7 @@ export default function BoardExpandedView() {
               <span className="font-pixel text-[10px] text-cyan-300 pixel-text-shadow">
                 KANBAN BOARD
               </span>
-              <button
-                onClick={toggleBoard}
-                className="pixel-btn text-[8px]"
-              >
+              <button onClick={toggleBoard} className="pixel-btn text-[8px]">
                 CLOSE [X]
               </button>
             </div>
@@ -85,16 +82,13 @@ export default function BoardExpandedView() {
                       <span className="font-pixel text-[7px] text-white">
                         {col.key.toUpperCase()}
                       </span>
-                      <span className="font-pixel text-[6px] text-white/70">
-                        {colTasks.length}
-                      </span>
+                      <span className="font-pixel text-[6px] text-white/70">{colTasks.length}</span>
                     </div>
 
                     {/* Cards */}
                     <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
                       {colTasks.map((task) => {
-                        const agentColor =
-                          AGENT_COLORS[task.assignedAgent ?? ''] ?? '#666666';
+                        const agentColor = AGENT_COLORS[task.assignedAgent ?? ''] ?? '#666666';
                         return (
                           <div
                             key={task.id}
@@ -127,9 +121,7 @@ export default function BoardExpandedView() {
                       })}
                       {colTasks.length === 0 && (
                         <div className="text-center py-4">
-                          <span className="font-pixel text-[5px] text-gray-600">
-                            Empty
-                          </span>
+                          <span className="font-pixel text-[5px] text-gray-600">Empty</span>
                         </div>
                       )}
                     </div>

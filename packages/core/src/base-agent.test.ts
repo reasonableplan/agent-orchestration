@@ -149,8 +149,8 @@ describe('BaseAgent', () => {
     const task2 = { ...MOCK_TASK_ROW, id: 'task-available', priority: 2, githubIssueNumber: 2 };
     vi.mocked(store.getReadyTasksForAgent).mockResolvedValueOnce([task1, task2]);
     vi.mocked(store.claimTask)
-      .mockResolvedValueOnce(false)  // task1: already claimed
-      .mockResolvedValueOnce(true);  // task2: success
+      .mockResolvedValueOnce(false) // task1: already claimed
+      .mockResolvedValueOnce(true); // task2: success
     agent.startPolling(50);
 
     await new Promise((r) => setTimeout(r, 80));

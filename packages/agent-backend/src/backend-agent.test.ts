@@ -1,13 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BackendAgent } from './backend-agent.js';
 import type { IClaudeClient } from './code-generator.js';
-import type {
-  AgentDependencies,
-  IMessageBus,
-  IStateStore,
-  IGitService,
-  Task,
-} from '@agent/core';
+import type { AgentDependencies, IMessageBus, IStateStore, IGitService, Task } from '@agent/core';
 
 // ===== Mocks =====
 
@@ -89,9 +83,24 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 
 const MOCK_GENERATED = {
   files: [
-    { path: 'src/routes/users.ts', content: 'export const router = {}', action: 'create' as const, language: 'typescript' },
-    { path: 'src/controllers/users.controller.ts', content: 'export class UsersController {}', action: 'create' as const, language: 'typescript' },
-    { path: 'src/schemas/users.schema.ts', content: 'export const schema = {}', action: 'create' as const, language: 'typescript' },
+    {
+      path: 'src/routes/users.ts',
+      content: 'export const router = {}',
+      action: 'create' as const,
+      language: 'typescript',
+    },
+    {
+      path: 'src/controllers/users.controller.ts',
+      content: 'export class UsersController {}',
+      action: 'create' as const,
+      language: 'typescript',
+    },
+    {
+      path: 'src/schemas/users.schema.ts',
+      content: 'export const schema = {}',
+      action: 'create' as const,
+      language: 'typescript',
+    },
   ],
   summary: 'Created user API with routes, controller, and validation schema',
 };
@@ -300,6 +309,7 @@ describe('BackendAgent', () => {
 // ===== Helper =====
 
 function callExecuteTask(agent: BackendAgent, task: Task) {
-  return (agent as never as { executeTask: (t: Task) => Promise<import('@agent/core').TaskResult> })
-    .executeTask(task);
+  return (
+    agent as never as { executeTask: (t: Task) => Promise<import('@agent/core').TaskResult> }
+  ).executeTask(task);
 }

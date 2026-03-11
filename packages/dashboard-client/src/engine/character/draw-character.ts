@@ -9,7 +9,7 @@ import { drawHead, drawHair, drawAccessory } from './draw-head';
 
 export interface CharacterFrame {
   walkFrame: number; // 0-3 for walk cycle
-  armFrame: number;  // 0-1 for working arm movement
+  armFrame: number; // 0-1 for working arm movement
   isBlinking: boolean;
 }
 

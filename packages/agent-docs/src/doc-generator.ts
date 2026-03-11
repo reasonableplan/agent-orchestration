@@ -9,7 +9,10 @@ const log = createLogger('DocGenerator');
  * Claude API 인터페이스. 테스트에서 mock 주입 가능.
  */
 export interface IClaudeClient {
-  chatJSON<T>(systemPrompt: string, userMessage: string): Promise<{
+  chatJSON<T>(
+    systemPrompt: string,
+    userMessage: string,
+  ): Promise<{
     data: T;
     usage: { inputTokens: number; outputTokens: number };
   }>;
@@ -119,7 +122,7 @@ Use action "update" for modified files.`,
 - Agent contribution summary
 - Remaining work estimate`,
 
-  'analyze': `\n\nAnalyze the described documentation needs and respond with:
+  analyze: `\n\nAnalyze the described documentation needs and respond with:
 - files: [] (empty — analysis produces no files)
 - summary: detailed analysis results as a string`,
 };
@@ -138,10 +141,7 @@ export class DocGenerator {
     const systemPrompt = this.buildSystemPrompt(taskType);
     const userMessage = await this.buildUserMessage(task, taskType);
 
-    const { data, usage } = await this.claude.chatJSON<GeneratedCode>(
-      systemPrompt,
-      userMessage,
-    );
+    const { data, usage } = await this.claude.chatJSON<GeneratedCode>(systemPrompt, userMessage);
     log.info({ inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }, 'Claude usage');
 
     if (!data || !Array.isArray(data.files) || typeof data.summary !== 'string') {
@@ -156,15 +156,15 @@ export class DocGenerator {
   }
 
   private async buildUserMessage(task: Task, taskType: DocsTaskType): Promise<string> {
-    const lines = [
-      `Task: ${task.title}`,
-      `Description: ${task.description}`,
-    ];
+    const lines = [`Task: ${task.title}`, `Description: ${task.description}`];
 
     if (task.reviewNote) {
-      lines.push('', '⚠️ PREVIOUS REVIEW FEEDBACK (address these issues):',
+      lines.push(
+        '',
+        '⚠️ PREVIOUS REVIEW FEEDBACK (address these issues):',
         task.reviewNote,
-        `Attempt: ${task.retryCount + 1}/3`);
+        `Attempt: ${task.retryCount + 1}/3`,
+      );
     }
 
     if (task.epicId) {
@@ -190,7 +190,9 @@ export class DocGenerator {
     return lines.join('\n');
   }
 
-  private async readExistingFiles(paths: string[]): Promise<Array<{ path: string; content: string }>> {
+  private async readExistingFiles(
+    paths: string[],
+  ): Promise<Array<{ path: string; content: string }>> {
     if (!this.workDir) return [];
     const resolvedWorkDir = resolve(this.workDir);
     const results: Array<{ path: string; content: string }> = [];
@@ -202,9 +204,10 @@ export class DocGenerator {
 
       try {
         const content = await readFile(absPath, 'utf-8');
-        const truncated = content.length > MAX_FILE_READ_CHARS
-          ? content.slice(0, MAX_FILE_READ_CHARS) + '\n... (truncated)'
-          : content;
+        const truncated =
+          content.length > MAX_FILE_READ_CHARS
+            ? content.slice(0, MAX_FILE_READ_CHARS) + '\n... (truncated)'
+            : content;
 
         const charCount = Math.min(content.length, MAX_FILE_READ_CHARS);
         if (totalChars + charCount > MAX_TOTAL_READ_CHARS) break;

@@ -4,7 +4,13 @@
 
 import { T, hash, fillCircle } from './tile-utils';
 
-export function drawDesk(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+export function drawDesk(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
   const pw = w * T;
   const ph = h * T;
 
@@ -106,7 +112,7 @@ export function drawDesk(ctx: CanvasRenderingContext2D, x: number, y: number, w:
   for (let i = 0; i < 5; i++) {
     ctx.fillStyle = codeColors[i];
     const lineW = 6 + Math.floor((hash(w, i) & 0xf) % 12);
-    const indent = (i === 1 || i === 3) ? 4 : 2;
+    const indent = i === 1 || i === 3 ? 4 : 2;
     ctx.fillRect(monX + indent, monY + 2 + i * 3, Math.min(lineW, monW - indent - 2), 1.5);
   }
   ctx.fillStyle = 'rgba(100,200,255,0.03)';

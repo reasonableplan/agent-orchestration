@@ -30,11 +30,12 @@ export class BoardOperations {
     if (!itemId) {
       // 캐시 미스: 새로 추가된 이슈 등 — REST + GraphQL fallback
       const { data: issue } = await withRetry(
-        () => this.ctx.octokit.rest.issues.get({
-          owner: this.ctx.owner,
-          repo: this.ctx.repo,
-          issue_number: issueNumber,
-        }),
+        () =>
+          this.ctx.octokit.rest.issues.get({
+            owner: this.ctx.owner,
+            repo: this.ctx.repo,
+            issue_number: issueNumber,
+          }),
         {},
         'getIssue (board cache miss)',
       );
@@ -49,8 +50,9 @@ export class BoardOperations {
     }
 
     await withRetry(
-      () => this.ctx.graphqlWithAuth(
-        `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+      () =>
+        this.ctx.graphqlWithAuth(
+          `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
           updateProjectV2ItemFieldValue(input: {
             projectId: $projectId
             itemId: $itemId
@@ -60,13 +62,13 @@ export class BoardOperations {
             projectV2Item { id }
           }
         }`,
-        {
-          projectId: this.setup.projectId,
-          itemId,
-          fieldId: this.setup.columnFieldId,
-          optionId,
-        },
-      ),
+          {
+            projectId: this.setup.projectId,
+            itemId,
+            fieldId: this.setup.columnFieldId,
+            optionId,
+          },
+        ),
       {},
       'moveIssueToColumn',
     );
@@ -118,9 +120,7 @@ export class BoardOperations {
         // Cache: issueNumber → project item id (for moveIssueToColumn)
         newItemIdCache.set(item.content.number, item.id);
 
-        const statusValue = item.fieldValues.nodes.find(
-          (fv) => fv.field?.name === 'Status',
-        );
+        const statusValue = item.fieldValues.nodes.find((fv) => fv.field?.name === 'Status');
         const column = statusValue?.name ?? 'Backlog';
         const labels = item.content.labels.nodes.map((l) => l.name);
 

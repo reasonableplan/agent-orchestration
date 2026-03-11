@@ -35,9 +35,7 @@ describe('FileWriter', () => {
 
   it('creates nested directories automatically', async () => {
     const generated: GeneratedCode = {
-      files: [
-        { path: 'a/b/c/deep.ts', content: 'deep', action: 'create', language: 'typescript' },
-      ],
+      files: [{ path: 'a/b/c/deep.ts', content: 'deep', action: 'create', language: 'typescript' }],
       summary: 'test',
     };
 
@@ -53,9 +51,7 @@ describe('FileWriter', () => {
     await fs.writeFile(path.join(dir, 'app.ts'), 'old');
 
     const generated: GeneratedCode = {
-      files: [
-        { path: 'src/app.ts', content: 'new', action: 'update', language: 'typescript' },
-      ],
+      files: [{ path: 'src/app.ts', content: 'new', action: 'update', language: 'typescript' }],
       summary: 'test',
     };
 
@@ -70,9 +66,7 @@ describe('FileWriter', () => {
     await fs.writeFile(filePath, 'bye');
 
     const generated: GeneratedCode = {
-      files: [
-        { path: 'to-delete.ts', content: '', action: 'delete', language: 'typescript' },
-      ],
+      files: [{ path: 'to-delete.ts', content: '', action: 'delete', language: 'typescript' }],
       summary: 'test',
     };
 
@@ -83,9 +77,7 @@ describe('FileWriter', () => {
 
   it('delete of nonexistent file does not throw', async () => {
     const generated: GeneratedCode = {
-      files: [
-        { path: 'ghost.ts', content: '', action: 'delete', language: 'typescript' },
-      ],
+      files: [{ path: 'ghost.ts', content: '', action: 'delete', language: 'typescript' }],
       summary: 'test',
     };
 
@@ -94,9 +86,7 @@ describe('FileWriter', () => {
 
   it('rejects paths that escape sandbox', async () => {
     const generated: GeneratedCode = {
-      files: [
-        { path: '../../etc/passwd', content: 'bad', action: 'create', language: 'text' },
-      ],
+      files: [{ path: '../../etc/passwd', content: 'bad', action: 'create', language: 'text' }],
       summary: 'test',
     };
 
@@ -119,9 +109,7 @@ describe('FileWriter', () => {
 
   it('rejects empty file content with validation error', async () => {
     const generated: GeneratedCode = {
-      files: [
-        { path: 'empty.ts', content: '', action: 'create', language: 'typescript' },
-      ],
+      files: [{ path: 'empty.ts', content: '', action: 'create', language: 'typescript' }],
       summary: 'test',
     };
 
@@ -131,7 +119,12 @@ describe('FileWriter', () => {
   it('handles paths with spaces and Korean characters', async () => {
     const generated: GeneratedCode = {
       files: [
-        { path: '프로젝트/my file.ts', content: '// 한글 파일', action: 'create', language: 'typescript' },
+        {
+          path: '프로젝트/my file.ts',
+          content: '// 한글 파일',
+          action: 'create',
+          language: 'typescript',
+        },
       ],
       summary: 'test',
     };

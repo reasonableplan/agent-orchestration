@@ -20,19 +20,14 @@ export function createAgentFactories(): Record<string, AgentFactory> {
   const githubToken = process.env.GITHUB_TOKEN;
 
   return {
-    director: (deps) =>
-      new DirectorAgent(deps, { claudeApiKey }),
+    director: (deps) => new DirectorAgent(deps, { claudeApiKey }),
 
-    git: (deps) =>
-      new GitAgent(deps, { workDir, githubToken }),
+    git: (deps) => new GitAgent(deps, { workDir, githubToken }),
 
-    backend: (deps) =>
-      new BackendAgent(deps, { workDir, claudeApiKey }),
+    backend: (deps) => new BackendAgent(deps, { workDir, claudeApiKey }),
 
-    frontend: (deps) =>
-      new FrontendAgent(deps, { workDir, claudeApiKey }),
+    frontend: (deps) => new FrontendAgent(deps, { workDir, claudeApiKey }),
 
-    docs: (deps) =>
-      new DocsAgent(deps, { workDir, claudeApiKey }),
+    docs: (deps) => new DocsAgent(deps, { workDir, claudeApiKey }),
   };
 }

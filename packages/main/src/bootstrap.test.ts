@@ -132,7 +132,7 @@ describe('Bootstrap Integration — Agent Factory Wiring', () => {
 
   it('all agents share the same MessageBus instance', () => {
     const factories = createAgentFactories();
-    const agents = Object.values(factories).map((f) => f(deps));
+    Object.values(factories).map((f) => f(deps));
 
     // Director subscribes to review.request — verify messageBus.subscribe was called
     expect(deps.messageBus.subscribe).toHaveBeenCalledWith('review.request', expect.any(Function));
@@ -183,8 +183,9 @@ describe('Bootstrap Integration — Agent Factory Wiring', () => {
 
       const result = { success: true, artifacts: [], data: {} };
 
-      await (worker as unknown as { onTaskComplete: (t: typeof task, r: typeof result) => Promise<void> })
-        .onTaskComplete(task, result);
+      await (
+        worker as unknown as { onTaskComplete: (t: typeof task, r: typeof result) => Promise<void> }
+      ).onTaskComplete(task, result);
 
       // 성공 시 Review 컬럼으로 이동해야 함 (Done이 아님!)
       expect(deps.stateStore.updateTask).toHaveBeenCalledWith(

@@ -100,6 +100,16 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
     ]);
   }
 
+  // OS 시그널 핸들링 — try 밖에 선언하여 catch에서도 접근 가능
+  let shuttingDown = false;
+  const signalHandler = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log.info('Signal received, shutting down...');
+    await cleanup();
+    process.exit(0);
+  };
+
   try {
     // 1. 환경 변수 로드
     config();
@@ -200,15 +210,7 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
       log.info('CLI ready');
     }
 
-    // OS 시그널 핸들링 — Ctrl+C / kill 시 자동 정리
-    let shuttingDown = false;
-    const signalHandler = async () => {
-      if (shuttingDown) return; // 중복 호출 방지
-      shuttingDown = true;
-      log.info('Signal received, shutting down...');
-      await cleanup();
-      process.exit(0);
-    };
+    // 시그널 핸들러 등록 (try 밖에서 선언됨)
     process.on('SIGINT', signalHandler);
     process.on('SIGTERM', signalHandler);
 
@@ -232,6 +234,8 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
     };
   } catch (error) {
     log.error('Startup failed, cleaning up...');
+    process.removeListener('SIGINT', signalHandler);
+    process.removeListener('SIGTERM', signalHandler);
     await cleanup();
     throw error;
   }

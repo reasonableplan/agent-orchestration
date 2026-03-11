@@ -5,9 +5,14 @@ import { createLogger } from '@agent/core';
 import type { Message, AgentRow, TaskRow, EpicRow } from '@agent/core';
 import { createRoutes } from './routes.js';
 import { WSHandler } from './ws-handler.js';
-import type { DashboardDependencies, DashboardStateStore, DashboardMessageBus, AgentRegistry } from './types.js';
+import type { DashboardDependencies, DashboardStateStore, DashboardMessageBus } from './types.js';
 
-export type { DashboardDependencies, DashboardStateStore, DashboardMessageBus, AgentRegistry } from './types.js';
+export type {
+  DashboardDependencies,
+  DashboardStateStore,
+  DashboardMessageBus,
+  AgentRegistry,
+} from './types.js';
 export type { DashboardEvent, DashboardCommand } from './types.js';
 
 const log = createLogger('DashboardServer');
@@ -297,10 +302,8 @@ export async function startStandalone(): Promise<DashboardServer> {
 }
 
 // If this file is run directly, start in standalone mode
-const isDirectRun = process.argv[1] && (
-  process.argv[1].endsWith('index.ts') ||
-  process.argv[1].endsWith('index.js')
-);
+const isDirectRun =
+  process.argv[1] && (process.argv[1].endsWith('index.ts') || process.argv[1].endsWith('index.js'));
 
 if (isDirectRun) {
   startStandalone().catch((err) => {

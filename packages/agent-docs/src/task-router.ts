@@ -17,15 +17,18 @@ export type DocsTaskType =
   | 'unknown';
 
 const VALID_TYPES: Set<string> = new Set([
-  'readme.generate', 'readme.update',
-  'api-docs.generate', 'api-docs.update',
+  'readme.generate',
+  'readme.update',
+  'api-docs.generate',
+  'api-docs.update',
   'changelog.update',
   'architecture.generate',
   'jsdoc.add',
   'contributing.generate',
   'env-example.update',
   'activity-log.generate',
-  'report.daily', 'report.epic',
+  'report.daily',
+  'report.epic',
   'analyze',
 ]);
 
@@ -58,25 +61,48 @@ export function detectTaskType(task: Task): DocsTaskType {
 
   // 2. 문서 타입별 키워드 (변경 이력 → changelog 먼저 체크, 이력 단독 → activity-log)
   if (text.includes('jsdoc') || text.includes('tsdoc') || text.includes('주석')) return 'jsdoc.add';
-  if (text.includes('changelog') || text.includes('변경 이력') || text.includes('변경이력') || text.includes('릴리스 노트')) return 'changelog.update';
-  if (text.includes('activity') || text.includes('작업 이력') || text.includes('작업 기록')) return 'activity-log.generate';
+  if (
+    text.includes('changelog') ||
+    text.includes('변경 이력') ||
+    text.includes('변경이력') ||
+    text.includes('릴리스 노트')
+  )
+    return 'changelog.update';
+  if (text.includes('activity') || text.includes('작업 이력') || text.includes('작업 기록'))
+    return 'activity-log.generate';
   if (text.includes('contributing') || text.includes('기여 가이드')) return 'contributing.generate';
-  if (text.includes('.env') || text.includes('환경 변수') || text.includes('env example')) return 'env-example.update';
-  if (text.includes('architecture') || text.includes('아키텍처') || text.includes('구조도')) return 'architecture.generate';
+  if (text.includes('.env') || text.includes('환경 변수') || text.includes('env example'))
+    return 'env-example.update';
+  if (text.includes('architecture') || text.includes('아키텍처') || text.includes('구조도'))
+    return 'architecture.generate';
 
   // 3. API 문서
-  if (text.includes('api doc') || text.includes('api 문서') || text.includes('swagger') || text.includes('openapi')) {
-    return text.includes('update') || text.includes('수정') || text.includes('갱신') ? 'api-docs.update' : 'api-docs.generate';
+  if (
+    text.includes('api doc') ||
+    text.includes('api 문서') ||
+    text.includes('swagger') ||
+    text.includes('openapi')
+  ) {
+    return text.includes('update') || text.includes('수정') || text.includes('갱신')
+      ? 'api-docs.update'
+      : 'api-docs.generate';
   }
 
   // 4. README (가장 일반적이므로 마지막)
   if (text.includes('readme') || text.includes('리드미')) {
-    return text.includes('update') || text.includes('수정') || text.includes('갱신') ? 'readme.update' : 'readme.generate';
+    return text.includes('update') || text.includes('수정') || text.includes('갱신')
+      ? 'readme.update'
+      : 'readme.generate';
   }
 
   // 5. 문서 관련 키워드 — 생성/작성 의도가 명확한 경우만 readme로, 아니면 analyze
   if (text.includes('document') || text.includes('문서')) {
-    if (text.includes('generate') || text.includes('create') || text.includes('작성') || text.includes('생성')) {
+    if (
+      text.includes('generate') ||
+      text.includes('create') ||
+      text.includes('작성') ||
+      text.includes('생성')
+    ) {
       return 'readme.generate';
     }
     return 'analyze';

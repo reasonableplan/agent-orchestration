@@ -16,11 +16,7 @@ export class CommitRequester {
    * @param writtenFiles 생성/수정된 파일 경로 목록
    * @param summary 변경 요약 (commit message로 사용)
    */
-  async requestCommit(
-    task: Task,
-    writtenFiles: string[],
-    summary: string,
-  ): Promise<number> {
+  async requestCommit(task: Task, writtenFiles: string[], summary: string): Promise<number> {
     if (writtenFiles.length === 0) {
       throw new Error('No files to commit');
     }

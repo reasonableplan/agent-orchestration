@@ -28,7 +28,10 @@ export class ClaudeClient {
     this.config = config;
   }
 
-  async chatJSON<T>(systemPrompt: string, userMessage: string): Promise<{ data: T; usage: ClaudeResponse['usage'] }> {
+  async chatJSON<T>(
+    systemPrompt: string,
+    userMessage: string,
+  ): Promise<{ data: T; usage: ClaudeResponse['usage'] }> {
     const response = await this.withRetry(async () => {
       const result = await this.client.messages.create({
         model: this.config.model,
@@ -57,9 +60,10 @@ export class ClaudeClient {
     const firstBrace = text.indexOf('{');
     const firstBracket = text.indexOf('[');
 
-    const startIdx = (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace))
-      ? firstBracket
-      : firstBrace;
+    const startIdx =
+      firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)
+        ? firstBracket
+        : firstBrace;
 
     if (startIdx !== -1) {
       const extracted = ClaudeClient.extractBalancedJSON(text, startIdx);
@@ -78,12 +82,24 @@ export class ClaudeClient {
 
     for (let i = start; i < text.length; i++) {
       const ch = text[i];
-      if (escape) { escape = false; continue; }
-      if (ch === '\\' && inString) { escape = true; continue; }
-      if (ch === '"') { inString = !inString; continue; }
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === '\\' && inString) {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
       if (inString) continue;
       if (ch === open) depth++;
-      else if (ch === close) { depth--; if (depth === 0) return text.slice(start, i + 1); }
+      else if (ch === close) {
+        depth--;
+        if (depth === 0) return text.slice(start, i + 1);
+      }
     }
 
     return null;
@@ -102,7 +118,15 @@ export class ClaudeClient {
         if (attempt < maxRetries) {
           const jitter = 1 + Math.random() * JITTER_FACTOR;
           const delay = BASE_DELAY_MS * Math.pow(2, attempt) * jitter;
-          log.warn({ attempt: attempt + 1, maxRetries, delayMs: Math.round(delay), err: lastError.message }, 'Retrying');
+          log.warn(
+            {
+              attempt: attempt + 1,
+              maxRetries,
+              delayMs: Math.round(delay),
+              err: lastError.message,
+            },
+            'Retrying',
+          );
           await new Promise((r) => setTimeout(r, delay));
         }
       }
@@ -115,8 +139,10 @@ export class ClaudeClient {
     const msg = error.message.toLowerCase();
     if (msg.includes('rate limit') || msg.includes('429')) return true;
     if (msg.includes('timeout') || msg.includes('timed out')) return true;
-    if (msg.includes('network') || msg.includes('econnreset') || msg.includes('socket')) return true;
-    if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('529')) return true;
+    if (msg.includes('network') || msg.includes('econnreset') || msg.includes('socket'))
+      return true;
+    if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('529'))
+      return true;
     if (msg.includes('401') || msg.includes('403') || msg.includes('invalid')) return false;
     return true;
   }

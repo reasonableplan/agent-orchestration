@@ -2,13 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DocsAgent } from './docs-agent.js';
 import { detectTaskType } from './task-router.js';
 import type { IClaudeClient } from './doc-generator.js';
-import type {
-  AgentDependencies,
-  IMessageBus,
-  IStateStore,
-  IGitService,
-  Task,
-} from '@agent/core';
+import type { AgentDependencies, IMessageBus, IStateStore, IGitService, Task } from '@agent/core';
 
 // ===== Mocks =====
 
@@ -90,22 +84,42 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 
 const MOCK_README_GENERATED = {
   files: [
-    { path: 'README.md', content: '# My Project\n\nA multi-agent orchestration system.', action: 'create' as const, language: 'markdown' },
+    {
+      path: 'README.md',
+      content: '# My Project\n\nA multi-agent orchestration system.',
+      action: 'create' as const,
+      language: 'markdown',
+    },
   ],
   summary: 'Generated comprehensive README.md with overview, installation, and usage',
 };
 
 const MOCK_API_DOCS_GENERATED = {
   files: [
-    { path: 'docs/api.md', content: '# API Reference\n\n## GET /api/users', action: 'create' as const, language: 'markdown' },
-    { path: 'docs/api-errors.md', content: '# Error Codes\n\n| Code | Description |', action: 'create' as const, language: 'markdown' },
+    {
+      path: 'docs/api.md',
+      content: '# API Reference\n\n## GET /api/users',
+      action: 'create' as const,
+      language: 'markdown',
+    },
+    {
+      path: 'docs/api-errors.md',
+      content: '# Error Codes\n\n| Code | Description |',
+      action: 'create' as const,
+      language: 'markdown',
+    },
   ],
   summary: 'Generated API documentation with endpoints and error codes',
 };
 
 const MOCK_CHANGELOG_GENERATED = {
   files: [
-    { path: 'CHANGELOG.md', content: '# Changelog\n\n## [1.0.0] - 2026-03-10\n\n### Added\n- Initial release', action: 'create' as const, language: 'markdown' },
+    {
+      path: 'CHANGELOG.md',
+      content: '# Changelog\n\n## [1.0.0] - 2026-03-10\n\n### Added\n- Initial release',
+      action: 'create' as const,
+      language: 'markdown',
+    },
   ],
   summary: 'Updated CHANGELOG with version 1.0.0 entries',
 };
@@ -124,67 +138,99 @@ describe('detectTaskType', () => {
   });
 
   it('detects analyze from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Analyze documentation gaps', description: '' }))).toBe('analyze');
+    expect(detectTaskType(makeTask({ title: 'Analyze documentation gaps', description: '' }))).toBe(
+      'analyze',
+    );
   });
 
   it('detects readme.generate from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate README.md', description: '' }))).toBe('readme.generate');
+    expect(detectTaskType(makeTask({ title: 'Generate README.md', description: '' }))).toBe(
+      'readme.generate',
+    );
   });
 
   it('detects readme.update from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Update README with new features', description: '' }))).toBe('readme.update');
+    expect(
+      detectTaskType(makeTask({ title: 'Update README with new features', description: '' })),
+    ).toBe('readme.update');
   });
 
   it('detects api-docs.generate from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate API documentation', description: '' }))).toBe('api-docs.generate');
+    expect(detectTaskType(makeTask({ title: 'Generate API documentation', description: '' }))).toBe(
+      'api-docs.generate',
+    );
   });
 
   it('detects api-docs.update from description', () => {
-    expect(detectTaskType(makeTask({ title: 'Update API docs', description: 'API 문서 수정' }))).toBe('api-docs.update');
+    expect(
+      detectTaskType(makeTask({ title: 'Update API docs', description: 'API 문서 수정' })),
+    ).toBe('api-docs.update');
   });
 
   it('detects changelog.update from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Update CHANGELOG', description: '' }))).toBe('changelog.update');
+    expect(detectTaskType(makeTask({ title: 'Update CHANGELOG', description: '' }))).toBe(
+      'changelog.update',
+    );
   });
 
   it('detects architecture.generate from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate architecture document', description: '' }))).toBe('architecture.generate');
+    expect(
+      detectTaskType(makeTask({ title: 'Generate architecture document', description: '' })),
+    ).toBe('architecture.generate');
   });
 
   it('detects jsdoc.add from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Add JSDoc comments to auth module', description: '' }))).toBe('jsdoc.add');
+    expect(
+      detectTaskType(makeTask({ title: 'Add JSDoc comments to auth module', description: '' })),
+    ).toBe('jsdoc.add');
   });
 
   it('detects contributing.generate from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate CONTRIBUTING.md', description: '' }))).toBe('contributing.generate');
+    expect(detectTaskType(makeTask({ title: 'Generate CONTRIBUTING.md', description: '' }))).toBe(
+      'contributing.generate',
+    );
   });
 
   it('detects env-example.update from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Update .env.example', description: '' }))).toBe('env-example.update');
+    expect(detectTaskType(makeTask({ title: 'Update .env.example', description: '' }))).toBe(
+      'env-example.update',
+    );
   });
 
   it('detects activity-log from Korean keyword', () => {
-    expect(detectTaskType(makeTask({ title: '작업 이력 문서 생성', description: '' }))).toBe('activity-log.generate');
+    expect(detectTaskType(makeTask({ title: '작업 이력 문서 생성', description: '' }))).toBe(
+      'activity-log.generate',
+    );
   });
 
   it('detects report.daily from keyword', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate daily report', description: '' }))).toBe('report.daily');
+    expect(detectTaskType(makeTask({ title: 'Generate daily report', description: '' }))).toBe(
+      'report.daily',
+    );
   });
 
   it('detects report.epic from keyword', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate epic progress report', description: '' }))).toBe('report.epic');
+    expect(
+      detectTaskType(makeTask({ title: 'Generate epic progress report', description: '' })),
+    ).toBe('report.epic');
   });
 
   it('detects Korean readme', () => {
-    expect(detectTaskType(makeTask({ title: '리드미 생성', description: '' }))).toBe('readme.generate');
+    expect(detectTaskType(makeTask({ title: '리드미 생성', description: '' }))).toBe(
+      'readme.generate',
+    );
   });
 
   it('detects Korean changelog', () => {
-    expect(detectTaskType(makeTask({ title: '변경 이력 갱신', description: '' }))).toBe('changelog.update');
+    expect(detectTaskType(makeTask({ title: '변경 이력 갱신', description: '' }))).toBe(
+      'changelog.update',
+    );
   });
 
   it('detects generic document keyword with create intent as readme', () => {
-    expect(detectTaskType(makeTask({ title: '프로젝트 문서 작성', description: '' }))).toBe('readme.generate');
+    expect(detectTaskType(makeTask({ title: '프로젝트 문서 작성', description: '' }))).toBe(
+      'readme.generate',
+    );
   });
 
   it('detects generic document keyword without create intent as analyze', () => {
@@ -192,7 +238,9 @@ describe('detectTaskType', () => {
   });
 
   it('returns unknown for unrecognizable task', () => {
-    expect(detectTaskType(makeTask({ title: 'do something', description: 'unrelated work' }))).toBe('unknown');
+    expect(detectTaskType(makeTask({ title: 'do something', description: 'unrelated work' }))).toBe(
+      'unknown',
+    );
   });
 });
 
@@ -265,7 +313,10 @@ describe('DocsAgent', () => {
     mockClaude = createMockClaude(MOCK_API_DOCS_GENERATED);
     agent = new DocsAgent(deps, { workDir: '/tmp/test-docs', claudeClient: mockClaude });
 
-    const task = makeTask({ title: 'Generate API documentation', labels: ['type:api-docs.generate'] });
+    const task = makeTask({
+      title: 'Generate API documentation',
+      labels: ['type:api-docs.generate'],
+    });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(true);
@@ -416,6 +467,7 @@ describe('DocsAgent', () => {
 // ===== Helper =====
 
 function callExecuteTask(agent: DocsAgent, task: Task) {
-  return (agent as unknown as { executeTask: (t: Task) => Promise<import('@agent/core').TaskResult> })
-    .executeTask(task);
+  return (
+    agent as unknown as { executeTask: (t: Task) => Promise<import('@agent/core').TaskResult> }
+  ).executeTask(task);
 }

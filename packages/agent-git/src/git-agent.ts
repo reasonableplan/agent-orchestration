@@ -3,6 +3,7 @@ import {
   type AgentDependencies,
   type AgentConfig,
   type Task,
+  type TaskResult,
 } from '@agent/core';
 import { GitCli } from './git-cli.js';
 import { WorkspaceManager } from './workspace-manager.js';

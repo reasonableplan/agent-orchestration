@@ -60,7 +60,8 @@ export default function SystemStatusBar() {
   // Token summary
   const totalUsed = Object.values(tokenUsage).reduce((sum, t) => sum + t.totalTokens, 0);
   const usedPercent = tokenBudget > 0 ? (totalUsed / tokenBudget) * 100 : 0;
-  const tokenColor = usedPercent > 90 ? 'text-red-400' : usedPercent > 70 ? 'text-yellow-400' : 'text-green-400';
+  const tokenColor =
+    usedPercent > 90 ? 'text-red-400' : usedPercent > 70 ? 'text-yellow-400' : 'text-green-400';
 
   return (
     <div className="flex items-center gap-4 px-4 py-2 bg-[#16213e] border-b-2 border-[#0f3460] font-pixel text-[8px] select-none">
@@ -78,9 +79,7 @@ export default function SystemStatusBar() {
                 style={{ width: `${Math.round(currentEpic.progress * 100)}%` }}
               />
             </div>
-            <span className="text-agent-director">
-              {Math.round(currentEpic.progress * 100)}%
-            </span>
+            <span className="text-agent-director">{Math.round(currentEpic.progress * 100)}%</span>
           </div>
         )}
       </div>
@@ -126,7 +125,8 @@ export default function SystemStatusBar() {
             className="h-full transition-all duration-500"
             style={{
               width: `${Math.min(usedPercent, 100)}%`,
-              backgroundColor: usedPercent > 90 ? '#FF4444' : usedPercent > 70 ? '#FFAA33' : '#44DD66',
+              backgroundColor:
+                usedPercent > 90 ? '#FF4444' : usedPercent > 70 ? '#FFAA33' : '#44DD66',
             }}
           />
         </div>

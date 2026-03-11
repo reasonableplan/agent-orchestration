@@ -35,15 +35,11 @@ export default function CommandBar({ onSend }: CommandBarProps) {
     const lastWord = words[words.length - 1];
 
     if (lastWord.startsWith('/')) {
-      const matches = SLASH_COMMANDS.filter((c) =>
-        c.startsWith(lastWord.toLowerCase()),
-      );
+      const matches = SLASH_COMMANDS.filter((c) => c.startsWith(lastWord.toLowerCase()));
       setSuggestions(matches);
       setSelectedSuggestion(0);
     } else if (lastWord.startsWith('@')) {
-      const matches = AGENT_MENTIONS.filter((m) =>
-        m.startsWith(lastWord.toLowerCase()),
-      );
+      const matches = AGENT_MENTIONS.filter((m) => m.startsWith(lastWord.toLowerCase()));
       setSuggestions(matches);
       setSelectedSuggestion(0);
     } else {
@@ -82,16 +78,12 @@ export default function CommandBar({ onSend }: CommandBarProps) {
     if (suggestions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedSuggestion((prev) =>
-          prev < suggestions.length - 1 ? prev + 1 : 0,
-        );
+        setSelectedSuggestion((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedSuggestion((prev) =>
-          prev > 0 ? prev - 1 : suggestions.length - 1,
-        );
+        setSelectedSuggestion((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
         return;
       }
       if (e.key === 'Tab' || e.key === 'Enter') {

@@ -3,13 +3,7 @@ import { FrontendAgent } from './frontend-agent.js';
 import { detectTaskType } from './task-router.js';
 import { parseApiSpec } from './api-spec-parser.js';
 import type { IClaudeClient } from './code-generator.js';
-import type {
-  AgentDependencies,
-  IMessageBus,
-  IStateStore,
-  IGitService,
-  Task,
-} from '@agent/core';
+import type { AgentDependencies, IMessageBus, IStateStore, IGitService, Task } from '@agent/core';
 
 // ===== Mocks =====
 
@@ -91,9 +85,24 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 
 const MOCK_GENERATED = {
   files: [
-    { path: 'src/components/LoginForm/LoginForm.tsx', content: 'export function LoginForm() {}', action: 'create' as const, language: 'typescriptreact' },
-    { path: 'src/components/LoginForm/LoginForm.test.tsx', content: 'describe("LoginForm", () => {})', action: 'create' as const, language: 'typescriptreact' },
-    { path: 'src/components/LoginForm/index.ts', content: 'export { LoginForm } from "./LoginForm"', action: 'create' as const, language: 'typescript' },
+    {
+      path: 'src/components/LoginForm/LoginForm.tsx',
+      content: 'export function LoginForm() {}',
+      action: 'create' as const,
+      language: 'typescriptreact',
+    },
+    {
+      path: 'src/components/LoginForm/LoginForm.test.tsx',
+      content: 'describe("LoginForm", () => {})',
+      action: 'create' as const,
+      language: 'typescriptreact',
+    },
+    {
+      path: 'src/components/LoginForm/index.ts',
+      content: 'export { LoginForm } from "./LoginForm"',
+      action: 'create' as const,
+      language: 'typescript',
+    },
   ],
   summary: 'Created LoginForm component with tests and index re-export',
 };
@@ -112,19 +121,27 @@ describe('detectTaskType', () => {
   });
 
   it('detects analyze from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Analyze project structure', description: '' }))).toBe('analyze');
+    expect(detectTaskType(makeTask({ title: 'Analyze project structure', description: '' }))).toBe(
+      'analyze',
+    );
   });
 
   it('detects test.create from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Create tests for Button', description: '' }))).toBe('test.create');
+    expect(detectTaskType(makeTask({ title: 'Create tests for Button', description: '' }))).toBe(
+      'test.create',
+    );
   });
 
   it('detects hook.create from useXxx pattern', () => {
-    expect(detectTaskType(makeTask({ title: 'Create useAuth hook', description: '' }))).toBe('hook.create');
+    expect(detectTaskType(makeTask({ title: 'Create useAuth hook', description: '' }))).toBe(
+      'hook.create',
+    );
   });
 
   it('detects hook.create from Korean keyword', () => {
-    expect(detectTaskType(makeTask({ title: '인증 훅 생성', description: '' }))).toBe('hook.create');
+    expect(detectTaskType(makeTask({ title: '인증 훅 생성', description: '' }))).toBe(
+      'hook.create',
+    );
   });
 
   it('does not false-positive hook from "user" or "used"', () => {
@@ -133,7 +150,9 @@ describe('detectTaskType', () => {
   });
 
   it('detects store.create from zustand keyword', () => {
-    expect(detectTaskType(makeTask({ title: 'Create auth zustand store', description: '' }))).toBe('store.create');
+    expect(detectTaskType(makeTask({ title: 'Create auth zustand store', description: '' }))).toBe(
+      'store.create',
+    );
   });
 
   it('does not false-positive store from "restore"', () => {
@@ -142,37 +161,56 @@ describe('detectTaskType', () => {
   });
 
   it('detects page.create from page keyword', () => {
-    expect(detectTaskType(makeTask({ title: 'Create login page', description: '' }))).toBe('page.create');
+    expect(detectTaskType(makeTask({ title: 'Create login page', description: '' }))).toBe(
+      'page.create',
+    );
   });
 
   it('detects page.modify from page + modify keywords', () => {
-    expect(detectTaskType(makeTask({ title: 'Modify login page layout', description: '' }))).toBe('page.modify');
+    expect(detectTaskType(makeTask({ title: 'Modify login page layout', description: '' }))).toBe(
+      'page.modify',
+    );
   });
 
   it('detects component.create from component keyword', () => {
-    expect(detectTaskType(makeTask({ title: 'Create LoginForm component', description: '' }))).toBe('component.create');
+    expect(detectTaskType(makeTask({ title: 'Create LoginForm component', description: '' }))).toBe(
+      'component.create',
+    );
   });
 
   it('detects component.modify from Korean keyword', () => {
-    expect(detectTaskType(makeTask({ title: '로그인 컴포넌트 수정', description: '' }))).toBe('component.modify');
+    expect(detectTaskType(makeTask({ title: '로그인 컴포넌트 수정', description: '' }))).toBe(
+      'component.modify',
+    );
   });
 
   it('detects style.generate from tailwind keyword', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate tailwind styles for dashboard', description: '' }))).toBe('style.generate');
+    expect(
+      detectTaskType(
+        makeTask({ title: 'Generate tailwind styles for dashboard', description: '' }),
+      ),
+    ).toBe('style.generate');
   });
 
   it('style does not override more specific types', () => {
     // description에 tailwind가 있어도 title의 component가 우선
-    const task = makeTask({ title: 'Create LoginForm component', description: 'Use tailwind for styling' });
+    const task = makeTask({
+      title: 'Create LoginForm component',
+      description: 'Use tailwind for styling',
+    });
     expect(detectTaskType(task)).toBe('component.create');
   });
 
   it('detects Korean page correctly', () => {
-    expect(detectTaskType(makeTask({ title: '로그인 페이지 생성', description: '' }))).toBe('page.create');
+    expect(detectTaskType(makeTask({ title: '로그인 페이지 생성', description: '' }))).toBe(
+      'page.create',
+    );
   });
 
   it('returns unknown for unrecognizable task', () => {
-    expect(detectTaskType(makeTask({ title: 'do something', description: 'unrelated' }))).toBe('unknown');
+    expect(detectTaskType(makeTask({ title: 'do something', description: 'unrelated' }))).toBe(
+      'unknown',
+    );
   });
 });
 
@@ -384,6 +422,7 @@ More text after`;
 // ===== Helper =====
 
 function callExecuteTask(agent: FrontendAgent, task: Task) {
-  return (agent as never as { executeTask: (t: Task) => Promise<import('@agent/core').TaskResult> })
-    .executeTask(task);
+  return (
+    agent as never as { executeTask: (t: Task) => Promise<import('@agent/core').TaskResult> }
+  ).executeTask(task);
 }
