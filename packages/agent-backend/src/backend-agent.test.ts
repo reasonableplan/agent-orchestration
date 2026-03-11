@@ -32,6 +32,10 @@ function createMockStateStore(): IStateStore {
     updateEpic: vi.fn(),
     saveMessage: vi.fn(),
     saveArtifact: vi.fn(),
+    getAllAgents: vi.fn().mockResolvedValue([]),
+    getAllTasks: vi.fn().mockResolvedValue([]),
+    getAllEpics: vi.fn().mockResolvedValue([]),
+    getRecentMessages: vi.fn().mockResolvedValue([]),
   };
 }
 

@@ -123,7 +123,7 @@ export class WSHandler {
       ]);
 
       const event: DashboardEvent = {
-        type: 'initial-state',
+        type: 'init',
         payload: { agents, tasks, epics },
       };
 
@@ -239,8 +239,8 @@ export class WSHandler {
     const task = await this.deps.stateStore.getTask(payload.taskId);
     if (task) {
       this.broadcast({
-        type: 'board-update',
-        payload: { taskId: payload.taskId, column: payload.toColumn, task },
+        type: 'task.update',
+        payload: { ...task, taskId: payload.taskId, boardColumn: payload.toColumn },
       });
     }
   }
@@ -261,8 +261,8 @@ export class WSHandler {
     const updatedTask = await this.deps.stateStore.getTask(taskId);
     if (updatedTask) {
       this.broadcast({
-        type: 'board-update',
-        payload: { taskId, column: 'Ready', task: updatedTask },
+        type: 'task.update',
+        payload: { ...updatedTask, taskId, boardColumn: 'Ready' },
       });
     }
 
