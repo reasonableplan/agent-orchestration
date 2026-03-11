@@ -3,12 +3,17 @@
  * All position/color/animation constants for the Canvas-based office scene
  */
 
-// Tile size: 32x32, Map: 24x16 tiles = 768x512 internal resolution
+// Render scale: 2x for higher pixel density (logical 768x512 → physical 1536x1024)
+export const RENDER_SCALE = 2;
+
+// Tile size: 32x32 logical, Map: 24x16 tiles
 export const TILE_SIZE = 32;
 export const MAP_COLS = 24;
 export const MAP_ROWS = 16;
-export const CANVAS_W = MAP_COLS * TILE_SIZE; // 768
-export const CANVAS_H = MAP_ROWS * TILE_SIZE; // 512
+export const LOGICAL_W = MAP_COLS * TILE_SIZE; // 768
+export const LOGICAL_H = MAP_ROWS * TILE_SIZE; // 512
+export const CANVAS_W = LOGICAL_W * RENDER_SCALE; // 1536
+export const CANVAS_H = LOGICAL_H * RENDER_SCALE; // 1024
 
 // Character sprite size (LPC standard proportions)
 export const CHAR_W = 24;

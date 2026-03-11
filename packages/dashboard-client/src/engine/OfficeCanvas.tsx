@@ -12,6 +12,7 @@ import {
   CANVAS_H,
   CHAR_W,
   CHAR_H,
+  RENDER_SCALE,
   DOMAIN_LABELS,
   AGENT_COLORS,
   getAgentPixelPosition,
@@ -79,10 +80,10 @@ function createAgentAnimState(domain: string): AgentAnimState {
   };
 }
 
-// ---- Hit testing ----
+// ---- Hit testing (works in logical coords) ----
 function hitTest(
-  canvasX: number,
-  canvasY: number,
+  logicalX: number,
+  logicalY: number,
   animStates: Map<string, AgentAnimState>,
 ): string | null {
   // Check agents in reverse Y-order (front-most first)
@@ -93,23 +94,24 @@ function hitTest(
   for (const [id, state] of entries) {
     const cx = state.spring.x;
     const cy = state.spring.y;
-    // Hit box around character
-    if (canvasX >= cx - padX && canvasX <= cx + padX &&
-        canvasY >= cy - padY && canvasY <= cy + 8) {
+    // Hit box around character (logical coords)
+    if (logicalX >= cx - padX && logicalX <= cx + padX &&
+        logicalY >= cy - padY && logicalY <= cy + 8) {
       return id;
     }
   }
   return null;
 }
 
-// ---- Name badge drawing ----
+// ---- Name badge drawing (receives physical coords) ----
 function drawNameBadge(ctx: CanvasRenderingContext2D, x: number, y: number, domain: string) {
   const label = DOMAIN_LABELS[domain] ?? domain.slice(0, 3).toUpperCase();
   const colors = AGENT_COLORS[domain];
   const accent = colors?.accent ?? '#FFFFFF';
 
-  const badgeW = 22;
-  const badgeH = 10;
+  const S = RENDER_SCALE;
+  const badgeW = 22 * S;
+  const badgeH = 10 * S;
   const bx = x - badgeW / 2;
   const by = y;
 
@@ -118,18 +120,18 @@ function drawNameBadge(ctx: CanvasRenderingContext2D, x: number, y: number, doma
   ctx.fillRect(bx, by, badgeW, badgeH);
   // Accent top line
   ctx.fillStyle = accent;
-  ctx.fillRect(bx, by, badgeW, 2);
+  ctx.fillRect(bx, by, badgeW, 2 * S);
   // Text
   ctx.fillStyle = accent;
-  ctx.font = '5px "Press Start 2P", monospace';
+  ctx.font = `${5 * S}px "Press Start 2P", monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, x, by + badgeH / 2 + 1);
+  ctx.fillText(label, x, by + badgeH / 2 + S);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
 }
 
-// ---- Status indicator drawing ----
+// ---- Status indicator drawing (receives physical coords) ----
 function drawStatusIndicator(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -137,60 +139,59 @@ function drawStatusIndicator(
   status: string,
   time: number,
 ) {
+  const S = RENDER_SCALE;
   if (status === 'error') {
-    // Flashing red circle with !
     const alpha = 0.5 + 0.5 * Math.sin(time * 0.008);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#FF3333';
     ctx.beginPath();
-    ctx.arc(x + 10, y - 4, 5, 0, Math.PI * 2);
+    ctx.arc(x + 10 * S, y - 4 * S, 5 * S, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 6px monospace';
+    ctx.font = `bold ${6 * S}px monospace`;
     ctx.textAlign = 'center';
-    ctx.fillText('!', x + 10, y - 2);
+    ctx.fillText('!', x + 10 * S, y - 2 * S);
     ctx.textAlign = 'left';
     ctx.globalAlpha = 1;
   } else if (status === 'working') {
-    // Small code icon
     const alpha = 0.5 + 0.5 * Math.sin(time * 0.005);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = 'rgba(104,160,99,0.6)';
-    ctx.fillRect(x - 8, y - 12, 16, 7);
+    ctx.fillRect(x - 8 * S, y - 12 * S, 16 * S, 7 * S);
     ctx.fillStyle = '#68A063';
-    ctx.font = '4px monospace';
+    ctx.font = `${4 * S}px monospace`;
     ctx.textAlign = 'center';
-    ctx.fillText('</>', x, y - 7);
+    ctx.fillText('</>', x, y - 7 * S);
     ctx.textAlign = 'left';
     ctx.globalAlpha = 1;
   } else if (status === 'thinking') {
-    // Thinking dots
     for (let i = 0; i < 3; i++) {
-      const dotY = y - 14 + Math.sin(time * 0.006 + i * 1.2) * 2;
+      const dotY = y - 14 * S + Math.sin(time * 0.006 + i * 1.2) * 2 * S;
       const alpha = 0.4 + 0.6 * Math.abs(Math.sin(time * 0.004 + i * 0.8));
       ctx.globalAlpha = alpha;
       ctx.fillStyle = '#CCCCCC';
       ctx.beginPath();
-      ctx.arc(x - 4 + i * 5, dotY, 2, 0, Math.PI * 2);
+      ctx.arc(x - 4 * S + i * 5 * S, dotY, 2 * S, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
 }
 
-// ---- Selection highlight ----
+// ---- Selection highlight (receives physical coords) ----
 function drawSelectionHighlight(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   time: number,
 ) {
+  const S = RENDER_SCALE;
   const alpha = 0.4 + 0.3 * Math.sin(time * 0.004);
   ctx.strokeStyle = '#FFD700';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2 * S;
   ctx.globalAlpha = alpha;
-  ctx.setLineDash([4, 3]);
-  ctx.strokeRect(x - 16, y - 38, 32, 50);
+  ctx.setLineDash([4 * S, 3 * S]);
+  ctx.strokeRect(x - 16 * S, y - 38 * S, 32 * S, 50 * S);
   ctx.setLineDash([]);
   ctx.globalAlpha = 1;
 }
@@ -326,10 +327,10 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
         .filter((e) => e.state)
         .sort((a, b) => a.state.spring.y - b.state.spring.y);
 
-      // Draw characters
+      // Draw characters (spring positions are in logical coords, scale to physical)
       for (const { agent, state } of sorted) {
-        const cx = Math.round(state.spring.x);
-        const cy = Math.round(state.spring.y);
+        const cx = Math.round(state.spring.x * RENDER_SCALE);
+        const cy = Math.round(state.spring.y * RENDER_SCALE);
 
         // Selection highlight (behind character)
         if (agent.id === selected) {
@@ -357,21 +358,20 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
 
           const frame = frames[Math.min(frameIdx, frames.length - 1)];
           // Draw centered at (cx, cy) — character bottom at cy
-          // Canvas is CHAR_W+8 wide, CHAR_H+12 tall, char drawn at translate(4,8)
+          // Cached canvas is (CHAR_W+8)*SCALE wide, (CHAR_H+12)*SCALE tall
           ctx.drawImage(
             frame,
-            cx - (CHAR_W + 8) / 2,
-            cy - CHAR_H - 8,
+            cx - ((CHAR_W + 8) * RENDER_SCALE) / 2,
+            cy - (CHAR_H + 8) * RENDER_SCALE,
           );
         }
 
-        // Status indicator
+        // Status indicator & name badge drawn in physical coords
         if (!agent.bubble) {
-          drawStatusIndicator(ctx, cx, cy - CHAR_H, agent.status, time);
+          drawStatusIndicator(ctx, cx, cy - CHAR_H * RENDER_SCALE, agent.status, time);
         }
 
-        // Name badge below character
-        drawNameBadge(ctx, cx, cy + 4, agent.domain);
+        drawNameBadge(ctx, cx, cy + 4 * RENDER_SCALE, agent.domain);
       }
 
       rafRef.current = requestAnimationFrame(loop);
@@ -405,8 +405,9 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
         offsetX = 0;
         offsetY = (rect.height - renderH) / 2;
       }
-      const canvasX = ((e.clientX - rect.left - offsetX) / renderW) * CANVAS_W;
-      const canvasY = ((e.clientY - rect.top - offsetY) / renderH) * CANVAS_H;
+      // Convert to logical coords (divide by RENDER_SCALE) for hit testing
+      const canvasX = ((e.clientX - rect.left - offsetX) / renderW) * CANVAS_W / RENDER_SCALE;
+      const canvasY = ((e.clientY - rect.top - offsetY) / renderH) * CANVAS_H / RENDER_SCALE;
 
       const hitId = hitTest(canvasX, canvasY, animStatesRef.current);
       onAgentClick(hitId);
