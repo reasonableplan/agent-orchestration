@@ -177,7 +177,14 @@ export interface ApiSpec {
 }
 
 // ===== Board Columns =====
-export const BOARD_COLUMNS = ['Backlog', 'Ready', 'In Progress', 'Review', 'Failed', 'Done'] as const;
+export const BOARD_COLUMNS = [
+  'Backlog',
+  'Ready',
+  'In Progress',
+  'Review',
+  'Failed',
+  'Done',
+] as const;
 export type BoardColumn = (typeof BOARD_COLUMNS)[number];
 
 // ===== IStateStore =====

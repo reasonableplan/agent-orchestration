@@ -9,7 +9,10 @@ const log = createLogger('FrontendCodeGen');
  * Claude API 인터페이스. 테스트에서 mock 주입 가능.
  */
 export interface IClaudeClient {
-  chatJSON<T>(systemPrompt: string, userMessage: string): Promise<{
+  chatJSON<T>(
+    systemPrompt: string,
+    userMessage: string,
+  ): Promise<{
     data: T;
     usage: { inputTokens: number; outputTokens: number };
   }>;
@@ -33,10 +36,7 @@ export class CodeGenerator {
     const systemPrompt = this.buildSystemPrompt(taskType);
     const userMessage = await this.buildUserMessage(task, taskType);
 
-    const { data, usage } = await this.claude.chatJSON<GeneratedCode>(
-      systemPrompt,
-      userMessage,
-    );
+    const { data, usage } = await this.claude.chatJSON<GeneratedCode>(systemPrompt, userMessage);
     log.info({ inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }, 'Claude usage');
 
     if (!data || !Array.isArray(data.files) || typeof data.summary !== 'string') {
@@ -106,7 +106,7 @@ Use action "update" for modified files.`,
 - Mock setup for external dependencies (API calls, stores)
 - Cover happy path + error cases + edge cases`,
 
-      'analyze': `\n\nAnalyze the described frontend code and respond with:
+      analyze: `\n\nAnalyze the described frontend code and respond with:
 - files: [] (empty — analysis produces no files)
 - summary: detailed analysis results as a string`,
     };
@@ -115,15 +115,15 @@ Use action "update" for modified files.`,
   }
 
   private async buildUserMessage(task: Task, taskType: FrontendTaskType): Promise<string> {
-    const lines = [
-      `Task: ${task.title}`,
-      `Description: ${task.description}`,
-    ];
+    const lines = [`Task: ${task.title}`, `Description: ${task.description}`];
 
     if (task.reviewNote) {
-      lines.push('', '⚠️ PREVIOUS REVIEW FEEDBACK (address these issues):',
+      lines.push(
+        '',
+        '⚠️ PREVIOUS REVIEW FEEDBACK (address these issues):',
         task.reviewNote,
-        `Attempt: ${task.retryCount + 1}/3`);
+        `Attempt: ${task.retryCount + 1}/3`,
+      );
     }
 
     if (task.epicId) {
@@ -154,8 +154,11 @@ Use action "update" for modified files.`,
    * - workDir 밖 경로(path traversal) 차단
    * - 파일당/총 크기 상한 적용
    */
-  private async readExistingFiles(paths: string[]): Promise<Array<{ path: string; content: string }>> {
-    const resolvedWorkDir = resolve(this.workDir!);
+  private async readExistingFiles(
+    paths: string[],
+  ): Promise<Array<{ path: string; content: string }>> {
+    if (!this.workDir) return [];
+    const resolvedWorkDir = resolve(this.workDir);
     const results: Array<{ path: string; content: string }> = [];
     let totalChars = 0;
 
@@ -169,9 +172,10 @@ Use action "update" for modified files.`,
         const content = await readFile(absPath, 'utf-8');
 
         // 파일당 문자 수 초과 시 truncate
-        const truncated = content.length > MAX_FILE_READ_CHARS
-          ? content.slice(0, MAX_FILE_READ_CHARS) + '\n... (truncated)'
-          : content;
+        const truncated =
+          content.length > MAX_FILE_READ_CHARS
+            ? content.slice(0, MAX_FILE_READ_CHARS) + '\n... (truncated)'
+            : content;
 
         const charCount = Math.min(content.length, MAX_FILE_READ_CHARS);
         if (totalChars + charCount > MAX_TOTAL_READ_CHARS) break;

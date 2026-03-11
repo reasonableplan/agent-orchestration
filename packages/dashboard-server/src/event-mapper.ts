@@ -1,4 +1,4 @@
-import type { Message, TaskRow } from '@agent/core';
+import type { Message } from '@agent/core';
 import { MESSAGE_TYPES } from '@agent/core';
 import type { DashboardEvent, DashboardStateStore } from './types.js';
 
@@ -59,7 +59,7 @@ export class EventMapper {
     ];
 
     // Generate bubble update for agent activity
-    if (payload.status === 'busy') {
+    if (payload.status === 'busy' || payload.status === 'working') {
       events.push({
         type: 'bubble-update',
         payload: {

@@ -10,11 +10,7 @@ const log = createLogger('DocsCommitReq');
 export class CommitRequester {
   constructor(private gitService: IGitService) {}
 
-  async requestCommit(
-    task: Task,
-    writtenFiles: string[],
-    summary: string,
-  ): Promise<number> {
+  async requestCommit(task: Task, writtenFiles: string[], summary: string): Promise<number> {
     if (writtenFiles.length === 0) {
       throw new Error('No files to commit');
     }

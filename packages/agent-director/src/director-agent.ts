@@ -14,10 +14,18 @@ import { ClaudeClient } from './claude-client.js';
 import { EpicPlanner } from './epic-planner.js';
 import { Dispatcher } from './dispatcher.js';
 import { ReviewProcessor } from './review-processor.js';
-import type { CreateEpicAction, StatusQueryAction, ClarifyAction, DirectorAction } from './action-types.js';
+import type {
+  CreateEpicAction,
+  StatusQueryAction,
+  ClarifyAction,
+  DirectorAction,
+} from './action-types.js';
 
 export interface IClaudeClient {
-  chatJSON<T>(systemPrompt: string, userMessage: string): Promise<{ data: T; usage: { inputTokens: number; outputTokens: number } }>;
+  chatJSON<T>(
+    systemPrompt: string,
+    userMessage: string,
+  ): Promise<{ data: T; usage: { inputTokens: number; outputTokens: number } }>;
 }
 
 export interface DirectorConfig {
@@ -53,28 +61,42 @@ export class DirectorAgent extends BaseAgent {
     };
     super(config, deps);
 
-    this.claude = directorConfig.claudeClient ?? new ClaudeClient(
-      {
-        model: config.claudeModel,
-        maxTokens: config.maxTokens,
-        temperature: config.temperature,
-      },
-      directorConfig.claudeApiKey,
-    );
+    this.claude =
+      directorConfig.claudeClient ??
+      new ClaudeClient(
+        {
+          model: config.claudeModel,
+          maxTokens: config.maxTokens,
+          temperature: config.temperature,
+        },
+        directorConfig.claudeApiKey,
+      );
 
     this.epicPlanner = new EpicPlanner(this.id, this.stateStore, this.gitService, this.messageBus);
     this.dispatcher = new Dispatcher(this.stateStore, this.gitService);
     this.dispatcher.setClaudeClient(this.claude);
-    this.reviewProcessor = new ReviewProcessor(this.stateStore, this.gitService, this.claude, this.dispatcher, this.messageBus);
+    this.reviewProcessor = new ReviewProcessor(
+      this.stateStore,
+      this.gitService,
+      this.claude,
+      this.dispatcher,
+      this.messageBus,
+    );
 
     // MessageBus 구독 — 비동기 에러 격리
     this.subscribe(MESSAGE_TYPES.REVIEW_REQUEST, async (msg) => {
-      try { await this.onReviewRequest(msg); }
-      catch (err) { log.error({ err, msgId: msg.id }, 'onReviewRequest failed'); }
+      try {
+        await this.onReviewRequest(msg);
+      } catch (err) {
+        log.error({ err, msgId: msg.id }, 'onReviewRequest failed');
+      }
     });
     this.subscribe(MESSAGE_TYPES.BOARD_MOVE, async (msg) => {
-      try { await this.onBoardMove(msg); }
-      catch (err) { log.error({ err, msgId: msg.id }, 'onBoardMove failed'); }
+      try {
+        await this.onBoardMove(msg);
+      } catch (err) {
+        log.error({ err, msgId: msg.id }, 'onBoardMove failed');
+      }
     });
   }
 
@@ -112,7 +134,10 @@ Rules:
 
     try {
       const { data, usage } = await this.claude.chatJSON<DirectorAction>(systemPrompt, content);
-      log.info({ inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }, 'Claude usage');
+      log.info(
+        { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
+        'Claude usage',
+      );
 
       switch (data.action) {
         case 'create_epic':

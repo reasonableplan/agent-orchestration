@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GitAgent } from './git-agent.js';
-import type {
-  AgentDependencies,
-  Task,
-  IMessageBus,
-  IStateStore,
-  IGitService,
-} from '@agent/core';
+import type { AgentDependencies, Task, IMessageBus, IStateStore, IGitService } from '@agent/core';
 
 // ===== Mocks =====
 
@@ -173,16 +167,21 @@ describe('GitAgent', () => {
     await (agent as any).onTaskComplete(task, result);
 
     expect(gitService.moveIssueToColumn).toHaveBeenCalledWith(10, 'Review');
-    expect(stateStore.updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({
-      status: 'review',
-      boardColumn: 'Review',
-    }));
+    expect(stateStore.updateTask).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        status: 'review',
+        boardColumn: 'Review',
+      }),
+    );
     // review.request 메시지 발행 확인
-    expect(deps.messageBus.publish).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'review.request',
-      from: 'git',
-      payload: expect.objectContaining({ taskId: 'task-1' }),
-    }));
+    expect(deps.messageBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'review.request',
+        from: 'git',
+        payload: expect.objectContaining({ taskId: 'task-1' }),
+      }),
+    );
   });
 
   it('moves issue to Failed on failure', async () => {
@@ -192,10 +191,13 @@ describe('GitAgent', () => {
     await (agent as any).onTaskComplete(task, result);
 
     expect(gitService.moveIssueToColumn).toHaveBeenCalledWith(10, 'Failed');
-    expect(stateStore.updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({
-      status: 'failed',
-      boardColumn: 'Failed',
-    }));
+    expect(stateStore.updateTask).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        status: 'failed',
+        boardColumn: 'Failed',
+      }),
+    );
   });
 
   it('skips board move when no githubIssueNumber', async () => {

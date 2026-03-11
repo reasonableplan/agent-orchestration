@@ -51,10 +51,12 @@ function isRetryable(error: unknown): boolean {
   if (msg.includes('network') || msg.includes('fetch failed')) return true;
 
   // HTTP 서버 에러
-  if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('504')) return true;
+  if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('504'))
+    return true;
 
   // Rate limit
-  if (msg.includes('rate limit') || msg.includes('429') || msg.includes('secondary rate')) return true;
+  if (msg.includes('rate limit') || msg.includes('429') || msg.includes('secondary rate'))
+    return true;
 
   // 인증/권한 에러는 재시도 불가
   if (msg.includes('401') || msg.includes('403') || msg.includes('404')) return false;

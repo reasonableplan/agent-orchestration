@@ -10,9 +10,7 @@ describe('withRetry', () => {
   });
 
   it('일시적 에러 시 재시도한다', async () => {
-    const fn = vi.fn()
-      .mockRejectedValueOnce(new Error('socket hang up'))
-      .mockResolvedValue('ok');
+    const fn = vi.fn().mockRejectedValueOnce(new Error('socket hang up')).mockResolvedValue('ok');
 
     const result = await withRetry(fn, { maxRetries: 3, baseDelayMs: 1 });
     expect(result).toBe('ok');
@@ -34,7 +32,8 @@ describe('withRetry', () => {
   });
 
   it('rate limit(429) 에러 시 재시도한다', async () => {
-    const fn = vi.fn()
+    const fn = vi
+      .fn()
       .mockRejectedValueOnce(new Error('429 rate limit exceeded'))
       .mockResolvedValue('ok');
 

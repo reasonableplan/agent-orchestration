@@ -127,14 +127,18 @@ export abstract class BaseAgent {
         } catch (error) {
           this.consecutiveErrors++;
           await this.setStatus('error');
-          this.log.error({ err: error, consecutiveErrors: this.consecutiveErrors }, 'Polling error');
+          this.log.error(
+            { err: error, consecutiveErrors: this.consecutiveErrors },
+            'Polling error',
+          );
         }
       }
 
       // 지수 백오프: 연속 에러 시 대기 시간 증가
-      const backoff = this.consecutiveErrors > 0
-        ? Math.min(intervalMs * Math.pow(2, this.consecutiveErrors - 1), MAX_BACKOFF_MS)
-        : intervalMs;
+      const backoff =
+        this.consecutiveErrors > 0
+          ? Math.min(intervalMs * Math.pow(2, this.consecutiveErrors - 1), MAX_BACKOFF_MS)
+          : intervalMs;
       await new Promise((r) => setTimeout(r, backoff));
     }
   }
@@ -148,7 +152,10 @@ export abstract class BaseAgent {
     return Promise.race([
       this.executeTask(task),
       new Promise<TaskResult>((_, reject) =>
-        setTimeout(() => reject(new Error(`Task "${task.title}" timed out after ${timeoutMs}ms`)), timeoutMs),
+        setTimeout(
+          () => reject(new Error(`Task "${task.title}" timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        ),
       ),
     ]);
   }
@@ -177,9 +184,22 @@ export abstract class BaseAgent {
       const claimed = await this.stateStore.claimTask(row.id);
       if (!claimed) continue; // another agent got it first
 
-      // Sync Board
+      // Sync Board — 실패 시 DB 롤백
       if (row.githubIssueNumber) {
-        await this.gitService.moveIssueToColumn(row.githubIssueNumber, 'In Progress');
+        try {
+          await this.gitService.moveIssueToColumn(row.githubIssueNumber, 'In Progress');
+        } catch (error) {
+          this.log.warn(
+            { err: error instanceof Error ? error.message : error, taskId: row.id },
+            'Failed to sync Board after claim, rolling back',
+          );
+          await this.stateStore.updateTask(row.id, {
+            status: 'ready',
+            boardColumn: 'Ready',
+            startedAt: null,
+          });
+          continue;
+        }
       }
 
       return this.taskRowToTask(row);
@@ -192,23 +212,7 @@ export abstract class BaseAgent {
    * TaskRow (DB) → Task (domain object) 변환.
    */
   protected taskRowToTask(row: TaskRow): Task {
-    return {
-      id: row.id,
-      epicId: row.epicId,
-      title: row.title,
-      description: row.description ?? '',
-      assignedAgent: row.assignedAgent,
-      status: (row.status as Task['status']) ?? 'in-progress',
-      githubIssueNumber: row.githubIssueNumber,
-      boardColumn: 'In Progress',
-      dependencies: (row.dependencies as string[]) ?? [],
-      priority: (row.priority ?? 3) as Task['priority'],
-      complexity: (row.complexity ?? 'medium') as Task['complexity'],
-      retryCount: row.retryCount ?? 0,
-      artifacts: [],
-      labels: (row.labels as string[]) ?? [],
-      reviewNote: row.reviewNote ?? null,
-    };
+    return taskRowToTask(row);
   }
 
   /**
@@ -243,4 +247,27 @@ export abstract class BaseAgent {
       timestamp: new Date(),
     });
   }
+}
+
+/**
+ * TaskRow (DB) → Task (domain object) 변환. standalone 함수.
+ */
+export function taskRowToTask(row: TaskRow): Task {
+  return {
+    id: row.id,
+    epicId: row.epicId,
+    title: row.title,
+    description: row.description ?? '',
+    assignedAgent: row.assignedAgent,
+    status: (row.status as Task['status']) ?? 'in-progress',
+    githubIssueNumber: row.githubIssueNumber,
+    boardColumn: row.boardColumn ?? 'In Progress',
+    dependencies: (row.dependencies as string[]) ?? [],
+    priority: (row.priority ?? 3) as Task['priority'],
+    complexity: (row.complexity ?? 'medium') as Task['complexity'],
+    retryCount: row.retryCount ?? 0,
+    artifacts: [],
+    labels: (row.labels as string[]) ?? [],
+    reviewNote: row.reviewNote ?? null,
+  };
 }

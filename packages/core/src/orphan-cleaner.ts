@@ -1,4 +1,4 @@
-import { eq, notInArray } from 'drizzle-orm';
+import { eq, and, notInArray } from 'drizzle-orm';
 import type { Database } from './db/index.js';
 import { agents, tasks } from './db/schema.js';
 import { createLogger } from './logger.js';
@@ -31,8 +31,14 @@ export class OrphanCleaner {
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => this.cleanup().catch((e) => log.error({ err: e }, 'Cleanup failed')), this.intervalMs);
-    log.info({ intervalMs: this.intervalMs, heartbeatTimeoutMs: this.heartbeatTimeoutMs }, 'OrphanCleaner started');
+    this.timer = setInterval(
+      () => this.cleanup().catch((e) => log.error({ err: e }, 'Cleanup failed')),
+      this.intervalMs,
+    );
+    log.info(
+      { intervalMs: this.intervalMs, heartbeatTimeoutMs: this.heartbeatTimeoutMs },
+      'OrphanCleaner started',
+    );
   }
 
   stop(): void {
@@ -67,7 +73,7 @@ export class OrphanCleaner {
     const inProgressTasks = await this.db
       .select()
       .from(tasks)
-      .where(eq(tasks.boardColumn, 'In Progress'));
+      .where(and(eq(tasks.boardColumn, 'In Progress'), eq(tasks.status, 'in-progress')));
 
     let restored = 0;
     for (const task of inProgressTasks) {
@@ -91,10 +97,7 @@ export class OrphanCleaner {
 
     // 3. 만료 에이전트 상태를 error로 마킹
     for (const agentId of staleAgentIds) {
-      await this.db
-        .update(agents)
-        .set({ status: 'error' })
-        .where(eq(agents.id, agentId));
+      await this.db.update(agents).set({ status: 'error' }).where(eq(agents.id, agentId));
       log.warn({ agentId }, 'Stale agent marked as error');
     }
 

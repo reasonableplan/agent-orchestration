@@ -27,7 +27,14 @@ export default function App() {
       { id: 'frontend-2', domain: 'frontend' },
       { id: 'backend-2', domain: 'backend' },
     ];
-    const statuses = ['idle', 'working', 'thinking', 'searching', 'delivering', 'reviewing'] as const;
+    const statuses = [
+      'idle',
+      'working',
+      'thinking',
+      'searching',
+      'delivering',
+      'reviewing',
+    ] as const;
     const bubbles: Array<{ content: string; type: 'task' | 'thinking' | 'info' }> = [
       { content: 'Code fix!', type: 'task' },
       { content: 'API done!', type: 'info' },
@@ -62,9 +69,7 @@ export default function App() {
       const status = statuses[Math.floor(Math.random() * statuses.length)];
 
       const showBubble = Math.random() > 0.35;
-      const bubble = showBubble
-        ? bubbles[Math.floor(Math.random() * bubbles.length)]
-        : null;
+      const bubble = showBubble ? bubbles[Math.floor(Math.random() * bubbles.length)] : null;
 
       updateAgent(agentId, {
         domain,

@@ -4,13 +4,32 @@
 
 import { MAP_ROWS, WALL_ROWS } from '../sprite-config';
 import {
-  T, rand, fillCircle,
-  FLOOR_COLORS, FLOOR_GRAIN, FLOOR_KNOT, FLOOR_BORDER,
-  WALL_COLORS, MORTAR, BRICK_HI, BRICK_SH, WALL_CAP,
-  WAINSCOT_BASE, WAINSCOT_HI, WAINSCOT_BEVEL_L, WAINSCOT_BEVEL_D, BASEBOARD,
+  T,
+  rand,
+  fillCircle,
+  FLOOR_COLORS,
+  FLOOR_GRAIN,
+  FLOOR_KNOT,
+  FLOOR_BORDER,
+  WALL_COLORS,
+  MORTAR,
+  BRICK_HI,
+  BRICK_SH,
+  WALL_CAP,
+  WAINSCOT_BASE,
+  WAINSCOT_HI,
+  WAINSCOT_BEVEL_L,
+  WAINSCOT_BEVEL_D,
+  BASEBOARD,
 } from './tile-utils';
 
-export function drawFloorTile(ctx: CanvasRenderingContext2D, x: number, y: number, row: number, col: number) {
+export function drawFloorTile(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  row: number,
+  col: number,
+) {
   const ci = Math.floor(rand(col, row) * FLOOR_COLORS.length);
   ctx.fillStyle = FLOOR_COLORS[ci];
   ctx.fillRect(x, y, T, T);
@@ -64,7 +83,13 @@ export function drawFloorTile(ctx: CanvasRenderingContext2D, x: number, y: numbe
   }
 }
 
-export function drawWallTile(ctx: CanvasRenderingContext2D, x: number, y: number, row: number, col: number) {
+export function drawWallTile(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  row: number,
+  col: number,
+) {
   ctx.fillStyle = '#B5A690';
   ctx.fillRect(x, y, T, T);
 
@@ -81,7 +106,9 @@ export function drawWallTile(ctx: CanvasRenderingContext2D, x: number, y: number
       const right = Math.min(T, abx + brickW);
       if (left >= right) continue;
 
-      const ci = Math.floor(rand(col * 4 + brickRow, Math.floor(abx / brickW), 50) * WALL_COLORS.length);
+      const ci = Math.floor(
+        rand(col * 4 + brickRow, Math.floor(abx / brickW), 50) * WALL_COLORS.length,
+      );
       ctx.fillStyle = WALL_COLORS[ci];
       ctx.fillRect(x + left, y + by, right - left, brickH);
 

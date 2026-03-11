@@ -63,7 +63,10 @@ export class FileWriter {
       try {
         JSON.parse(content);
       } catch (err) {
-        throw new Error(`Invalid JSON in ${file.path}: ${err instanceof Error ? err.message : err}`);
+        throw new Error(
+          `Invalid JSON in ${file.path}: ${err instanceof Error ? err.message : err}`,
+          { cause: err },
+        );
       }
       return;
     }
@@ -82,7 +85,9 @@ export class FileWriter {
       for (const [bracket, count] of Object.entries(balance)) {
         if (count !== 0) {
           log.warn({ file: file.path, bracket, count }, 'Bracket imbalance detected');
-          throw new Error(`Syntax error in ${file.path}: unbalanced '${bracket}' (${count > 0 ? 'unclosed' : 'extra closing'})`);
+          throw new Error(
+            `Syntax error in ${file.path}: unbalanced '${bracket}' (${count > 0 ? 'unclosed' : 'extra closing'})`,
+          );
         }
       }
     }

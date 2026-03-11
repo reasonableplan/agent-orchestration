@@ -8,7 +8,16 @@ import { drawCharacter } from './draw-character';
 export function prerenderCharacters(): Map<string, HTMLCanvasElement[]> {
   const cache = new Map<string, HTMLCanvasElement[]>();
   const domains = ['director', 'git', 'frontend', 'backend', 'docs'];
-  const statuses = ['idle', 'working', 'thinking', 'error', 'waiting', 'searching', 'delivering', 'reviewing'];
+  const statuses = [
+    'idle',
+    'working',
+    'thinking',
+    'error',
+    'waiting',
+    'searching',
+    'delivering',
+    'reviewing',
+  ];
 
   const canvasW = (CHAR_W + 16) * RENDER_SCALE;
   const canvasH = (CHAR_H + 16) * RENDER_SCALE;
@@ -16,7 +25,7 @@ export function prerenderCharacters(): Map<string, HTMLCanvasElement[]> {
   for (const domain of domains) {
     for (const status of statuses) {
       const frames: HTMLCanvasElement[] = [];
-      const walkFrames = (status === 'delivering' || status === 'searching') ? 4 : 1;
+      const walkFrames = status === 'delivering' || status === 'searching' ? 4 : 1;
       const armFrames = status === 'working' ? 2 : 1;
       const totalFrames = Math.max(walkFrames, armFrames);
 

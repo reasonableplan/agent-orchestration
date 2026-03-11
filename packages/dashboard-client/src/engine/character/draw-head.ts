@@ -2,7 +2,7 @@
  * Character head: face, hair styles, domain accessories
  */
 
-import { CHAR_W as _CHAR_W, type AgentColors } from '../sprite-config';
+import { type AgentColors } from '../sprite-config';
 import { lighten, darken, px, cpx } from './draw-utils';
 
 // ---- Head ----
@@ -17,8 +17,8 @@ export function drawHead(
   isIdle: boolean,
   isWaiting: boolean,
 ) {
-  const hx = 9;  // head left x
-  const hy = 2;  // head top y
+  const hx = 9; // head left x
+  const hy = 2; // head top y
   const hw = 14; // head width
   const hh = 12; // head height
 

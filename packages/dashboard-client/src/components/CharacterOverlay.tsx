@@ -50,10 +50,7 @@ export default function CharacterOverlay() {
   const [positions, setPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
 
   // Check if any agent has a bubble — skip rAF when none
-  const hasBubbles = useMemo(
-    () => Object.values(agents).some((a) => a.bubble !== null),
-    [agents],
-  );
+  const hasBubbles = useMemo(() => Object.values(agents).some((a) => a.bubble !== null), [agents]);
 
   // Sync spring positions with animation frame (only when bubbles exist)
   useEffect(() => {
@@ -99,7 +96,14 @@ export default function CharacterOverlay() {
   return (
     <div
       className="pointer-events-none overflow-hidden"
-      style={{ position: 'absolute', left: 0, top: 0, width: CANVAS_W, height: CANVAS_H, imageRendering: 'auto' }}
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: CANVAS_W,
+        height: CANVAS_H,
+        imageRendering: 'auto',
+      }}
     >
       <AnimatePresence>
         {Object.values(agents).map((agent) => {
@@ -110,9 +114,8 @@ export default function CharacterOverlay() {
           if (!bubble) return null;
 
           const style = BUBBLE_STYLES[bubble.type] ?? BUBBLE_STYLES.info;
-          const truncated = bubble.content.length > 24
-            ? bubble.content.slice(0, 22) + '..'
-            : bubble.content;
+          const truncated =
+            bubble.content.length > 24 ? bubble.content.slice(0, 22) + '..' : bubble.content;
 
           return (
             <motion.div

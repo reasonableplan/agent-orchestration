@@ -38,10 +38,7 @@ export class StateStore implements IStateStore {
   }
 
   async updateHeartbeat(id: string): Promise<void> {
-    await this.db
-      .update(agents)
-      .set({ lastHeartbeat: new Date() })
-      .where(eq(agents.id, id));
+    await this.db.update(agents).set({ lastHeartbeat: new Date() }).where(eq(agents.id, id));
   }
 
   // ===== Task =====
@@ -82,7 +79,7 @@ export class StateStore implements IStateStore {
         status: 'in-progress',
         startedAt: new Date(),
       })
-      .where(and(eq(tasks.id, taskId), eq(tasks.boardColumn, 'Ready')));
+      .where(and(eq(tasks.id, taskId), eq(tasks.boardColumn, 'Ready'), eq(tasks.status, 'ready')));
 
     // Drizzle pg driver returns QueryResult with rowCount
     const rowCount = (result as { rowCount?: number }).rowCount ?? 0;

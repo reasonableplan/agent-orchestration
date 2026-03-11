@@ -9,7 +9,13 @@ import { T, rand, fillCircle } from './tile-utils';
 /* ================================================================
    SOFA
    ================================================================ */
-export function drawSofa(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+export function drawSofa(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
   const pw = w * T;
   const ph = h * T;
 
@@ -74,7 +80,13 @@ export function drawSofa(ctx: CanvasRenderingContext2D, x: number, y: number, w:
 /* ================================================================
    BOOKSHELF
    ================================================================ */
-export function drawBookshelf(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+export function drawBookshelf(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
   const pw = w * T;
   const ph = h * T;
 
@@ -89,9 +101,20 @@ export function drawBookshelf(ctx: CanvasRenderingContext2D, x: number, y: numbe
   const shelfH = Math.floor((ph - 6) / shelfCount);
 
   const bookColors = [
-    '#CC3333', '#3366CC', '#33AA33', '#CC9900', '#9933CC',
-    '#CC6633', '#339999', '#AA3366', '#668833', '#3355AA',
-    '#DD7722', '#5544AA', '#228877', '#BB4455',
+    '#CC3333',
+    '#3366CC',
+    '#33AA33',
+    '#CC9900',
+    '#9933CC',
+    '#CC6633',
+    '#339999',
+    '#AA3366',
+    '#668833',
+    '#3355AA',
+    '#DD7722',
+    '#5544AA',
+    '#228877',
+    '#BB4455',
   ];
 
   for (let shelf = 0; shelf < shelfCount; shelf++) {
@@ -163,7 +186,13 @@ export function drawBookshelf(ctx: CanvasRenderingContext2D, x: number, y: numbe
 /* ================================================================
    WHITEBOARD
    ================================================================ */
-export function drawWhiteboard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+export function drawWhiteboard(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
   const pw = w * T;
   const ph = h * T;
 
@@ -525,7 +554,13 @@ export function drawRug(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
 /* ================================================================
    WINDOW
    ================================================================ */
-export function drawWindow(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+export function drawWindow(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
   const pw = w * T;
   const ph = h * T;
 
@@ -625,7 +660,14 @@ export function drawWindow(ctx: CanvasRenderingContext2D, x: number, y: number, 
 /* ================================================================
    POSTERS
    ================================================================ */
-export function drawPoster(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, _h: number, type: string) {
+export function drawPoster(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  _h: number,
+  type: string,
+) {
   const pw = w * T;
   const ph = _h * T;
 
@@ -732,7 +774,13 @@ export function drawCooler(ctx: CanvasRenderingContext2D, x: number, y: number) 
 /* ================================================================
    ARCADE MACHINE
    ================================================================ */
-export function drawArcade(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+export function drawArcade(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
   const pw = w * T;
   const ph = h * T;
 
@@ -829,7 +877,13 @@ export function drawArcade(ctx: CanvasRenderingContext2D, x: number, y: number, 
 /* ================================================================
    FRIDGE
    ================================================================ */
-export function drawFridge(ctx: CanvasRenderingContext2D, x: number, y: number, _w: number, h: number) {
+export function drawFridge(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  _w: number,
+  h: number,
+) {
   const ph = h * T;
 
   ctx.fillStyle = 'rgba(0,0,0,0.1)';
@@ -845,7 +899,7 @@ export function drawFridge(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillStyle = '#E8E8E8';
   ctx.fillRect(x + 3, y + 5, T - 6, ph / 3 - 2);
   ctx.fillStyle = '#DCDCDC';
-  ctx.fillRect(x + 3, y + ph / 3 + 3, T - 6, ph * 2 / 3 - 8);
+  ctx.fillRect(x + 3, y + ph / 3 + 3, T - 6, (ph * 2) / 3 - 8);
 
   ctx.fillStyle = '#AAAAAA';
   ctx.fillRect(x + 3, y + ph / 3 + 1, T - 6, 2);

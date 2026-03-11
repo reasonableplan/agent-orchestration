@@ -39,9 +39,7 @@ export default function TokenUsagePanel() {
     <div className="flex flex-col h-full bg-[#16213e] border-l-2 border-[#0f3460]">
       {/* Header */}
       <div className="px-3 py-2 border-b border-[#0f3460]">
-        <span className="font-pixel text-[8px] text-cyan-300 pixel-text-shadow">
-          TOKEN USAGE
-        </span>
+        <span className="font-pixel text-[8px] text-cyan-300 pixel-text-shadow">TOKEN USAGE</span>
       </div>
 
       {/* Total Budget Bar */}
@@ -166,9 +164,7 @@ export default function TokenUsagePanel() {
           {Object.entries(DOMAIN_COLORS).map(([id, color]) => (
             <div key={id} className="flex items-center gap-1">
               <div className="w-1.5 h-1.5" style={{ backgroundColor: color }} />
-              <span className="font-pixel text-[4px] text-gray-500">
-                {DOMAIN_LABELS[id] ?? id}
-              </span>
+              <span className="font-pixel text-[4px] text-gray-500">{DOMAIN_LABELS[id] ?? id}</span>
             </div>
           ))}
         </div>

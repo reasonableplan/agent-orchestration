@@ -47,10 +47,7 @@ describe('SystemController', () => {
   let controller: SystemController;
 
   beforeEach(() => {
-    agents = [
-      createMockAgent('git', 'git'),
-      createMockAgent('backend', 'backend'),
-    ];
+    agents = [createMockAgent('git', 'git'), createMockAgent('backend', 'backend')];
     stateStore = createMockStateStore();
     controller = new SystemController(agents, stateStore);
   });

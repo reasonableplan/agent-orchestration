@@ -37,29 +37,59 @@ export interface AgentColors {
 
 export const AGENT_COLORS: Record<string, AgentColors> = {
   director: {
-    body: '#2C2C54', bodyDark: '#1A1A3E', accent: '#FFD700',
-    hair: '#4A3728', skin: '#FFCC99', skinShadow: '#E5B080',
-    pants: '#1A1A3E', shoes: '#333344', hairStyle: 'short',
+    body: '#2C2C54',
+    bodyDark: '#1A1A3E',
+    accent: '#FFD700',
+    hair: '#4A3728',
+    skin: '#FFCC99',
+    skinShadow: '#E5B080',
+    pants: '#1A1A3E',
+    shoes: '#333344',
+    hairStyle: 'short',
   },
   git: {
-    body: '#CC3322', bodyDark: '#AA2211', accent: '#FF7854',
-    hair: '#1A1A1A', skin: '#8B6848', skinShadow: '#7A5838',
-    pants: '#333344', shoes: '#222233', hairStyle: 'spiky',
+    body: '#CC3322',
+    bodyDark: '#AA2211',
+    accent: '#FF7854',
+    hair: '#1A1A1A',
+    skin: '#8B6848',
+    skinShadow: '#7A5838',
+    pants: '#333344',
+    shoes: '#222233',
+    hairStyle: 'spiky',
   },
   frontend: {
-    body: '#20232A', bodyDark: '#15181E', accent: '#61DAFB',
-    hair: '#8B4513', skin: '#FFD5B8', skinShadow: '#E8BCA0',
-    pants: '#2A3A4A', shoes: '#444455', hairStyle: 'long',
+    body: '#20232A',
+    bodyDark: '#15181E',
+    accent: '#61DAFB',
+    hair: '#8B4513',
+    skin: '#FFD5B8',
+    skinShadow: '#E8BCA0',
+    pants: '#2A3A4A',
+    shoes: '#444455',
+    hairStyle: 'long',
   },
   backend: {
-    body: '#2E6B2E', bodyDark: '#1E5A1E', accent: '#68A063',
-    hair: '#222222', skin: '#DEB887', skinShadow: '#C8A070',
-    pants: '#333344', shoes: '#333333', hairStyle: 'curly',
+    body: '#2E6B2E',
+    bodyDark: '#1E5A1E',
+    accent: '#68A063',
+    hair: '#222222',
+    skin: '#DEB887',
+    skinShadow: '#C8A070',
+    pants: '#333344',
+    shoes: '#333333',
+    hairStyle: 'curly',
   },
   docs: {
-    body: '#C9A800', bodyDark: '#A08800', accent: '#F7DF1E',
-    hair: '#654321', skin: '#FFE0C0', skinShadow: '#E8C8A8',
-    pants: '#4A4030', shoes: '#554433', hairStyle: 'ponytail',
+    body: '#C9A800',
+    bodyDark: '#A08800',
+    accent: '#F7DF1E',
+    hair: '#654321',
+    skin: '#FFE0C0',
+    skinShadow: '#E8C8A8',
+    pants: '#4A4030',
+    shoes: '#554433',
+    hairStyle: 'ponytail',
   },
 };
 
@@ -81,7 +111,7 @@ export const DESK_SLOTS: DeskSlot[] = [
   // Slot 0: Director (center-top boss desk)
   { desk: { x: 384, y: 192 }, idle: { x: 608, y: 432 } },
   // Slot 1: Git (left)
-  { desk: { x: 96,  y: 272 }, idle: { x: 576, y: 440 } },
+  { desk: { x: 96, y: 272 }, idle: { x: 576, y: 440 } },
   // Slot 2: Frontend (center-left)
   { desk: { x: 256, y: 320 }, idle: { x: 640, y: 432 } },
   // Slot 3: Backend (center-right)
@@ -98,10 +128,7 @@ export const DESK_SLOTS: DeskSlot[] = [
 
 export const BOOKSHELF_POS = { x: 704, y: 280 };
 
-export function getAgentPixelPosition(
-  slotIndex: number,
-  status: string,
-): { x: number; y: number } {
+export function getAgentPixelPosition(slotIndex: number, status: string): { x: number; y: number } {
   const slot = DESK_SLOTS[slotIndex] ?? DESK_SLOTS[0];
   switch (status) {
     case 'working':
@@ -112,7 +139,10 @@ export function getAgentPixelPosition(
     case 'idle':
       return slot.idle;
     case 'searching':
-      return { x: BOOKSHELF_POS.x - (slotIndex % 3) * 20, y: BOOKSHELF_POS.y + Math.floor(slotIndex / 3) * 20 };
+      return {
+        x: BOOKSHELF_POS.x - (slotIndex % 3) * 20,
+        y: BOOKSHELF_POS.y + Math.floor(slotIndex / 3) * 20,
+      };
     case 'delivering': {
       const dir = DESK_SLOTS[0].desk;
       return { x: (slot.desk.x + dir.x) / 2, y: (slot.desk.y + dir.y) / 2 };

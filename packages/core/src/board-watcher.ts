@@ -88,8 +88,6 @@ export class BoardWatcher {
     const currentColumns = new Map<number, string>();
 
     for (const issue of allItems) {
-      currentColumns.set(issue.issueNumber, issue.column);
-
       const prevColumn = this.previousColumns.get(issue.issueNumber);
       const isNew = prevColumn === undefined;
       const isChanged = prevColumn !== undefined && prevColumn !== issue.column;
@@ -104,8 +102,15 @@ export class BoardWatcher {
         if (isNew || isChanged) {
           await this.syncTaskFromIssue(issue);
         }
+
+        // 성공한 경우에만 currentColumns에 등록 (실패 시 다음 사이클에서 재시도)
+        currentColumns.set(issue.issueNumber, issue.column);
       } catch (error) {
         log.error({ err: error, issueNumber: issue.issueNumber }, 'Failed to sync issue');
+        // 이전 상태 유지 — 다음 사이클에서 isNew/isChanged로 재시도됨
+        if (prevColumn !== undefined) {
+          currentColumns.set(issue.issueNumber, prevColumn);
+        }
       }
     }
 
@@ -175,18 +180,24 @@ export class BoardWatcher {
       const dbStatus = existing.status as string;
       const boardStatus = COLUMN_TO_STATUS[issue.column] ?? 'backlog';
       const STATUS_PRIORITY: Record<string, number> = {
-        backlog: 0, ready: 1, 'in-progress': 2, review: 3, failed: 3, done: 4,
+        backlog: 0,
+        ready: 1,
+        'in-progress': 2,
+        failed: 3,
+        review: 4,
+        done: 5,
       };
       const dbPriority = STATUS_PRIORITY[dbStatus] ?? 0;
       const boardPriority = STATUS_PRIORITY[boardStatus] ?? 0;
 
-      // Board가 DB보다 앞선(더 진행된) 상태이거나 같은 경우에만 업데이트
-      if (boardPriority >= dbPriority) {
+      // Board가 DB보다 앞선(더 진행된) 상태일 때만 업데이트 (같으면 스킵 — 불필요한 write 방지)
+      if (boardPriority > dbPriority) {
         await this.stateStore.updateTask(taskId, {
           boardColumn: issue.column,
           status: boardStatus,
           assignedAgent: targetAgent,
           labels: issue.labels,
+          dependencies: issue.dependencies.map((d) => `task-gh-${d}`),
         });
       }
     } else {

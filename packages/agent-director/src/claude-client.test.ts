@@ -38,10 +38,7 @@ describe('ClaudeClient.extractJSON', () => {
 
   it('extracts JSON array', () => {
     const input = 'Tasks: [{"title": "a"}, {"title": "b"}]';
-    expect(JSON.parse(ClaudeClient.extractJSON(input))).toEqual([
-      { title: 'a' },
-      { title: 'b' },
-    ]);
+    expect(JSON.parse(ClaudeClient.extractJSON(input))).toEqual([{ title: 'a' }, { title: 'b' }]);
   });
 
   it('handles nested JSON objects', () => {

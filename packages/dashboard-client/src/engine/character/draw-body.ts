@@ -360,7 +360,6 @@ export function drawArms(
     px(ctx, 25, armY + 9 + offsetR, 4, 1);
     ctx.fillStyle = handShadow;
     px(ctx, 27, armY + 8 + offsetR, 1, 1);
-
   } else if (status === 'thinking') {
     // ---- THINKING: left arm down, right arm up to chin ----
     ctx.fillStyle = sleeveColor;
@@ -382,7 +381,6 @@ export function drawArms(
     px(ctx, 22, armY - 7, 4, 3);
     ctx.fillStyle = handShadow;
     px(ctx, 22, armY - 5, 4, 1);
-
   } else if (status === 'idle') {
     // ---- IDLE: arms at sides, relaxed ----
     ctx.fillStyle = sleeveColor;
@@ -406,7 +404,6 @@ export function drawArms(
     px(ctx, 26, armY + 8, 3, 3);
     ctx.fillStyle = handShadow;
     px(ctx, 26, armY + 10, 3, 1);
-
   } else {
     // ---- DEFAULT: arms at sides ----
     ctx.fillStyle = sleeveColor;

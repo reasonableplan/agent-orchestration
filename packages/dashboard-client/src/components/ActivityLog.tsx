@@ -42,9 +42,7 @@ export default function ActivityLog() {
     <div className="flex flex-col h-full bg-[#16213e] border-l-2 border-[#0f3460]">
       {/* Header */}
       <div className="px-3 py-2 border-b border-[#0f3460]">
-        <span className="font-pixel text-[8px] text-cyan-300 pixel-text-shadow">
-          ACTIVITY LOG
-        </span>
+        <span className="font-pixel text-[8px] text-cyan-300 pixel-text-shadow">ACTIVITY LOG</span>
       </div>
 
       {/* Messages */}
@@ -57,10 +55,7 @@ export default function ActivityLog() {
         {messages.map((msg) => {
           const style = getStyle(msg.type);
           return (
-            <div
-              key={msg.id}
-              className="flex items-start gap-1 py-0.5 border-b border-gray-800/50"
-            >
+            <div key={msg.id} className="flex items-start gap-1 py-0.5 border-b border-gray-800/50">
               <span className="text-gray-600 font-pixel text-[5px] whitespace-nowrap pt-0.5">
                 {formatTimestamp(msg.timestamp)}
               </span>
@@ -71,7 +66,9 @@ export default function ActivityLog() {
                 {msg.from}:
               </span>
               <span className="text-gray-300 font-pixel text-[5px] break-all leading-relaxed">
-                {truncateContent(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))}
+                {truncateContent(
+                  typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+                )}
               </span>
             </div>
           );

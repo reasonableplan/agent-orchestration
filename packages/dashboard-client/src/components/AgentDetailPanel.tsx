@@ -45,26 +45,20 @@ export default function AgentDetailPanel() {
 
   const agent = selectedAgent ? agents[selectedAgent] : null;
 
-  const agentTasks = agent
-    ? Object.values(tasks).filter((t) => t.assignedAgent === agent.id)
-    : [];
+  const agentTasks = agent ? Object.values(tasks).filter((t) => t.assignedAgent === agent.id) : [];
 
-  const agentMessages = agent
-    ? messages.filter((m) => m.from === agent.id).slice(0, 10)
-    : [];
+  const agentMessages = agent ? messages.filter((m) => m.from === agent.id).slice(0, 10) : [];
 
   const statusInfo = agent
-    ? STATUS_LABELS[agent.status] ?? STATUS_LABELS.idle
+    ? (STATUS_LABELS[agent.status] ?? STATUS_LABELS.idle)
     : STATUS_LABELS.idle;
 
   const agentTokens = agent ? tokenUsage[agent.id] : null;
   const totalUsed = Object.values(tokenUsage).reduce((sum, t) => sum + t.totalTokens, 0);
-  const agentPercent = agentTokens && totalUsed > 0
-    ? (agentTokens.totalTokens / totalUsed) * 100
-    : 0;
-  const budgetPercent = agentTokens && tokenBudget > 0
-    ? (agentTokens.totalTokens / tokenBudget) * 100
-    : 0;
+  const agentPercent =
+    agentTokens && totalUsed > 0 ? (agentTokens.totalTokens / totalUsed) * 100 : 0;
+  const budgetPercent =
+    agentTokens && tokenBudget > 0 ? (agentTokens.totalTokens / tokenBudget) * 100 : 0;
 
   return (
     <AnimatePresence>
@@ -107,9 +101,7 @@ export default function AgentDetailPanel() {
               <div className="mt-2">
                 <span className="font-pixel text-[6px] text-gray-500">CURRENT TASK</span>
                 <div className="mt-1 px-2 py-1 bg-[#1a1a3e] border border-[#0f3460]">
-                  <span className="font-pixel text-[6px] text-gray-300">
-                    {agent.currentTask}
-                  </span>
+                  <span className="font-pixel text-[6px] text-gray-300">{agent.currentTask}</span>
                 </div>
               </div>
             )}
@@ -179,7 +171,11 @@ export default function AgentDetailPanel() {
                     {agentTokens.callCount} API calls
                   </span>
                   <span className="font-pixel text-[5px] text-gray-500">
-                    ~{agentTokens.callCount > 0 ? formatTokens(Math.round(agentTokens.totalTokens / agentTokens.callCount)) : '0'}/call
+                    ~
+                    {agentTokens.callCount > 0
+                      ? formatTokens(Math.round(agentTokens.totalTokens / agentTokens.callCount))
+                      : '0'}
+                    /call
                   </span>
                 </div>
               </div>
@@ -207,10 +203,7 @@ export default function AgentDetailPanel() {
                           ? 'bg-purple-600'
                           : 'bg-gray-600';
                 return (
-                  <div
-                    key={task.id}
-                    className="flex items-center gap-1 px-1 py-0.5 bg-[#1a1a3e]"
-                  >
+                  <div key={task.id} className="flex items-center gap-1 px-1 py-0.5 bg-[#1a1a3e]">
                     <div className={`w-1.5 h-1.5 ${colColor} flex-shrink-0`} />
                     <span className="font-pixel text-[5px] text-gray-300 truncate">
                       {task.title || task.id}

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { CircuitBreaker } from './circuit-breaker.js';
 
 describe('CircuitBreaker', () => {
@@ -25,7 +25,9 @@ describe('CircuitBreaker', () => {
     await expect(cb.execute(() => Promise.reject(new Error('fail')))).rejects.toThrow();
     expect(cb.getState()).toBe('OPEN');
 
-    await expect(cb.execute(() => Promise.resolve('ok'))).rejects.toThrow('Circuit breaker "test" is OPEN');
+    await expect(cb.execute(() => Promise.resolve('ok'))).rejects.toThrow(
+      'Circuit breaker "test" is OPEN',
+    );
   });
 
   it('resetTimeout 후 HALF_OPEN으로 전환되어 probe 요청을 허용한다', async () => {

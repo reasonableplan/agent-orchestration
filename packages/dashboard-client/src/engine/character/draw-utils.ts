@@ -30,7 +30,14 @@ export function px(ctx: CanvasRenderingContext2D, x: number, y: number, w = 1, h
 }
 
 /** Set fill and draw a pixel in one call */
-export function cpx(ctx: CanvasRenderingContext2D, color: string, x: number, y: number, w = 1, h = 1) {
+export function cpx(
+  ctx: CanvasRenderingContext2D,
+  color: string,
+  x: number,
+  y: number,
+  w = 1,
+  h = 1,
+) {
   ctx.fillStyle = color;
   ctx.fillRect(x, y, w, h);
 }
@@ -38,8 +45,12 @@ export function cpx(ctx: CanvasRenderingContext2D, color: string, x: number, y: 
 /** Draw a rounded rectangle (pixel art style - cut corners) */
 export function roundedRect(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number,
-  color: string, cornerSize = 1,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: string,
+  cornerSize = 1,
 ) {
   ctx.fillStyle = color;
   // Main body
@@ -57,10 +68,15 @@ export function getWalkBob(walkFrame: number): number {
 export function getWalkStride(walkFrame: number): { left: number; right: number } {
   // Stride pattern for legs: frame 0=center, 1=left forward, 2=center, 3=right forward
   switch (walkFrame) {
-    case 0: return { left: 0, right: 0 };
-    case 1: return { left: -2, right: 2 };
-    case 2: return { left: 0, right: 0 };
-    case 3: return { left: 2, right: -2 };
-    default: return { left: 0, right: 0 };
+    case 0:
+      return { left: 0, right: 0 };
+    case 1:
+      return { left: -2, right: 2 };
+    case 2:
+      return { left: 0, right: 0 };
+    case 3:
+      return { left: 2, right: -2 };
+    default:
+      return { left: 0, right: 0 };
   }
 }

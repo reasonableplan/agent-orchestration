@@ -37,10 +37,12 @@ export class BackendAgent extends BaseAgent {
     };
     super(config, deps);
 
-    const claude = backendConfig.claudeClient ?? new ClaudeClient(
-      { model: config.claudeModel, maxTokens: config.maxTokens, temperature: config.temperature },
-      backendConfig.claudeApiKey,
-    );
+    const claude =
+      backendConfig.claudeClient ??
+      new ClaudeClient(
+        { model: config.claudeModel, maxTokens: config.maxTokens, temperature: config.temperature },
+        backendConfig.claudeApiKey,
+      );
 
     this.codeGenerator = new CodeGenerator(claude, backendConfig.workDir);
     this.commitRequester = new CommitRequester(deps.gitService);
@@ -76,7 +78,10 @@ export class BackendAgent extends BaseAgent {
   private async handleCodeTask(task: Task, taskType: BackendTaskType): Promise<TaskResult> {
     // 1. Claude로 코드 생성
     const generated = await this.codeGenerator.generate(task, taskType);
-    this.log.info({ fileCount: generated.files.length, summary: generated.summary }, 'Code generated');
+    this.log.info(
+      { fileCount: generated.files.length, summary: generated.summary },
+      'Code generated',
+    );
 
     // 2. analyze 타입은 파일 생성 없이 결과만 반환
     if (taskType === 'analyze') {
@@ -113,7 +118,10 @@ export class BackendAgent extends BaseAgent {
     try {
       await this.commitRequester.requestCommit(task, writtenFiles, generated.summary);
     } catch (error) {
-      this.log.warn({ err: error instanceof Error ? error.message : error }, 'Failed to create commit request');
+      this.log.warn(
+        { err: error instanceof Error ? error.message : error },
+        'Failed to create commit request',
+      );
     }
 
     // 6. 도메인 간 후속 이슈 생성 (non-fatal): [FE] API 연동, [DOCS] API 문서
@@ -123,7 +131,10 @@ export class BackendAgent extends BaseAgent {
         await this.followUpCreator.createFollowUps(task, followUps);
       }
     } catch (error) {
-      this.log.warn({ err: error instanceof Error ? error.message : error }, 'Failed to create follow-up issues');
+      this.log.warn(
+        { err: error instanceof Error ? error.message : error },
+        'Failed to create follow-up issues',
+      );
     }
 
     return {

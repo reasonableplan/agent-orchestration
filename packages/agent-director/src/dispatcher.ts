@@ -49,7 +49,11 @@ export class Dispatcher {
   }): Promise<void> {
     // type:commit (Git commit 요청)은 자동 승인
     if (payload.labels.includes('type:commit')) {
-      await this.approveToReady(payload.issueNumber, payload.title, 'auto-approved (commit request)');
+      await this.approveToReady(
+        payload.issueNumber,
+        payload.title,
+        'auto-approved (commit request)',
+      );
       return;
     }
 
@@ -73,7 +77,10 @@ Respond with JSON: {"approved": true|false, "reason": "brief explanation"}`,
       if (data.approved) {
         await this.approveToReady(payload.issueNumber, payload.title, data.reason);
       } else {
-        log.info({ issueNumber: payload.issueNumber, reason: data.reason }, 'Backlog issue rejected');
+        log.info(
+          { issueNumber: payload.issueNumber, reason: data.reason },
+          'Backlog issue rejected',
+        );
         await this.gitService.addComment(
           payload.issueNumber,
           `**[Director]** Issue rejected: ${data.reason}`,
@@ -81,7 +88,10 @@ Respond with JSON: {"approved": true|false, "reason": "brief explanation"}`,
       }
     } catch (error) {
       // 검토 실패 시 자동 승인 (작업을 차단하지 않음)
-      log.warn({ err: error instanceof Error ? error.message : error }, 'Backlog review failed, auto-approving');
+      log.warn(
+        { err: error instanceof Error ? error.message : error },
+        'Backlog review failed, auto-approving',
+      );
       await this.approveToReady(payload.issueNumber, payload.title, 'auto-approved (review error)');
     }
   }
@@ -91,9 +101,11 @@ Respond with JSON: {"approved": true|false, "reason": "brief explanation"}`,
     const task = await this.stateStore.getTask(taskId);
     if (task) {
       await this.stateStore.updateTask(taskId, { status: 'ready', boardColumn: 'Ready' });
+      await this.gitService.moveIssueToColumn(issueNumber, 'Ready');
+      log.info({ issueNumber, title, reason }, 'Backlog issue approved → Ready');
+    } else {
+      log.warn({ issueNumber, taskId }, 'Task not found in DB, skipping Board move');
     }
-    await this.gitService.moveIssueToColumn(issueNumber, 'Ready');
-    log.info({ issueNumber, title, reason }, 'Backlog issue approved → Ready');
   }
 
   /**

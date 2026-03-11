@@ -82,11 +82,32 @@ export interface OfficeStore {
 }
 
 const DEFAULT_AGENTS: Record<string, AgentState> = {
-  director: { id: 'director', status: 'idle', currentTask: null, bubble: null, domain: 'director', slot: 0 },
-  git:      { id: 'git',      status: 'idle', currentTask: null, bubble: null, domain: 'git',      slot: 1 },
-  frontend: { id: 'frontend', status: 'idle', currentTask: null, bubble: null, domain: 'frontend', slot: 2 },
-  backend:  { id: 'backend',  status: 'idle', currentTask: null, bubble: null, domain: 'backend',  slot: 3 },
-  docs:     { id: 'docs',     status: 'idle', currentTask: null, bubble: null, domain: 'docs',     slot: 4 },
+  director: {
+    id: 'director',
+    status: 'idle',
+    currentTask: null,
+    bubble: null,
+    domain: 'director',
+    slot: 0,
+  },
+  git: { id: 'git', status: 'idle', currentTask: null, bubble: null, domain: 'git', slot: 1 },
+  frontend: {
+    id: 'frontend',
+    status: 'idle',
+    currentTask: null,
+    bubble: null,
+    domain: 'frontend',
+    slot: 2,
+  },
+  backend: {
+    id: 'backend',
+    status: 'idle',
+    currentTask: null,
+    bubble: null,
+    domain: 'backend',
+    slot: 3,
+  },
+  docs: { id: 'docs', status: 'idle', currentTask: null, bubble: null, domain: 'docs', slot: 4 },
 };
 
 /** Find the next unoccupied desk slot */
@@ -121,7 +142,7 @@ export const useOfficeStore = create<OfficeStore>((set) => ({
 
   setInitialState: (data) =>
     set((state) => {
-      let agents = data.agents ?? state.agents;
+      const agents = data.agents ?? state.agents;
       // Auto-assign slots to agents that don't have one
       const usedSlots = new Set<number>();
       for (const a of Object.values(agents)) {
@@ -178,7 +199,15 @@ export const useOfficeStore = create<OfficeStore>((set) => ({
         ...state.tasks,
         [id]: state.tasks[id]
           ? { ...state.tasks[id], ...updates }
-          : { id, title: '', status: '', boardColumn: '', assignedAgent: null, epicId: null, ...updates },
+          : {
+              id,
+              title: '',
+              status: '',
+              boardColumn: '',
+              assignedAgent: null,
+              epicId: null,
+              ...updates,
+            },
       },
     })),
 
@@ -217,7 +246,12 @@ export const useOfficeStore = create<OfficeStore>((set) => ({
 
   updateTokenUsage: (agentId, input, output) =>
     set((state) => {
-      const prev = state.tokenUsage[agentId] ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 };
+      const prev = state.tokenUsage[agentId] ?? {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        callCount: 0,
+      };
       return {
         tokenUsage: {
           ...state.tokenUsage,

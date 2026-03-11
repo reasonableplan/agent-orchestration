@@ -14,4 +14,9 @@ export { OrphanCleaner, type OrphanCleanerConfig } from './orphan-cleaner.js';
 export { createLogger, type Logger } from './logger.js';
 export * from './system-controller.js';
 export { startCLI, type CLIOptions } from './cli.js';
-export { bootstrap, type SystemContext, type AgentFactory, type BootstrapConfig } from './bootstrap.js';
+export {
+  bootstrap,
+  type SystemContext,
+  type AgentFactory,
+  type BootstrapConfig,
+} from './bootstrap.js';

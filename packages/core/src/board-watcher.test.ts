@@ -113,6 +113,7 @@ describe('BoardWatcher', () => {
       status: 'in-progress',
       assignedAgent: 'git',
       labels: ['agent:git'],
+      dependencies: [],
     });
   });
 
@@ -198,7 +199,10 @@ describe('BoardWatcher', () => {
     const issueInProgress = makeIssue({ issueNumber: 10, column: 'In Progress' });
     vi.mocked(gitService.getAllProjectItems).mockResolvedValueOnce([issueInProgress]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(stateStore.getTask).mockResolvedValueOnce({ id: 'task-gh-10', status: 'ready' } as any);
+    vi.mocked(stateStore.getTask).mockResolvedValueOnce({
+      id: 'task-gh-10',
+      status: 'ready',
+    } as any);
     await watcher.sync();
 
     expect(stateStore.getTask).toHaveBeenCalledWith('task-gh-10');

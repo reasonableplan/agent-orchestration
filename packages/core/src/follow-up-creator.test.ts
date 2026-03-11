@@ -44,13 +44,15 @@ describe('FollowUpCreator', () => {
     const creator = new FollowUpCreator(gitService);
     const task = createTask();
 
-    const followUps: FollowUp[] = [{
-      title: '[FE] API 연동: Create user API',
-      targetAgent: 'frontend',
-      type: 'api-hook',
-      description: 'Frontend API hook 구현',
-      dependencies: [42],
-    }];
+    const followUps: FollowUp[] = [
+      {
+        title: '[FE] API 연동: Create user API',
+        targetAgent: 'frontend',
+        type: 'api-hook',
+        description: 'Frontend API hook 구현',
+        dependencies: [42],
+      },
+    ];
 
     const created = await creator.createFollowUps(task, followUps);
     expect(created).toEqual([100]);
@@ -60,19 +62,31 @@ describe('FollowUpCreator', () => {
   it('중복 이슈가 있으면 생성하지 않는다', async () => {
     const gitService = createMockGitService();
     (gitService.getEpicIssues as ReturnType<typeof vi.fn>).mockResolvedValue([
-      { issueNumber: 99, title: '[FE] API 연동: Create user API', body: '', labels: [], column: 'Backlog', dependencies: [], assignee: null, generatedBy: '', epicId: null },
+      {
+        issueNumber: 99,
+        title: '[FE] API 연동: Create user API',
+        body: '',
+        labels: [],
+        column: 'Backlog',
+        dependencies: [],
+        assignee: null,
+        generatedBy: '',
+        epicId: null,
+      },
     ]);
 
     const creator = new FollowUpCreator(gitService);
     const task = createTask();
 
-    const followUps: FollowUp[] = [{
-      title: '[FE] API 연동: Create user API',
-      targetAgent: 'frontend',
-      type: 'api-hook',
-      description: 'Frontend API hook 구현',
-      dependencies: [42],
-    }];
+    const followUps: FollowUp[] = [
+      {
+        title: '[FE] API 연동: Create user API',
+        targetAgent: 'frontend',
+        type: 'api-hook',
+        description: 'Frontend API hook 구현',
+        dependencies: [42],
+      },
+    ];
 
     const created = await creator.createFollowUps(task, followUps);
     expect(created).toEqual([]);
@@ -89,8 +103,20 @@ describe('FollowUpCreator', () => {
     const task = createTask();
 
     const followUps: FollowUp[] = [
-      { title: '[FE] Hook 1', targetAgent: 'frontend', type: 'api-hook', description: 'test', dependencies: [] },
-      { title: '[DOCS] Docs 1', targetAgent: 'docs', type: 'docs', description: 'test', dependencies: [] },
+      {
+        title: '[FE] Hook 1',
+        targetAgent: 'frontend',
+        type: 'api-hook',
+        description: 'test',
+        dependencies: [],
+      },
+      {
+        title: '[DOCS] Docs 1',
+        targetAgent: 'docs',
+        type: 'docs',
+        description: 'test',
+        dependencies: [],
+      },
     ];
 
     const created = await creator.createFollowUps(task, followUps);
