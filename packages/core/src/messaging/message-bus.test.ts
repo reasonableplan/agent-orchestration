@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MessageBus } from './message-bus.js';
-import type { Message } from './types/index.js';
+import type { Message } from '../types/index.js';
 
 function createMessage(type: string, payload: unknown = {}): Message {
   return {

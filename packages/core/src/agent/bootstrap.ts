@@ -1,16 +1,16 @@
-import { config } from 'dotenv';
-import { createDb, runMigrations, type Database } from './db/index.js';
-import { MessageBus } from './message-bus.js';
-import { StateStore } from './state-store.js';
-import { GitService, type GitServiceConfig } from './git-service/index.js';
-import { BoardWatcher } from './board-watcher.js';
+import { createDb, runMigrations, type Database, type DbConnection } from '../db/index.js';
+import { MessageBus } from '../messaging/message-bus.js';
+import { StateStore } from '../state/state-store.js';
+import { GitService, type GitServiceConfig } from '../git-service/index.js';
+import { BoardWatcher } from '../board/board-watcher.js';
 import { SystemController } from './system-controller.js';
-import { OrphanCleaner } from './orphan-cleaner.js';
+import { OrphanCleaner } from '../resilience/orphan-cleaner.js';
 import { startCLI } from './cli.js';
-import { createLogger } from './logger.js';
+import { createLogger } from '../logging/logger.js';
+import { loadConfig, type AppConfig } from '../config.js';
 import type { BaseAgent } from './base-agent.js';
 import type { AgentDependencies } from './base-agent.js';
-import type { UserInput } from './types/index.js';
+import type { UserInput } from '../types/index.js';
 
 const log = createLogger('Bootstrap');
 
@@ -32,6 +32,8 @@ export type AgentFactory = (deps: AgentDependencies) => BaseAgent | Promise<Base
 export interface BootstrapConfig {
   /** Agent factory functions. Key is agent id. */
   agents: Record<string, AgentFactory>;
+  /** Pre-loaded configuration. If omitted, loadConfig() is called internally. */
+  appConfig?: AppConfig;
   /** Skip GitHub validation (for testing). */
   skipGitValidation?: boolean;
   /** Skip CLI (for testing or programmatic use). */
@@ -49,6 +51,7 @@ export interface BootstrapConfig {
  */
 export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
   // 이미 시작된 리소스 추적 (에러 시 cleanup용)
+  let dbConn: DbConnection | null = null;
   let db: Database | null = null;
   let stateStore: StateStore | null = null;
   let boardWatcher: BoardWatcher | null = null;
@@ -58,11 +61,12 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
 
   async function cleanupInternal() {
     // 역순 정리: agents → orphanCleaner → boardWatcher → agent DB status → db
-    for (const agent of startedAgents) {
-      agent.stopPolling();
-    }
+    // drain()은 in-flight 작업이 끝날 때까지 대기한다.
+    await Promise.all(startedAgents.map((agent) => agent.drain()));
     orphanCleaner?.stop();
-    boardWatcher?.stop();
+    if (boardWatcher) {
+      await boardWatcher.drain();
+    }
 
     // 등록된 에이전트 상태를 offline으로 변경
     if (stateStore) {
@@ -75,11 +79,9 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
       }
     }
 
-    if (db) {
-      // Drizzle pg Pool 종료
+    if (dbConn) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (db as any).$client?.end?.();
+        await dbConn.close();
       } catch (err) {
         log.error({ err }, 'Failed to close DB pool');
       }
@@ -111,14 +113,13 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
   };
 
   try {
-    // 1. 환경 변수 로드
-    config();
+    // 1. 설정 로드 (외부에서 주입하거나 환경변수에서 자동 로드)
+    const appConfig = cfg.appConfig ?? loadConfig();
     log.info('Configuration loaded');
 
     // 2. PostgreSQL 초기화
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) throw new Error('DATABASE_URL is required');
-    db = createDb(databaseUrl);
+    dbConn = createDb(appConfig.database.url);
+    db = dbConn.db;
     if (!cfg.skipMigration) {
       await runMigrations(db, './drizzle');
       log.info('Database migrations applied');
@@ -132,10 +133,10 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
 
     // 4. GitService 생성
     const gitConfig: GitServiceConfig = {
-      token: process.env.GITHUB_TOKEN ?? '',
-      owner: process.env.GITHUB_OWNER ?? '',
-      repo: process.env.GITHUB_REPO ?? '',
-      projectNumber: Number(process.env.GITHUB_PROJECT_NUMBER) || undefined,
+      token: appConfig.github.token,
+      owner: appConfig.github.owner,
+      repo: appConfig.github.repo,
+      projectNumber: appConfig.github.projectNumber,
     };
     const gitService = new GitService(gitConfig);
 

@@ -1,13 +1,43 @@
-import type { Message } from '@agent/core';
+import type { Message, TaskRow } from '@agent/core';
 import { MESSAGE_TYPES } from '@agent/core';
 import type { DashboardEvent, DashboardStateStore } from './types.js';
+
+const TASK_CACHE_TTL_MS = 5_000; // 5초 TTL
+
+interface CachedTask {
+  task: TaskRow;
+  cachedAt: number;
+}
 
 /**
  * Maps internal MessageBus events to DashboardEvents for the WebSocket clients.
  * Each mapper function returns zero or more DashboardEvents to broadcast.
+ * Task 조회에 인메모리 TTL 캐시를 적용하여 N+1 DB 조회를 방지한다.
  */
 export class EventMapper {
+  private taskCache = new Map<string, CachedTask>();
+
   constructor(private stateStore: DashboardStateStore) {}
+
+  private async getTaskCached(taskId: string): Promise<TaskRow | null> {
+    const now = Date.now();
+    const cached = this.taskCache.get(taskId);
+    if (cached && now - cached.cachedAt < TASK_CACHE_TTL_MS) {
+      return cached.task;
+    }
+    const task = await this.stateStore.getTask(taskId);
+    if (task) {
+      this.taskCache.set(taskId, { task, cachedAt: now });
+    } else {
+      this.taskCache.delete(taskId);
+    }
+    return task;
+  }
+
+  /** 캐시에서 특정 task를 무효화한다 (task 상태 변경 시 사용). */
+  invalidateTask(taskId: string): void {
+    this.taskCache.delete(taskId);
+  }
 
   /**
    * Convert an internal Message into DashboardEvents to broadcast.
@@ -109,8 +139,9 @@ export class EventMapper {
     const taskId = `task-gh-${payload.issueNumber}`;
     const events: DashboardEvent[] = [];
 
-    // Try to get the full task row for the board update
-    const task = await this.stateStore.getTask(taskId);
+    // Try to get the full task row for the board update (캐시 사용)
+    this.invalidateTask(taskId); // board.move 시 기존 캐시 무효화
+    const task = await this.getTaskCached(taskId);
     if (task) {
       events.push({
         type: 'task.update',

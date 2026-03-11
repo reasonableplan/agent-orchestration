@@ -1,22 +1,11 @@
-import { createLogger, type GeneratedCode, type Task } from '@agent/core';
+import { createLogger, type IClaudeClient, type GeneratedCode, type Task } from '@agent/core';
 import { readFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import type { DocsTaskType } from './task-router.js';
 
-const log = createLogger('DocGenerator');
+export type { IClaudeClient } from '@agent/core';
 
-/**
- * Claude API 인터페이스. 테스트에서 mock 주입 가능.
- */
-export interface IClaudeClient {
-  chatJSON<T>(
-    systemPrompt: string,
-    userMessage: string,
-  ): Promise<{
-    data: T;
-    usage: { inputTokens: number; outputTokens: number };
-  }>;
-}
+const log = createLogger('DocGenerator');
 
 /** 파일 읽기 제한 */
 const MAX_FILE_READ_CHARS = 50_000;
@@ -214,8 +203,8 @@ export class DocGenerator {
 
         totalChars += charCount;
         results.push({ path: filePath, content: truncated });
-      } catch {
-        // 파일이 없거나 읽기 실패 시 skip
+      } catch (err) {
+        log.warn({ path: filePath, err: err instanceof Error ? err.message : err }, 'Failed to read existing file, skipping');
       }
     }
 

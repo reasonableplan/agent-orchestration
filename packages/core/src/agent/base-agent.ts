@@ -7,9 +7,9 @@ import type {
   Task,
   TaskResult,
   TaskRow,
-} from './types/index.js';
-import { MESSAGE_TYPES } from './types/index.js';
-import { createLogger, type Logger } from './logger.js';
+} from '../types/index.js';
+import { MESSAGE_TYPES } from '../types/index.js';
+import { createLogger, type Logger } from '../logging/logger.js';
 
 export interface AgentDependencies {
   messageBus: IMessageBus;
@@ -31,6 +31,8 @@ export abstract class BaseAgent {
   private polling = false;
   private _status: AgentStatus = 'idle';
   private consecutiveErrors = 0;
+  private abortController: AbortController | null = null;
+  private pollPromise: Promise<void> | null = null;
 
   protected messageBus: IMessageBus;
   protected stateStore: IStateStore;
@@ -72,11 +74,25 @@ export abstract class BaseAgent {
   startPolling(intervalMs = 10_000) {
     if (this.polling) return;
     this.polling = true;
-    this.pollLoop(intervalMs);
+    this.abortController = new AbortController();
+    this.pollPromise = this.pollLoop(intervalMs);
   }
 
   stopPolling() {
     this.polling = false;
+    this.abortController?.abort();
+  }
+
+  /**
+   * 현재 실행 중인 태스크가 끝날 때까지 대기한 후 폴링을 멈춘다.
+   * Graceful shutdown 시 사용.
+   */
+  async drain(): Promise<void> {
+    this.stopPolling();
+    if (this.pollPromise) {
+      await this.pollPromise;
+      this.pollPromise = null;
+    }
   }
 
   /**
@@ -97,6 +113,7 @@ export abstract class BaseAgent {
 
   private async pollLoop(intervalMs: number) {
     let cycleCount = 0;
+    const signal = this.abortController?.signal;
 
     while (this.polling) {
       // 하트비트: N cycle마다 DB에 생존 신호
@@ -139,7 +156,9 @@ export abstract class BaseAgent {
         this.consecutiveErrors > 0
           ? Math.min(intervalMs * Math.pow(2, this.consecutiveErrors - 1), MAX_BACKOFF_MS)
           : intervalMs;
-      await new Promise((r) => setTimeout(r, backoff));
+
+      // AbortController signal로 즉시 깨어남 — graceful shutdown 지원
+      await abortableSleep(backoff, signal);
     }
   }
 
@@ -149,15 +168,19 @@ export abstract class BaseAgent {
   private async executeTaskWithTimeout(task: Task): Promise<TaskResult> {
     const timeoutMs = this.config.taskTimeoutMs ?? DEFAULT_TASK_TIMEOUT_MS;
 
-    return Promise.race([
-      this.executeTask(task),
-      new Promise<TaskResult>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`Task "${task.title}" timed out after ${timeoutMs}ms`)),
-          timeoutMs,
-        ),
-      ),
-    ]);
+    let timer: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<TaskResult>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`Task "${task.title}" timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+    });
+
+    try {
+      return await Promise.race([this.executeTask(task), timeoutPromise]);
+    } finally {
+      clearTimeout(timer!);
+    }
   }
 
   /**
@@ -247,6 +270,21 @@ export abstract class BaseAgent {
       timestamp: new Date(),
     });
   }
+}
+
+/**
+ * AbortSignal을 지원하는 sleep. signal이 abort되면 즉시 resolve된다.
+ * Graceful shutdown 시 polling sleep을 즉시 깨우는 데 사용.
+ */
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
 }
 
 /**

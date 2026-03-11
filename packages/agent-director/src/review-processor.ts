@@ -1,6 +1,5 @@
-import type { IStateStore, IGitService, Task, TaskResult, Message, IMessageBus } from '@agent/core';
+import type { IStateStore, IGitService, IClaudeClient, Task, TaskResult, Message, IMessageBus } from '@agent/core';
 import { MESSAGE_TYPES, createLogger, taskRowToTask } from '@agent/core';
-import type { IClaudeClient } from './director-agent.js';
 import type { Dispatcher } from './dispatcher.js';
 
 const log = createLogger('ReviewProcessor');
@@ -85,12 +84,16 @@ Retry count: ${task.retryCount ?? 0}`;
       );
       return data;
     } catch (error) {
-      // 리뷰 실패 시 자동 승인 (리뷰 불가가 작업을 차단하면 안 됨)
-      log.warn(
+      // Fail-closed: 리뷰 API 장애 시 거부 처리하여 품질 게이트를 유지한다.
+      // 자동 승인은 장애 시 결함 코드가 통과할 위험이 있다.
+      log.error(
         { err: error instanceof Error ? error.message : error },
-        'Review Claude call failed, auto-approving',
+        'Review Claude call failed, rejecting (fail-closed)',
       );
-      return { approved: true, reason: 'auto-approved (review unavailable)' };
+      return {
+        approved: false,
+        reason: 'Review service unavailable — task will be retried when service recovers',
+      };
     }
   }
 

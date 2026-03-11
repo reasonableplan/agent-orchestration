@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
-import type { IMessageBus, IStateStore, Message, MessageHandler } from './types/index.js';
-import { createLogger } from './logger.js';
+import type { IMessageBus, IStateStore, Message, MessageHandler } from '../types/index.js';
+import { createLogger } from '../logging/logger.js';
 
 const log = createLogger('MessageBus');
 

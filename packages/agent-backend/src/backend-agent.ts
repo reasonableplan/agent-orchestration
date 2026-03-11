@@ -2,14 +2,15 @@ import {
   BaseAgent,
   FileWriter,
   FollowUpCreator,
+  ClaudeClient,
+  CommitRequester,
   type AgentDependencies,
   type AgentConfig,
   type Task,
   type TaskResult,
+  type IClaudeClient,
 } from '@agent/core';
-import { ClaudeClient } from './claude-client.js';
-import { CodeGenerator, type IClaudeClient } from './code-generator.js';
-import { CommitRequester } from './commit-requester.js';
+import { CodeGenerator } from './code-generator.js';
 import { detectTaskType, type BackendTaskType } from './task-router.js';
 
 export interface BackendAgentConfig {
@@ -37,15 +38,18 @@ export class BackendAgent extends BaseAgent {
     };
     super(config, deps);
 
+    if (!backendConfig.claudeClient && !backendConfig.claudeApiKey) {
+      throw new Error('BackendAgent requires either claudeClient or claudeApiKey');
+    }
     const claude =
       backendConfig.claudeClient ??
       new ClaudeClient(
         { model: config.claudeModel, maxTokens: config.maxTokens, temperature: config.temperature },
-        backendConfig.claudeApiKey,
+        backendConfig.claudeApiKey!,
       );
 
     this.codeGenerator = new CodeGenerator(claude, backendConfig.workDir);
-    this.commitRequester = new CommitRequester(deps.gitService);
+    this.commitRequester = new CommitRequester(deps.gitService, 'feat(backend):');
     this.followUpCreator = new FollowUpCreator(deps.gitService);
     this.fileWriter = new FileWriter(backendConfig.workDir);
   }

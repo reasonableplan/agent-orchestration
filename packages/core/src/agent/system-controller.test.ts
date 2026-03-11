@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SystemController } from './system-controller.js';
 import type { BaseAgent } from './base-agent.js';
-import type { IStateStore, UserInput } from './types/index.js';
+import type { IStateStore, UserInput } from '../types/index.js';
 
 function createMockAgent(id: string, domain: string): BaseAgent {
   return {
@@ -38,6 +38,7 @@ function createMockStateStore(): IStateStore {
     getAllTasks: vi.fn().mockResolvedValue([]),
     getAllEpics: vi.fn().mockResolvedValue([]),
     getRecentMessages: vi.fn().mockResolvedValue([]),
+    transaction: vi.fn().mockImplementation((fn) => fn({})),
   };
 }
 

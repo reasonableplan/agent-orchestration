@@ -1,8 +1,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import type { GeneratedCode, GeneratedFile } from './types/index.js';
-import { createLogger } from './logger.js';
+import type { GeneratedCode, GeneratedFile } from '../types/index.js';
+import { createLogger } from '../logging/logger.js';
+import { SandboxEscapeError, SyntaxValidationError } from '../errors.js';
 
 const log = createLogger('FileWriter');
 
@@ -27,7 +28,7 @@ export class FileWriter {
 
       // Sandbox: workDir 밖으로 나가는 경로 차단
       if (!absolutePath.startsWith(resolvedWorkDir + path.sep)) {
-        throw new Error(`Path escapes sandbox: ${file.path}`);
+        throw new SandboxEscapeError(file.path, resolvedWorkDir);
       }
 
       if (file.action === 'delete') {
@@ -56,16 +57,16 @@ export class FileWriter {
     const content = file.content;
 
     if (!content.trim()) {
-      throw new Error(`Empty file content: ${file.path}`);
+      throw new SyntaxValidationError(file.path, 'empty file content');
     }
 
     if (JSON_EXTENSIONS.has(ext)) {
       try {
         JSON.parse(content);
       } catch (err) {
-        throw new Error(
-          `Invalid JSON in ${file.path}: ${err instanceof Error ? err.message : err}`,
-          { cause: err },
+        throw new SyntaxValidationError(
+          file.path,
+          `Invalid JSON: ${err instanceof Error ? err.message : err}`,
         );
       }
       return;
@@ -85,8 +86,9 @@ export class FileWriter {
       for (const [bracket, count] of Object.entries(balance)) {
         if (count !== 0) {
           log.warn({ file: file.path, bracket, count }, 'Bracket imbalance detected');
-          throw new Error(
-            `Syntax error in ${file.path}: unbalanced '${bracket}' (${count > 0 ? 'unclosed' : 'extra closing'})`,
+          throw new SyntaxValidationError(
+            file.path,
+            `unbalanced '${bracket}' (${count > 0 ? 'unclosed' : 'extra closing'})`,
           );
         }
       }

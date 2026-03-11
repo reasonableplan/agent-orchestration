@@ -1,25 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
-import { createLogger, type GeneratedCode, type Task } from '@agent/core';
+import { createLogger, type IClaudeClient, type GeneratedCode, type Task } from '@agent/core';
 import type { BackendTaskType } from './task-router.js';
+
+export type { IClaudeClient } from '@agent/core';
 
 const log = createLogger('CodeGenerator');
 
 const MAX_FILE_READ_CHARS = 8000;
 const MAX_TOTAL_CHARS = 30000;
-
-/**
- * Claude API 인터페이스. 테스트에서 mock 주입 가능.
- */
-export interface IClaudeClient {
-  chatJSON<T>(
-    systemPrompt: string,
-    userMessage: string,
-  ): Promise<{
-    data: T;
-    usage: { inputTokens: number; outputTokens: number };
-  }>;
-}
 
 /**
  * Claude API를 사용하여 백엔드 코드를 생성하는 엔진.
@@ -163,8 +152,8 @@ Use action "update" for modified files.`,
         totalChars += charCount;
 
         results.push({ path: filePath, content: truncated });
-      } catch {
-        // 파일을 읽을 수 없으면 skip
+      } catch (err) {
+        log.warn({ path: filePath, err: err instanceof Error ? err.message : err }, 'Failed to read existing file, skipping');
       }
     }
 

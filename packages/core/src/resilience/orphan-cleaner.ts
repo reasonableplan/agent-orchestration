@@ -1,7 +1,7 @@
 import { eq, and, notInArray } from 'drizzle-orm';
-import type { Database } from './db/index.js';
-import { agents, tasks } from './db/schema.js';
-import { createLogger } from './logger.js';
+import type { Database } from '../db/index.js';
+import { agents, tasks } from '../db/schema.js';
+import { createLogger } from '../logging/logger.js';
 
 const log = createLogger('OrphanCleaner');
 

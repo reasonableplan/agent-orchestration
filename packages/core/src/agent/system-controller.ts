@@ -1,5 +1,5 @@
 import type { BaseAgent } from './base-agent.js';
-import type { IStateStore, UserInput } from './types/index.js';
+import type { IStateStore, UserInput } from '../types/index.js';
 
 /**
  * 자연어가 아닌 시스템 명령을 처리하는 핸들러.

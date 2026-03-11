@@ -1,21 +1,21 @@
-import type { IGitService, Task } from '@agent/core';
-import { createLogger } from '@agent/core';
+import type { IGitService, Task } from '../types/index.js';
+import { createLogger } from '../logging/logger.js';
 
 const log = createLogger('CommitRequester');
 
 /**
  * 코드 생성 후 Git Agent에게 commit을 요청하는 follow-up issue를 생성한다.
  * Board-Driven 패턴: Worker → Follow-up Issue → Git Agent
+ *
+ * commitPrefix를 생성자에서 받아 도메인별 커밋 메시지를 구분한다.
+ * 예: 'feat(backend):', 'feat(frontend):', 'docs:'
  */
 export class CommitRequester {
-  constructor(private gitService: IGitService) {}
+  constructor(
+    private gitService: IGitService,
+    private commitPrefix: string,
+  ) {}
 
-  /**
-   * Git commit follow-up issue를 생성한다.
-   * @param task 원본 task
-   * @param writtenFiles 생성/수정된 파일 경로 목록
-   * @param summary 변경 요약 (commit message로 사용)
-   */
   async requestCommit(task: Task, writtenFiles: string[], summary: string): Promise<number> {
     if (writtenFiles.length === 0) {
       throw new Error('No files to commit');
@@ -33,7 +33,7 @@ export class CommitRequester {
         fileList,
         '',
         '### Commit Message',
-        `feat(backend): ${summary}`,
+        `${this.commitPrefix} ${summary}`,
       ].join('\n'),
       labels: ['agent:git', 'type:commit', ...(task.epicId ? [`epic:${task.epicId}`] : [])],
       dependencies: task.githubIssueNumber ? [task.githubIssueNumber] : [],

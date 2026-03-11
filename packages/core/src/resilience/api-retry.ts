@@ -1,4 +1,4 @@
-import { createLogger } from './logger.js';
+import { createLogger } from '../logging/logger.js';
 
 const log = createLogger('ApiRetry');
 

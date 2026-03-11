@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BoardWatcher } from './board-watcher.js';
-import type { IGitService, IStateStore, IMessageBus, BoardIssue } from './types/index.js';
+import type { IGitService, IStateStore, IMessageBus, BoardIssue } from '../types/index.js';
 
 function createMockGitService(): IGitService {
   return {
@@ -41,6 +41,7 @@ function createMockStateStore(): IStateStore {
     getAllTasks: vi.fn().mockResolvedValue([]),
     getAllEpics: vi.fn().mockResolvedValue([]),
     getRecentMessages: vi.fn().mockResolvedValue([]),
+    transaction: vi.fn().mockImplementation((fn) => fn({})),
   };
 }
 

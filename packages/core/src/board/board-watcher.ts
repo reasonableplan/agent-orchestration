@@ -1,5 +1,6 @@
-import type { IGitService, IStateStore, IMessageBus, BoardIssue, Message } from './types/index.js';
-import { createLogger } from './logger.js';
+import type { IGitService, IStateStore, IMessageBus, BoardIssue, Message } from '../types/index.js';
+import { createLogger } from '../logging/logger.js';
+import { CircuitBreaker } from '../resilience/circuit-breaker.js';
 
 const log = createLogger('BoardWatcher');
 
@@ -21,34 +22,66 @@ export class BoardWatcher {
   private running = false;
   private syncing = false; // 동시 sync 방지 lock
   private previousColumns: Map<number, string> = new Map(); // issueNumber → column
+  private abortController: AbortController | null = null;
+  private pollPromise: Promise<void> | null = null;
+  private circuitBreaker: CircuitBreaker;
 
   constructor(
     private gitService: IGitService,
     private stateStore: IStateStore,
     private messageBus: IMessageBus,
     private pollIntervalMs = 15_000,
-  ) {}
+  ) {
+    this.circuitBreaker = new CircuitBreaker({
+      name: 'github-api',
+      failureThreshold: 5,
+      resetTimeoutMs: 60_000, // 1분 후 재시도
+    });
+  }
 
   start(): void {
     if (this.running) return;
     this.running = true;
-    this.pollLoop();
+    this.abortController = new AbortController();
+    this.pollPromise = this.pollLoop();
     log.info({ intervalMs: this.pollIntervalMs }, 'Started');
   }
 
   stop(): void {
     this.running = false;
+    this.abortController?.abort();
     log.info('Stopped');
   }
 
+  /**
+   * 현재 진행 중인 sync가 끝날 때까지 대기한 후 멈춘다.
+   * Graceful shutdown 시 사용.
+   */
+  async drain(): Promise<void> {
+    this.stop();
+    if (this.pollPromise) {
+      await this.pollPromise;
+      this.pollPromise = null;
+    }
+  }
+
   private async pollLoop(): Promise<void> {
+    const signal = this.abortController?.signal;
     while (this.running) {
       try {
         await this.sync();
       } catch (error) {
         log.error({ err: error }, 'Sync error');
       }
-      await new Promise((r) => setTimeout(r, this.pollIntervalMs));
+      // AbortSignal로 즉시 깨어남 — graceful shutdown 지원
+      if (signal?.aborted) break;
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, this.pollIntervalMs);
+        signal?.addEventListener('abort', () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+      });
     }
   }
 
@@ -84,7 +117,9 @@ export class BoardWatcher {
   }
 
   private async syncInternal(): Promise<void> {
-    const allItems = await this.gitService.getAllProjectItems();
+    const allItems = await this.circuitBreaker.execute(() =>
+      this.gitService.getAllProjectItems(),
+    );
     const currentColumns = new Map<number, string>();
 
     for (const issue of allItems) {
@@ -179,6 +214,9 @@ export class BoardWatcher {
       // Board 기준 'Ready'로 되돌리는 것을 방지 — DB가 더 최신이면 스킵
       const dbStatus = existing.status as string;
       const boardStatus = COLUMN_TO_STATUS[issue.column] ?? 'backlog';
+      if (!COLUMN_TO_STATUS[issue.column]) {
+        log.warn({ column: issue.column, issueNumber: issue.issueNumber }, 'Unknown board column, falling back to backlog');
+      }
       const STATUS_PRIORITY: Record<string, number> = {
         backlog: 0,
         ready: 1,
@@ -201,6 +239,9 @@ export class BoardWatcher {
         });
       }
     } else {
+      if (!COLUMN_TO_STATUS[issue.column]) {
+        log.warn({ column: issue.column, issueNumber: issue.issueNumber }, 'Unknown board column for new task, falling back to backlog');
+      }
       await this.stateStore.createTask({
         id: taskId,
         epicId: issue.epicId,

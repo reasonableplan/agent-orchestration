@@ -26,7 +26,7 @@ describe('CircuitBreaker', () => {
     expect(cb.getState()).toBe('OPEN');
 
     await expect(cb.execute(() => Promise.resolve('ok'))).rejects.toThrow(
-      'Circuit breaker "test" is OPEN',
+      'Circuit breaker OPEN for service: test',
     );
   });
 

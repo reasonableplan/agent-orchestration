@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FollowUpCreator } from './follow-up-creator.js';
-import type { IGitService, Task, FollowUp } from './types/index.js';
+import type { IGitService, Task, FollowUp } from '../types/index.js';
 
 function createMockGitService(): IGitService {
   return {

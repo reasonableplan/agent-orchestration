@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BaseAgent } from './base-agent.js';
 import type {
   AgentConfig,
@@ -8,7 +8,7 @@ import type {
   Message,
   Task,
   TaskResult,
-} from './types/index.js';
+} from '../types/index.js';
 
 class TestAgent extends BaseAgent {
   public executeTaskFn = vi
@@ -51,6 +51,7 @@ function createMockStateStore(): IStateStore {
     getAllTasks: vi.fn().mockResolvedValue([]),
     getAllEpics: vi.fn().mockResolvedValue([]),
     getRecentMessages: vi.fn().mockResolvedValue([]),
+    transaction: vi.fn().mockImplementation((fn) => fn({})),
   };
 }
 
@@ -100,6 +101,16 @@ const MOCK_TASK_ROW = {
   reviewNote: null,
 };
 
+/**
+ * Flush all pending microtasks and timers for one poll cycle.
+ * BaseAgent uses `setTimeout` recursive loop, so we advance timers
+ * and flush microtasks to let the async poll loop proceed.
+ */
+async function flushPollCycle(intervalMs: number) {
+  // Flush pending microtasks first (any in-flight async work)
+  await vi.advanceTimersByTimeAsync(intervalMs);
+}
+
 describe('BaseAgent', () => {
   let bus: IMessageBus;
   let store: IStateStore;
@@ -107,6 +118,7 @@ describe('BaseAgent', () => {
   let agent: TestAgent;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     bus = createMockMessageBus();
     store = createMockStateStore();
     git = createMockGitService();
@@ -115,6 +127,11 @@ describe('BaseAgent', () => {
       stateStore: store,
       gitService: git,
     });
+  });
+
+  afterEach(() => {
+    agent.stopPolling();
+    vi.useRealTimers();
   });
 
   it('초기 상태는 idle이다', () => {
@@ -129,8 +146,7 @@ describe('BaseAgent', () => {
   it('startPolling 후 findNextTask가 DB를 조회한다', async () => {
     agent.startPolling(50);
 
-    await new Promise((r) => setTimeout(r, 80));
-    agent.stopPolling();
+    await flushPollCycle(50);
 
     expect(store.getReadyTasksForAgent).toHaveBeenCalledWith('test-agent');
   });
@@ -140,8 +156,7 @@ describe('BaseAgent', () => {
     vi.mocked(store.claimTask).mockResolvedValueOnce(true);
     agent.startPolling(50);
 
-    await new Promise((r) => setTimeout(r, 80));
-    agent.stopPolling();
+    await flushPollCycle(50);
 
     expect(store.claimTask).toHaveBeenCalledWith('task-001');
     expect(agent.executeTaskFn).toHaveBeenCalled();
@@ -157,8 +172,7 @@ describe('BaseAgent', () => {
       .mockResolvedValueOnce(true); // task2: success
     agent.startPolling(50);
 
-    await new Promise((r) => setTimeout(r, 80));
-    agent.stopPolling();
+    await flushPollCycle(50);
 
     expect(store.claimTask).toHaveBeenCalledTimes(2);
     expect(agent.executeTaskFn).toHaveBeenCalledWith(
@@ -171,8 +185,7 @@ describe('BaseAgent', () => {
     vi.mocked(store.claimTask).mockResolvedValueOnce(false);
     agent.startPolling(50);
 
-    await new Promise((r) => setTimeout(r, 80));
-    agent.stopPolling();
+    await flushPollCycle(50);
 
     expect(agent.executeTaskFn).not.toHaveBeenCalled();
   });
@@ -181,8 +194,7 @@ describe('BaseAgent', () => {
     vi.mocked(store.getReadyTasksForAgent).mockResolvedValueOnce([MOCK_TASK_ROW]);
     agent.startPolling(50);
 
-    await new Promise((r) => setTimeout(r, 80));
-    agent.stopPolling();
+    await flushPollCycle(50);
 
     const publishCalls = (bus.publish as ReturnType<typeof vi.fn>).mock.calls;
     const reviewMessages = publishCalls.filter(([msg]: [Message]) => msg.type === 'review.request');
@@ -195,18 +207,17 @@ describe('BaseAgent', () => {
 
     agent.startPolling(50);
 
-    // 첫 폴링(에러) + 두 번째 폴링(복구)까지 대기
-    await new Promise((r) => setTimeout(r, 200));
-    agent.stopPolling();
+    // 첫 폴링 (에러 발생)
+    await flushPollCycle(50);
+    // 백오프 후 두 번째 폴링 (복구)
+    await flushPollCycle(100);
 
-    // 자동 복구 후 idle 상태
     expect(agent.status).toBe('idle');
   });
 
   it('중복 startPolling은 무시된다', () => {
     agent.startPolling(50);
     agent.startPolling(50); // 두 번째 호출은 무시
-    agent.stopPolling();
   });
 
   it('subscribe는 messageBus.subscribe를 호출한다', () => {
@@ -222,8 +233,7 @@ describe('BaseAgent', () => {
     vi.mocked(store.getReadyTasksForAgent).mockResolvedValue([]);
     agent.startPolling(50);
 
-    await new Promise((r) => setTimeout(r, 80));
-    agent.stopPolling();
+    await flushPollCycle(50);
 
     expect(agent.executeTaskFn).not.toHaveBeenCalled();
   });
@@ -234,11 +244,27 @@ describe('BaseAgent', () => {
     vi.mocked(store.getReadyTasksForAgent).mockResolvedValueOnce([lowPriority, highPriority]);
 
     agent.startPolling(50);
-    await new Promise((r) => setTimeout(r, 80));
-    agent.stopPolling();
+    await flushPollCycle(50);
 
     expect(agent.executeTaskFn).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'task-high', priority: 1 }),
     );
+  });
+
+  it('drain()은 현재 태스크 완료 후 폴링을 멈춘다', async () => {
+    vi.mocked(store.getReadyTasksForAgent).mockResolvedValueOnce([MOCK_TASK_ROW]);
+    agent.startPolling(50);
+
+    await flushPollCycle(50);
+
+    // drain 호출 — 즉시 폴링 중지
+    const drainPromise = agent.drain();
+    await flushPollCycle(50);
+    await drainPromise;
+
+    // drain 후 더 이상 폴링하지 않음
+    vi.mocked(store.getReadyTasksForAgent).mockClear();
+    await flushPollCycle(50);
+    expect(store.getReadyTasksForAgent).not.toHaveBeenCalled();
   });
 });

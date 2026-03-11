@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { FileWriter } from './file-writer.js';
-import type { GeneratedCode } from './types/index.js';
+import type { GeneratedCode } from '../types/index.js';
 
 describe('FileWriter', () => {
   let tmpDir: string;
@@ -90,7 +90,7 @@ describe('FileWriter', () => {
       summary: 'test',
     };
 
-    await expect(writer.writeFiles(generated)).rejects.toThrow('Path escapes sandbox');
+    await expect(writer.writeFiles(generated)).rejects.toThrow('Path escapes sandbox:');
   });
 
   it('handles multiple files in one call', async () => {
@@ -113,7 +113,7 @@ describe('FileWriter', () => {
       summary: 'test',
     };
 
-    await expect(writer.writeFiles(generated)).rejects.toThrow('Empty file content: empty.ts');
+    await expect(writer.writeFiles(generated)).rejects.toThrow('empty file content');
   });
 
   it('handles paths with spaces and Korean characters', async () => {

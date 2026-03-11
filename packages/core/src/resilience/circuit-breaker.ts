@@ -1,4 +1,5 @@
-import { createLogger } from './logger.js';
+import { createLogger } from '../logging/logger.js';
+import { CircuitBreakerError } from '../errors.js';
 
 const log = createLogger('CircuitBreaker');
 
@@ -53,7 +54,7 @@ export class CircuitBreaker {
         this.halfOpenSuccesses = 0;
         log.info({ circuit: this.name }, 'Circuit half-open, allowing probe request');
       } else {
-        throw new Error(`Circuit breaker "${this.name}" is OPEN — request rejected`);
+        throw new CircuitBreakerError(this.name);
       }
     }
 

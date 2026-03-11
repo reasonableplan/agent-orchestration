@@ -32,12 +32,50 @@ export interface DashboardServer {
  * Factory function to create a DashboardServer with injected dependencies.
  * Used in production when integrating with the bootstrap system.
  */
-export function createDashboardServer(deps: DashboardDependencies): DashboardServer {
+export interface DashboardServerOptions {
+  corsOrigins?: string[];
+}
+
+export function createDashboardServer(
+  deps: DashboardDependencies,
+  opts: DashboardServerOptions = {},
+): DashboardServer {
   const app = express();
 
   // Middleware
-  app.use(cors());
-  app.use(express.json());
+  const allowedOrigins = opts.corsOrigins ?? ['http://localhost:3000', 'http://localhost:5173'];
+  app.use(
+    cors({
+      origin: allowedOrigins,
+      methods: ['GET', 'POST'],
+      credentials: true,
+    }),
+  );
+  app.use(express.json({ limit: '64kb' }));
+
+  // Simple in-memory rate limiter (100 req/min per IP)
+  const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+  const RATE_LIMIT_WINDOW_MS = 60_000;
+  const RATE_LIMIT_MAX = 100;
+
+  app.use('/api', (req, res, next) => {
+    const ip = req.ip ?? 'unknown';
+    const now = Date.now();
+    const entry = rateLimitMap.get(ip);
+
+    if (!entry || now > entry.resetAt) {
+      rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+      return next();
+    }
+
+    entry.count++;
+    if (entry.count > RATE_LIMIT_MAX) {
+      res.status(429).json({ error: 'Too many requests. Try again later.' });
+      return;
+    }
+
+    next();
+  });
 
   // REST routes
   const router = createRoutes({
@@ -279,9 +317,11 @@ class InMemoryMessageBus implements DashboardMessageBus {
 /**
  * Start the dashboard server in standalone dev mode.
  * Creates its own in-memory state store and message bus — no PostgreSQL or GitHub needed.
+ *
+ * @param devPort 포트 번호. 미지정 시 DASHBOARD_PORT 환경변수 또는 3001.
  */
-export async function startStandalone(): Promise<DashboardServer> {
-  const port = Number(process.env.DASHBOARD_PORT) || 3001;
+export async function startStandalone(devPort?: number): Promise<DashboardServer> {
+  const port = devPort ?? (Number(process.env.DASHBOARD_PORT) || 3001);
 
   const stateStore = new InMemoryStateStore();
   const messageBus = new InMemoryMessageBus(stateStore);

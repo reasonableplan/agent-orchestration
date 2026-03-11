@@ -1,6 +1,5 @@
-import type { IStateStore, IGitService, Message } from '@agent/core';
+import type { IStateStore, IGitService, IClaudeClient, Message } from '@agent/core';
 import { createLogger } from '@agent/core';
-import type { IClaudeClient } from './director-agent.js';
 
 const log = createLogger('Dispatcher');
 

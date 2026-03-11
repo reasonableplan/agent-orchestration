@@ -2,14 +2,15 @@ import {
   BaseAgent,
   FileWriter,
   FollowUpCreator,
+  ClaudeClient,
+  CommitRequester,
   type AgentDependencies,
   type AgentConfig,
   type Task,
   type TaskResult,
+  type IClaudeClient,
 } from '@agent/core';
-import { ClaudeClient } from './claude-client.js';
-import { CodeGenerator, type IClaudeClient } from './code-generator.js';
-import { CommitRequester } from './commit-requester.js';
+import { CodeGenerator } from './code-generator.js';
 import { detectTaskType, type FrontendTaskType } from './task-router.js';
 
 export interface FrontendAgentConfig {
@@ -37,15 +38,18 @@ export class FrontendAgent extends BaseAgent {
     };
     super(config, deps);
 
+    if (!frontendConfig.claudeClient && !frontendConfig.claudeApiKey) {
+      throw new Error('FrontendAgent requires either claudeClient or claudeApiKey');
+    }
     const claude =
       frontendConfig.claudeClient ??
       new ClaudeClient(
         { model: config.claudeModel, maxTokens: config.maxTokens, temperature: config.temperature },
-        frontendConfig.claudeApiKey,
+        frontendConfig.claudeApiKey!,
       );
 
     this.codeGenerator = new CodeGenerator(claude, frontendConfig.workDir);
-    this.commitRequester = new CommitRequester(deps.gitService);
+    this.commitRequester = new CommitRequester(deps.gitService, 'feat(frontend):');
     this.followUpCreator = new FollowUpCreator(deps.gitService);
     this.fileWriter = new FileWriter(frontendConfig.workDir);
   }

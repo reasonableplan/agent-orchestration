@@ -15,7 +15,7 @@ export type GitTaskType = 'branch' | 'commit' | 'pr' | 'unknown';
 export function detectTaskType(task: Task): GitTaskType {
   // Labels 기반 (DirectorAgent가 붙이는 type:* labels)
   if (task.githubIssueNumber) {
-    const labels = (task as { labels?: string[] }).labels;
+    const labels = task.labels;
     if (labels) {
       if (labels.some((l) => l === 'type:pr')) return 'pr';
       if (labels.some((l) => l === 'type:branch')) return 'branch';

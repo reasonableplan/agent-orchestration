@@ -1,5 +1,5 @@
 import * as readline from 'readline';
-import type { UserInput } from './types/index.js';
+import type { UserInput } from '../types/index.js';
 import type { SystemController } from './system-controller.js';
 
 export interface CLIOptions {

@@ -1,5 +1,5 @@
-import type { IGitService, Task, FollowUp } from './types/index.js';
-import { createLogger } from './logger.js';
+import type { IGitService, Task, FollowUp } from '../types/index.js';
+import { createLogger } from '../logging/logger.js';
 
 const log = createLogger('FollowUpCreator');
 
