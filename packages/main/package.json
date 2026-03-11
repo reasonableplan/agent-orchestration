@@ -15,6 +15,7 @@
     "@agent/git": "workspace:*",
     "@agent/backend": "workspace:*",
     "@agent/frontend": "workspace:*",
-    "@agent/docs": "workspace:*"
+    "@agent/docs": "workspace:*",
+    "@agent/dashboard-server": "workspace:*"
   }
 }

@@ -14,16 +14,16 @@ export type DashboardCommand =
 // ===== Server → Client =====
 
 export type DashboardEvent =
-  | { type: 'initial-state'; payload: { agents: AgentRow[]; tasks: TaskRow[]; epics: EpicRow[] } }
-  | { type: 'agent-state'; payload: { agentId: string; status: string; task?: string } }
-  | { type: 'board-update'; payload: { taskId: string; column: string; task: TaskRow } }
-  | { type: 'bubble-update'; payload: { agentId: string; content: string | null; type?: string } }
-  | { type: 'epic-update'; payload: { epicId: string; title: string; progress: number } }
+  | { type: 'init'; payload: { agents: AgentRow[]; tasks: TaskRow[]; epics: EpicRow[] } }
+  | { type: 'agent.status'; payload: { agentId: string; status: string; task?: string } }
+  | { type: 'task.update'; payload: TaskRow & { taskId: string; boardColumn: string } }
+  | { type: 'agent.bubble'; payload: { agentId: string; bubble: { content: string; type: string } | null } }
+  | { type: 'epic.progress'; payload: { epicId: string; title: string; progress: number } }
   | {
       type: 'toast';
       payload: { type: 'success' | 'error' | 'info'; title: string; message: string };
     }
-  | { type: 'message-log'; payload: { message: Message } };
+  | { type: 'message'; payload: { id: string; type: string; from: string; content: string; timestamp: string } };
 
 // ===== Server Dependencies =====
 

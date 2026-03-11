@@ -17,7 +17,16 @@ export class EventMapper {
     const events: DashboardEvent[] = [];
 
     // Always emit the raw message log
-    events.push({ type: 'message-log', payload: { message } });
+    events.push({
+      type: 'message',
+      payload: {
+        id: message.id,
+        type: message.type,
+        from: message.from,
+        content: JSON.stringify(message.payload),
+        timestamp: message.timestamp.toISOString(),
+      },
+    });
 
     // Type-specific mappings
     switch (message.type) {
@@ -49,7 +58,7 @@ export class EventMapper {
     const payload = message.payload as { status: string; taskId?: string };
     const events: DashboardEvent[] = [
       {
-        type: 'agent-state',
+        type: 'agent.status',
         payload: {
           agentId: message.from,
           status: payload.status,
@@ -61,28 +70,26 @@ export class EventMapper {
     // Generate bubble update for agent activity
     if (payload.status === 'busy' || payload.status === 'working') {
       events.push({
-        type: 'bubble-update',
+        type: 'agent.bubble',
         payload: {
           agentId: message.from,
-          content: 'Working...',
-          type: 'working',
+          bubble: { content: 'Working...', type: 'working' },
         },
       });
     } else if (payload.status === 'idle') {
       events.push({
-        type: 'bubble-update',
+        type: 'agent.bubble',
         payload: {
           agentId: message.from,
-          content: null,
+          bubble: null,
         },
       });
     } else if (payload.status === 'error') {
       events.push({
-        type: 'bubble-update',
+        type: 'agent.bubble',
         payload: {
           agentId: message.from,
-          content: 'Error!',
-          type: 'error',
+          bubble: { content: 'Error!', type: 'error' },
         },
       });
     }
@@ -91,60 +98,67 @@ export class EventMapper {
   }
 
   private async mapBoardMove(message: Message): Promise<DashboardEvent[]> {
-    const payload = message.payload as { taskId: string; from: string; to: string };
+    // board.move payload: { issueNumber, title, fromColumn, toColumn, labels }
+    const payload = message.payload as {
+      issueNumber: number;
+      title: string;
+      fromColumn: string;
+      toColumn: string;
+      labels: string[];
+    };
+    const taskId = `task-gh-${payload.issueNumber}`;
     const events: DashboardEvent[] = [];
 
     // Try to get the full task row for the board update
-    const task = await this.stateStore.getTask(payload.taskId);
+    const task = await this.stateStore.getTask(taskId);
     if (task) {
       events.push({
-        type: 'board-update',
+        type: 'task.update',
         payload: {
-          taskId: payload.taskId,
-          column: payload.to,
-          task,
+          ...task,
+          taskId,
+          boardColumn: payload.toColumn,
         },
       });
     }
 
     // Generate toast for task completion or failure
-    if (payload.to === 'Done') {
+    if (payload.toColumn === 'Done') {
       events.push({
         type: 'toast',
         payload: {
           type: 'success',
           title: 'Task Completed',
-          message: task ? `"${task.title}" moved to Done` : `Task ${payload.taskId} completed`,
+          message: `"${payload.title}" moved to Done`,
         },
       });
-    } else if (payload.to === 'Failed') {
+    } else if (payload.toColumn === 'Failed') {
       events.push({
         type: 'toast',
         payload: {
           type: 'error',
           title: 'Task Failed',
-          message: task ? `"${task.title}" moved to Failed` : `Task ${payload.taskId} failed`,
+          message: `"${payload.title}" moved to Failed`,
         },
       });
     }
 
     // Bubble update for the assigned agent
     if (task?.assignedAgent) {
-      if (payload.to === 'In Progress') {
+      if (payload.toColumn === 'In Progress') {
         events.push({
-          type: 'bubble-update',
+          type: 'agent.bubble',
           payload: {
             agentId: task.assignedAgent,
-            content: task.title,
-            type: 'working',
+            bubble: { content: payload.title, type: 'working' },
           },
         });
-      } else if (payload.to === 'Done' || payload.to === 'Failed') {
+      } else if (payload.toColumn === 'Done' || payload.toColumn === 'Failed') {
         events.push({
-          type: 'bubble-update',
+          type: 'agent.bubble',
           payload: {
             agentId: task.assignedAgent,
-            content: null,
+            bubble: null,
           },
         });
       }
@@ -157,7 +171,7 @@ export class EventMapper {
     const payload = message.payload as { taskId: string };
     return [
       {
-        type: 'agent-state',
+        type: 'agent.status',
         payload: {
           agentId: message.from,
           status: 'reviewing',
@@ -179,7 +193,7 @@ export class EventMapper {
     const payload = message.payload as { epicId: string; title: string; progress: number };
     return [
       {
-        type: 'epic-update',
+        type: 'epic.progress',
         payload: {
           epicId: payload.epicId,
           title: payload.title,
@@ -190,14 +204,14 @@ export class EventMapper {
   }
 
   private mapBoardRemove(message: Message): DashboardEvent[] {
-    const payload = message.payload as { taskId: string };
+    const payload = message.payload as { issueNumber: number; lastColumn: string };
     return [
       {
         type: 'toast',
         payload: {
           type: 'info',
           title: 'Task Removed',
-          message: `Task ${payload.taskId} was removed from the board`,
+          message: `Issue #${payload.issueNumber} was removed from the board (was in ${payload.lastColumn})`,
         },
       },
     ];

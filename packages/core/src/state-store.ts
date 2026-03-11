@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import type { Database } from './db/index.js';
 import { agents, epics, tasks, messages, artifacts } from './db/schema.js';
 import type {
@@ -119,5 +119,36 @@ export class StateStore implements IStateStore {
 
   async saveArtifact(artifact: ArtifactInsert): Promise<void> {
     await this.db.insert(artifacts).values(artifact);
+  }
+
+  // ===== Dashboard Queries =====
+
+  async getAllAgents(): Promise<AgentRow[]> {
+    return this.db.select().from(agents);
+  }
+
+  async getAllTasks(): Promise<TaskRow[]> {
+    return this.db.select().from(tasks);
+  }
+
+  async getAllEpics(): Promise<EpicRow[]> {
+    return this.db.select().from(epics);
+  }
+
+  async getRecentMessages(limit: number): Promise<Message[]> {
+    const rows = await this.db
+      .select()
+      .from(messages)
+      .orderBy(desc(messages.createdAt))
+      .limit(limit);
+    return rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      from: r.fromAgent,
+      to: r.toAgent,
+      payload: r.payload as Record<string, unknown>,
+      traceId: r.traceId ?? crypto.randomUUID(),
+      timestamp: r.createdAt ?? new Date(),
+    }));
   }
 }

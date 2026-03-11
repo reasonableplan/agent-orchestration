@@ -211,6 +211,11 @@ export interface IStateStore {
   saveMessage(message: Message): Promise<void>;
   // Artifact
   saveArtifact(artifact: ArtifactInsert): Promise<void>;
+  // Dashboard queries
+  getAllAgents(): Promise<AgentRow[]>;
+  getAllTasks(): Promise<TaskRow[]>;
+  getAllEpics(): Promise<EpicRow[]>;
+  getRecentMessages(limit: number): Promise<Message[]>;
 }
 
 // ===== IGitService =====
