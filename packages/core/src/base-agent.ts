@@ -207,6 +207,7 @@ export abstract class BaseAgent {
       retryCount: row.retryCount ?? 0,
       artifacts: [],
       labels: (row.labels as string[]) ?? [],
+      reviewNote: row.reviewNote ?? null,
     };
   }
 
