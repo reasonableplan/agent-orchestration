@@ -13,9 +13,9 @@ import {
   CHAR_W,
   CHAR_H,
   RENDER_SCALE,
-  DOMAIN_LABELS,
   AGENT_COLORS,
   getAgentPixelPosition,
+  getAgentLabel,
 } from './sprite-config';
 
 // ---- Spring physics for smooth movement ----
@@ -67,8 +67,8 @@ const ARM_FRAME_DURATION = 250;  // ms per arm frame
 const BLINK_INTERVAL = 3500;     // ms between blinks
 const BLINK_DURATION = 150;      // ms blink lasts
 
-function createAgentAnimState(domain: string): AgentAnimState {
-  const pos = getAgentPixelPosition(domain, 'idle');
+function createAgentAnimState(slot: number): AgentAnimState {
+  const pos = getAgentPixelPosition(slot, 'idle');
   return {
     spring: { x: pos.x, y: pos.y, vx: 0, vy: 0, targetX: pos.x, targetY: pos.y },
     walkFrame: 0,
@@ -104,8 +104,8 @@ function hitTest(
 }
 
 // ---- Name badge drawing (receives physical coords) ----
-function drawNameBadge(ctx: CanvasRenderingContext2D, x: number, y: number, domain: string) {
-  const label = DOMAIN_LABELS[domain] ?? domain.slice(0, 3).toUpperCase();
+function drawNameBadge(ctx: CanvasRenderingContext2D, x: number, y: number, agentId: string, domain: string) {
+  const label = getAgentLabel(agentId, domain);
   const colors = AGENT_COLORS[domain];
   const accent = colors?.accent ?? '#FFFFFF';
 
@@ -229,7 +229,7 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
     // Init anim states for all agents
     for (const agent of Object.values(agents)) {
       if (!animStatesRef.current.has(agent.id)) {
-        animStatesRef.current.set(agent.id, createAgentAnimState(agent.domain));
+        animStatesRef.current.set(agent.id, createAgentAnimState(agent.slot));
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -239,7 +239,7 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
   useEffect(() => {
     for (const agent of Object.values(agents)) {
       if (!animStatesRef.current.has(agent.id)) {
-        animStatesRef.current.set(agent.id, createAgentAnimState(agent.domain));
+        animStatesRef.current.set(agent.id, createAgentAnimState(agent.slot));
       }
     }
   }, [agents]);
@@ -276,7 +276,7 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
         const state = animStatesRef.current.get(agent.id);
         if (!state) continue;
 
-        const target = getAgentPixelPosition(agent.domain, agent.status);
+        const target = getAgentPixelPosition(agent.slot, agent.status);
         state.spring.targetX = target.x;
         state.spring.targetY = target.y;
         updateSpring(state.spring, dt);
@@ -372,7 +372,7 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
           drawStatusIndicator(ctx, cx, cy - CHAR_H * RENDER_SCALE, agent.status, time);
         }
 
-        drawNameBadge(ctx, cx, cy + 4 * RENDER_SCALE, agent.domain);
+        drawNameBadge(ctx, cx, cy + 4 * RENDER_SCALE, agent.id, agent.domain);
       }
 
       rafRef.current = requestAnimationFrame(loop);
