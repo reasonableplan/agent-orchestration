@@ -4,7 +4,7 @@
  * 2.5-head tall, front-facing with walk animation support
  */
 
-import { AGENT_COLORS, CHAR_W, CHAR_H, type AgentColors } from './sprite-config';
+import { AGENT_COLORS, CHAR_W, CHAR_H, RENDER_SCALE, type AgentColors } from './sprite-config';
 
 // Animation frame data
 // Walk cycle: 4 frames (stand, step-right, stand, step-left)
@@ -404,11 +404,12 @@ export function prerenderCharacters(): Map<string, HTMLCanvasElement[]> {
 
       for (let i = 0; i < totalFrames; i++) {
         const canvas = document.createElement('canvas');
-        canvas.width = CHAR_W + 8; // extra for accessories overflow
-        canvas.height = CHAR_H + 12; // extra top padding for hair spikes
+        canvas.width = (CHAR_W + 8) * RENDER_SCALE;
+        canvas.height = (CHAR_H + 12) * RENDER_SCALE;
         const fCtx = canvas.getContext('2d')!;
         fCtx.imageSmoothingEnabled = false;
 
+        fCtx.scale(RENDER_SCALE, RENDER_SCALE);
         fCtx.save();
         fCtx.translate(4, 8); // padding: 4 left, 8 top for tall hair
         drawCharacter(fCtx, domain, status, {
@@ -423,10 +424,11 @@ export function prerenderCharacters(): Map<string, HTMLCanvasElement[]> {
 
       // Also add a blink frame (same as frame 0 but blinking)
       const blinkCanvas = document.createElement('canvas');
-      blinkCanvas.width = CHAR_W + 8;
-      blinkCanvas.height = CHAR_H + 12;
+      blinkCanvas.width = (CHAR_W + 8) * RENDER_SCALE;
+      blinkCanvas.height = (CHAR_H + 12) * RENDER_SCALE;
       const bCtx = blinkCanvas.getContext('2d')!;
       bCtx.imageSmoothingEnabled = false;
+      bCtx.scale(RENDER_SCALE, RENDER_SCALE);
       bCtx.save();
       bCtx.translate(4, 8);
       drawCharacter(bCtx, domain, status, {

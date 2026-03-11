@@ -8,6 +8,9 @@ import {
   MAP_COLS,
   MAP_ROWS,
   WALL_ROWS,
+  CANVAS_W,
+  CANVAS_H,
+  RENDER_SCALE,
   FURNITURE,
   type FurniturePlacement,
 } from './sprite-config';
@@ -552,10 +555,13 @@ export function renderFurnitureBehind(ctx: CanvasRenderingContext2D) {
 /** Pre-render the entire background to an offscreen canvas for performance */
 export function createBackgroundBuffer(): HTMLCanvasElement {
   const buffer = document.createElement('canvas');
-  buffer.width = MAP_COLS * T;
-  buffer.height = MAP_ROWS * T;
+  buffer.width = CANVAS_W;
+  buffer.height = CANVAS_H;
   const ctx = buffer.getContext('2d')!;
   ctx.imageSmoothingEnabled = false;
+
+  // Scale up so all logical-space drawing produces 2x pixels
+  ctx.scale(RENDER_SCALE, RENDER_SCALE);
 
   renderBackground(ctx);
   renderFurnitureBehind(ctx);

@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOfficeStore } from '@/stores/office-store';
-import { CANVAS_W, CANVAS_H, getAgentPixelPosition } from '@/engine/sprite-config';
+import { CANVAS_W, CANVAS_H, RENDER_SCALE, getAgentPixelPosition } from '@/engine/sprite-config';
 
 // Spring state mirror (same logic as OfficeCanvas for position sync)
 interface PosState {
@@ -80,7 +80,7 @@ export default function CharacterOverlay() {
         if (!s) continue;
         const target = getAgentPixelPosition(agent.domain, agent.status);
         springStep(s, target.x, target.y, dt);
-        newPositions.set(agent.id, { x: s.x, y: s.y });
+        newPositions.set(agent.id, { x: s.x * RENDER_SCALE, y: s.y * RENDER_SCALE });
       }
       setPositions(newPositions);
 
@@ -121,18 +121,19 @@ export default function CharacterOverlay() {
               exit={{ opacity: 0, y: -4, scale: 0.9 }}
               transition={{ duration: 0.25 }}
               className="absolute -translate-x-1/2 -translate-y-full"
-              style={{ left: pos.x, top: pos.y - 48 }}
+              style={{ left: pos.x, top: pos.y - 48 * RENDER_SCALE }}
             >
               {/* Bubble body */}
               <div
-                className="px-2 py-1 rounded whitespace-nowrap font-pixel"
+                className="rounded whitespace-nowrap font-pixel"
                 style={{
                   backgroundColor: style.bg,
-                  border: `2px solid ${style.border}`,
+                  border: `${2 * RENDER_SCALE}px solid ${style.border}`,
+                  padding: `${RENDER_SCALE * 4}px ${RENDER_SCALE * 8}px`,
                   color: style.text,
-                  fontSize: '7px',
-                  lineHeight: '10px',
-                  boxShadow: '2px 2px 0px rgba(0,0,0,0.3)',
+                  fontSize: `${7 * RENDER_SCALE}px`,
+                  lineHeight: `${10 * RENDER_SCALE}px`,
+                  boxShadow: `${2 * RENDER_SCALE}px ${2 * RENDER_SCALE}px 0px rgba(0,0,0,0.3)`,
                 }}
               >
                 {truncated}
@@ -141,9 +142,9 @@ export default function CharacterOverlay() {
               <div
                 className="mx-auto w-0 h-0"
                 style={{
-                  borderLeft: '5px solid transparent',
-                  borderRight: '5px solid transparent',
-                  borderTop: `5px solid ${style.border}`,
+                  borderLeft: `${5 * RENDER_SCALE}px solid transparent`,
+                  borderRight: `${5 * RENDER_SCALE}px solid transparent`,
+                  borderTop: `${5 * RENDER_SCALE}px solid ${style.border}`,
                 }}
               />
             </motion.div>
