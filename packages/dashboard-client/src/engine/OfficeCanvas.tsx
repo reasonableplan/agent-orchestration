@@ -421,8 +421,8 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
       height={CANVAS_H}
       onClick={handleClick}
       style={{
-        maxWidth: '100%',
-        maxHeight: '100%',
+        width: '100%',
+        height: '100%',
         imageRendering: 'pixelated',
         cursor: 'pointer',
         objectFit: 'contain',

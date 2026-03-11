@@ -8,6 +8,12 @@ function formatTime(seconds: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
 const COLUMN_COLORS: Record<string, string> = {
   Backlog: 'bg-gray-500',
   Ready: 'bg-blue-500',
@@ -25,6 +31,8 @@ export default function SystemStatusBar() {
   const elapsedTime = useOfficeStore((s) => s.elapsedTime);
   const togglePause = useOfficeStore((s) => s.togglePause);
   const incrementTime = useOfficeStore((s) => s.incrementTime);
+  const tokenUsage = useOfficeStore((s) => s.tokenUsage);
+  const tokenBudget = useOfficeStore((s) => s.tokenBudget);
 
   useEffect(() => {
     if (isPaused) return;
@@ -48,6 +56,11 @@ export default function SystemStatusBar() {
 
   const epicList = Object.values(epics);
   const currentEpic = epicList.length > 0 ? epicList[epicList.length - 1] : null;
+
+  // Token summary
+  const totalUsed = Object.values(tokenUsage).reduce((sum, t) => sum + t.totalTokens, 0);
+  const usedPercent = tokenBudget > 0 ? (totalUsed / tokenBudget) * 100 : 0;
+  const tokenColor = usedPercent > 90 ? 'text-red-400' : usedPercent > 70 ? 'text-yellow-400' : 'text-green-400';
 
   return (
     <div className="flex items-center gap-4 px-4 py-2 bg-[#16213e] border-b-2 border-[#0f3460] font-pixel text-[8px] select-none">
@@ -98,6 +111,26 @@ export default function SystemStatusBar() {
           );
         })}
         {taskList.length === 0 && <span className="text-gray-500">empty</span>}
+      </div>
+
+      <div className="w-px h-5 bg-gray-600" />
+
+      {/* Token usage summary */}
+      <div className="flex items-center gap-2">
+        <span className="text-gray-400">TOKENS:</span>
+        <span className={tokenColor}>{formatTokens(totalUsed)}</span>
+        <span className="text-gray-600">/</span>
+        <span className="text-gray-400">{formatTokens(tokenBudget)}</span>
+        <div className="w-16 h-2 bg-gray-700 overflow-hidden">
+          <div
+            className="h-full transition-all duration-500"
+            style={{
+              width: `${Math.min(usedPercent, 100)}%`,
+              backgroundColor: usedPercent > 90 ? '#FF4444' : usedPercent > 70 ? '#FFAA33' : '#44DD66',
+            }}
+          />
+        </div>
+        <span className={`${tokenColor} text-[7px]`}>{usedPercent.toFixed(1)}%</span>
       </div>
 
       {/* Spacer */}

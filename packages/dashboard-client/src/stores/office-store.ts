@@ -38,6 +38,13 @@ export interface ToastState {
   message: string;
 }
 
+export interface TokenUsageState {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  callCount: number;
+}
+
 export interface OfficeStore {
   agents: Record<string, AgentState>;
   tasks: Record<string, TaskState>;
@@ -48,11 +55,15 @@ export interface OfficeStore {
   boardExpanded: boolean;
   isPaused: boolean;
   elapsedTime: number;
+  tokenUsage: Record<string, TokenUsageState>;
+  tokenBudget: number;
 
   setInitialState(data: {
     agents?: Record<string, AgentState>;
     tasks?: Record<string, TaskState>;
     epics?: Record<string, EpicState>;
+    tokenUsage?: Record<string, TokenUsageState>;
+    tokenBudget?: number;
   }): void;
   updateAgent(id: string, updates: Partial<AgentState>): void;
   updateTask(id: string, updates: Partial<TaskState>): void;
@@ -64,6 +75,8 @@ export interface OfficeStore {
   toggleBoard(): void;
   togglePause(): void;
   incrementTime(): void;
+  updateTokenUsage(agentId: string, input: number, output: number): void;
+  setTokenBudget(budget: number): void;
 }
 
 const DEFAULT_AGENTS: Record<string, AgentState> = {
@@ -104,6 +117,14 @@ const DEFAULT_AGENTS: Record<string, AgentState> = {
   },
 };
 
+const DEFAULT_TOKEN_USAGE: Record<string, TokenUsageState> = {
+  director: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  git: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  frontend: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  backend: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  docs: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+};
+
 export const useOfficeStore = create<OfficeStore>((set) => ({
   agents: { ...DEFAULT_AGENTS },
   tasks: {},
@@ -114,12 +135,16 @@ export const useOfficeStore = create<OfficeStore>((set) => ({
   boardExpanded: false,
   isPaused: false,
   elapsedTime: 0,
+  tokenUsage: { ...DEFAULT_TOKEN_USAGE },
+  tokenBudget: 10_000_000,
 
   setInitialState: (data) =>
     set((state) => ({
       agents: data.agents ?? state.agents,
       tasks: data.tasks ?? state.tasks,
       epics: data.epics ?? state.epics,
+      tokenUsage: data.tokenUsage ?? state.tokenUsage,
+      tokenBudget: data.tokenBudget ?? state.tokenBudget,
     })),
 
   updateAgent: (id, updates) =>
@@ -172,4 +197,22 @@ export const useOfficeStore = create<OfficeStore>((set) => ({
   togglePause: () => set((state) => ({ isPaused: !state.isPaused })),
 
   incrementTime: () => set((state) => ({ elapsedTime: state.elapsedTime + 1 })),
+
+  updateTokenUsage: (agentId, input, output) =>
+    set((state) => {
+      const prev = state.tokenUsage[agentId] ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 };
+      return {
+        tokenUsage: {
+          ...state.tokenUsage,
+          [agentId]: {
+            inputTokens: prev.inputTokens + input,
+            outputTokens: prev.outputTokens + output,
+            totalTokens: prev.totalTokens + input + output,
+            callCount: prev.callCount + 1,
+          },
+        },
+      };
+    }),
+
+  setTokenBudget: (budget) => set({ tokenBudget: budget }),
 }));

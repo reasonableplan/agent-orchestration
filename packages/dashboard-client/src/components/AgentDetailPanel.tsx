@@ -28,11 +28,19 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   error: { label: 'ERROR', color: 'text-red-400' },
 };
 
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
 export default function AgentDetailPanel() {
   const selectedAgent = useOfficeStore((s) => s.selectedAgent);
   const agents = useOfficeStore((s) => s.agents);
   const tasks = useOfficeStore((s) => s.tasks);
   const messages = useOfficeStore((s) => s.messages);
+  const tokenUsage = useOfficeStore((s) => s.tokenUsage);
+  const tokenBudget = useOfficeStore((s) => s.tokenBudget);
   const selectAgent = useOfficeStore((s) => s.selectAgent);
 
   const agent = selectedAgent ? agents[selectedAgent] : null;
@@ -48,6 +56,15 @@ export default function AgentDetailPanel() {
   const statusInfo = agent
     ? STATUS_LABELS[agent.status] ?? STATUS_LABELS.idle
     : STATUS_LABELS.idle;
+
+  const agentTokens = agent ? tokenUsage[agent.id] : null;
+  const totalUsed = Object.values(tokenUsage).reduce((sum, t) => sum + t.totalTokens, 0);
+  const agentPercent = agentTokens && totalUsed > 0
+    ? (agentTokens.totalTokens / totalUsed) * 100
+    : 0;
+  const budgetPercent = agentTokens && tokenBudget > 0
+    ? (agentTokens.totalTokens / tokenBudget) * 100
+    : 0;
 
   return (
     <AnimatePresence>
@@ -108,6 +125,67 @@ export default function AgentDetailPanel() {
             )}
           </div>
 
+          {/* Token Usage */}
+          {agentTokens && (
+            <div className="px-3 py-2 border-b border-[#0f3460]/50">
+              <span className="font-pixel text-[6px] text-gray-500">TOKEN USAGE</span>
+              <div className="mt-1.5 space-y-1">
+                {/* Total bar */}
+                <div className="flex items-center justify-between">
+                  <span className="font-pixel text-[5px] text-gray-400">TOTAL</span>
+                  <span
+                    className="font-pixel text-[6px]"
+                    style={{ color: DOMAIN_COLORS[agent.domain] ?? '#888' }}
+                  >
+                    {formatTokens(agentTokens.totalTokens)}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-gray-800 overflow-hidden">
+                  <div
+                    className="h-full transition-all duration-300"
+                    style={{
+                      width: `${Math.min(agentPercent, 100)}%`,
+                      backgroundColor: DOMAIN_COLORS[agent.domain] ?? '#888',
+                      opacity: 0.8,
+                    }}
+                  />
+                </div>
+                {/* I/O breakdown */}
+                <div className="flex items-center gap-3">
+                  <div>
+                    <span className="font-pixel text-[5px] text-blue-400">IN: </span>
+                    <span className="font-pixel text-[5px] text-gray-300">
+                      {formatTokens(agentTokens.inputTokens)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-pixel text-[5px] text-orange-400">OUT: </span>
+                    <span className="font-pixel text-[5px] text-gray-300">
+                      {formatTokens(agentTokens.outputTokens)}
+                    </span>
+                  </div>
+                </div>
+                {/* Percentages */}
+                <div className="flex items-center justify-between">
+                  <span className="font-pixel text-[5px] text-gray-500">
+                    {agentPercent.toFixed(1)}% of total
+                  </span>
+                  <span className="font-pixel text-[5px] text-gray-500">
+                    {budgetPercent.toFixed(2)}% of budget
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-pixel text-[5px] text-gray-500">
+                    {agentTokens.callCount} API calls
+                  </span>
+                  <span className="font-pixel text-[5px] text-gray-500">
+                    ~{agentTokens.callCount > 0 ? formatTokens(Math.round(agentTokens.totalTokens / agentTokens.callCount)) : '0'}/call
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Tasks */}
           <div className="px-3 py-2 border-b border-[#0f3460]/50">
             <span className="font-pixel text-[6px] text-gray-500">
@@ -162,7 +240,7 @@ export default function AgentDetailPanel() {
             </div>
           </div>
 
-          {/* Controls placeholder */}
+          {/* Controls */}
           <div className="px-3 py-2 border-t border-[#0f3460] flex gap-2">
             <button className="pixel-btn text-[6px] flex-1">FOCUS</button>
             <button className="pixel-btn text-[6px] flex-1">RESTART</button>
