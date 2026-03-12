@@ -1,6 +1,4 @@
-import { eq, and, notInArray } from 'drizzle-orm';
-import type { Database } from '../db/index.js';
-import { agents, tasks } from '../db/schema.js';
+import type { IStateStore } from '../types/index.js';
 import { createLogger } from '../logging/logger.js';
 
 const log = createLogger('OrphanCleaner');
@@ -15,14 +13,17 @@ export interface OrphanCleanerConfig {
 /**
  * 고아 태스크 정리 — 죽은 에이전트의 In Progress 태스크를 Ready로 복원.
  * 에이전트가 크래시되면 하트비트가 중단되므로, 일정 시간 초과 시 클레임을 해제한다.
+ *
+ * setTimeout 재귀 방식으로 이전 cleanup 완료 후에만 다음 주기가 시작된다 (동시 실행 방지).
  */
 export class OrphanCleaner {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private running = false;
   private readonly heartbeatTimeoutMs: number;
   private readonly intervalMs: number;
 
   constructor(
-    private db: Database,
+    private stateStore: IStateStore,
     config: OrphanCleanerConfig = {},
   ) {
     this.heartbeatTimeoutMs = config.heartbeatTimeoutMs ?? 60_000;
@@ -30,11 +31,9 @@ export class OrphanCleaner {
   }
 
   start(): void {
-    if (this.timer) return;
-    this.timer = setInterval(
-      () => this.cleanup().catch((e) => log.error({ err: e }, 'Cleanup failed')),
-      this.intervalMs,
-    );
+    if (this.running) return;
+    this.running = true;
+    this.scheduleNext();
     log.info(
       { intervalMs: this.intervalMs, heartbeatTimeoutMs: this.heartbeatTimeoutMs },
       'OrphanCleaner started',
@@ -42,51 +41,57 @@ export class OrphanCleaner {
   }
 
   stop(): void {
+    this.running = false;
     if (this.timer) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
   }
 
+  private scheduleNext(): void {
+    if (!this.running) return;
+    this.timer = setTimeout(async () => {
+      try {
+        await this.cleanup();
+      } catch (e) {
+        log.error({ err: e }, 'Cleanup failed');
+      }
+      this.scheduleNext();
+    }, this.intervalMs);
+  }
+
   /**
    * 만료된 에이전트의 In Progress 태스크를 Ready로 복원한다.
+   * IStateStore를 경유하여 상태 전환 검증을 유지한다.
    */
   async cleanup(): Promise<number> {
-    const now = new Date();
-    const cutoff = new Date(now.getTime() - this.heartbeatTimeoutMs);
+    const cutoff = new Date(Date.now() - this.heartbeatTimeoutMs);
 
-    // 1. 하트비트가 만료된 에이전트 찾기 — offline/paused를 DB 레벨에서 필터
-    const activeAgents = await this.db
-      .select()
-      .from(agents)
-      .where(notInArray(agents.status, ['offline', 'paused']));
-    const staleAgentIds = activeAgents
+    // 1. 모든 에이전트를 조회하여 stale 에이전트 찾기
+    const allAgents = await this.stateStore.getAllAgents();
+    const staleAgentIds = allAgents
       .filter((a) => {
-        if (!a.lastHeartbeat) return true; // 한 번도 하트비트 안 보낸 에이전트
+        if (a.status === 'offline' || a.status === 'paused') return false;
+        if (!a.lastHeartbeat) return true;
         return a.lastHeartbeat < cutoff;
       })
       .map((a) => a.id);
 
     if (staleAgentIds.length === 0) return 0;
 
-    // 2. 해당 에이전트의 In Progress 태스크를 Ready로 복원
-    const inProgressTasks = await this.db
-      .select()
-      .from(tasks)
-      .where(and(eq(tasks.boardColumn, 'In Progress'), eq(tasks.status, 'in-progress')));
+    const staleSet = new Set(staleAgentIds);
 
+    // 2. In Progress 태스크 중 stale 에이전트에 할당된 것을 Ready로 복원
+    const inProgressTasks = await this.stateStore.getTasksByColumn('In Progress');
     let restored = 0;
-    for (const task of inProgressTasks) {
-      if (task.assignedAgent && staleAgentIds.includes(task.assignedAgent)) {
-        await this.db
-          .update(tasks)
-          .set({
-            status: 'ready',
-            boardColumn: 'Ready',
-            startedAt: null,
-          })
-          .where(eq(tasks.id, task.id));
 
+    for (const task of inProgressTasks) {
+      if (task.assignedAgent && staleSet.has(task.assignedAgent)) {
+        await this.stateStore.updateTask(task.id, {
+          status: 'ready',
+          boardColumn: 'Ready',
+          startedAt: null,
+        });
         restored++;
         log.warn(
           { taskId: task.id, taskTitle: task.title, staleAgent: task.assignedAgent },
@@ -97,7 +102,7 @@ export class OrphanCleaner {
 
     // 3. 만료 에이전트 상태를 error로 마킹
     for (const agentId of staleAgentIds) {
-      await this.db.update(agents).set({ status: 'error' }).where(eq(agents.id, agentId));
+      await this.stateStore.updateAgentStatus(agentId, 'error');
       log.warn({ agentId }, 'Stale agent marked as error');
     }
 

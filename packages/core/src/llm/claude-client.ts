@@ -102,7 +102,13 @@ export class ClaudeClient implements IClaudeClient {
     );
 
     const jsonStr = ClaudeClient.extractJSON(response.content);
-    const data = JSON.parse(jsonStr) as T;
+    let data: T;
+    try {
+      data = JSON.parse(jsonStr) as T;
+    } catch (err) {
+      const preview = jsonStr.length > 200 ? jsonStr.slice(0, 200) + '...' : jsonStr;
+      throw new Error(`Failed to parse Claude JSON response: ${(err as Error).message}\nResponse preview: ${preview}`);
+    }
     return { data, usage: response.usage };
   }
 

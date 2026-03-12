@@ -24,7 +24,10 @@ export function useWebSocket() {
 
       case 'agent.status':
         if (payload.agentId && typeof payload.agentId === 'string') {
-          updateAgent(payload.agentId, payload as Record<string, unknown>);
+          updateAgent(payload.agentId, {
+            status: payload.status as string,
+            ...(payload.task ? { currentTask: payload.task as string } : {}),
+          });
         }
         break;
 
@@ -45,14 +48,6 @@ export function useWebSocket() {
         }
         break;
 
-      case 'board.move':
-        if (payload.taskId && typeof payload.taskId === 'string') {
-          updateTask(payload.taskId, {
-            boardColumn: payload.toColumn as string,
-          });
-        }
-        break;
-
       case 'epic.progress':
         if (payload.epicId && typeof payload.epicId === 'string') {
           updateEpic(payload.epicId, payload as Record<string, unknown>);
@@ -67,6 +62,17 @@ export function useWebSocket() {
           content: (payload.content as string) ?? '',
           timestamp: (payload.timestamp as string) ?? new Date().toISOString(),
         });
+        break;
+
+      case 'token.usage':
+        if (payload.agentId && typeof payload.agentId === 'string') {
+          const { updateTokenUsage } = useOfficeStore.getState();
+          updateTokenUsage(
+            payload.agentId as string,
+            (payload.inputTokens as number) ?? 0,
+            (payload.outputTokens as number) ?? 0,
+          );
+        }
         break;
 
       case 'toast':
@@ -186,7 +192,7 @@ function mapInitPayload(payload: Record<string, unknown>) {
           currentTask: null,
           bubble: null,
           domain: agent.domain ?? agent.id,
-          slot: undefined, // auto-assigned by setInitialState
+          // slot is omitted — auto-assigned by setInitialState
         };
       }
     }

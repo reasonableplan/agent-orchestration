@@ -153,7 +153,11 @@ export class BoardWatcher {
     if (this.previousColumns.size > 0) {
       for (const [issueNumber, column] of this.previousColumns) {
         if (!currentColumns.has(issueNumber)) {
-          await this.onIssueRemoved(issueNumber, column);
+          try {
+            await this.onIssueRemoved(issueNumber, column);
+          } catch (err) {
+            log.error({ err, issueNumber, column }, 'Failed to process removed issue');
+          }
         }
       }
     }

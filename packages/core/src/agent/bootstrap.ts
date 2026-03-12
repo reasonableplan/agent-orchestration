@@ -156,7 +156,7 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
     }
 
     // 6.5. OrphanCleaner 생성 — 죽은 에이전트의 클레임 해제
-    orphanCleaner = new OrphanCleaner(db);
+    orphanCleaner = new OrphanCleaner(stateStore);
     orphanCleaner.start();
     log.info('OrphanCleaner started');
 

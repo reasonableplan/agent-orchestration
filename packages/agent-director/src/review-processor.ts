@@ -1,5 +1,17 @@
 import type { IStateStore, IGitService, IClaudeClient, Task, TaskResult, Message, IMessageBus } from '@agent/core';
 import { MESSAGE_TYPES, createLogger, taskRowToTask } from '@agent/core';
+
+function publishTokenUsage(messageBus: IMessageBus, from: string, inputTokens: number, outputTokens: number): Promise<void> {
+  return messageBus.publish({
+    id: crypto.randomUUID(),
+    type: MESSAGE_TYPES.TOKEN_USAGE,
+    from,
+    to: null,
+    payload: { inputTokens, outputTokens },
+    traceId: crypto.randomUUID(),
+    timestamp: new Date(),
+  });
+}
 import type { Dispatcher } from './dispatcher.js';
 
 const log = createLogger('ReviewProcessor');
@@ -78,10 +90,13 @@ Data: ${JSON.stringify(result.data ?? {})}
 Retry count: ${task.retryCount ?? 0}`;
 
     try {
-      const { data } = await this.claude.chatJSON<{ approved: boolean; reason: string }>(
+      const { data, usage } = await this.claude.chatJSON<{ approved: boolean; reason: string }>(
         systemPrompt,
         userMessage,
       );
+      if (this.messageBus) {
+        await publishTokenUsage(this.messageBus, 'director', usage.inputTokens, usage.outputTokens);
+      }
       return data;
     } catch (error) {
       // Fail-closed: 리뷰 API 장애 시 거부 처리하여 품질 게이트를 유지한다.

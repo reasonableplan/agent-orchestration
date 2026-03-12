@@ -82,6 +82,7 @@ export class BackendAgent extends BaseAgent {
   private async handleCodeTask(task: Task, taskType: BackendTaskType): Promise<TaskResult> {
     // 1. Claude로 코드 생성
     const generated = await this.codeGenerator.generate(task, taskType);
+    await this.publishTokenUsage(generated.usage.inputTokens, generated.usage.outputTokens);
     this.log.info(
       { fileCount: generated.files.length, summary: generated.summary },
       'Code generated',

@@ -17,6 +17,7 @@ export type {
   AgentRegistry,
 } from './types.js';
 export type { DashboardEvent, DashboardCommand } from './types.js';
+export { EventMapper } from './event-mapper.js';
 
 const log = createLogger('DashboardServer');
 
@@ -97,6 +98,10 @@ export function createDashboardServer(
   // Serve built dashboard-client static files (production single-port mode)
   if (opts.staticDir && existsSync(opts.staticDir)) {
     app.use(express.static(opts.staticDir));
+    // API 404 handler: /api/* 경로는 JSON 404 반환
+    app.all('/api/*', (_req, res) => {
+      res.status(404).json({ error: 'Not found' });
+    });
     // SPA fallback: any non-API route returns index.html
     app.get('*', (_req, res) => {
       res.sendFile(resolve(opts.staticDir!, 'index.html'));

@@ -62,7 +62,7 @@ export function loadConfig(opts: { requireAll?: boolean } = {}): AppConfig {
       owner: env('GITHUB_OWNER'),
       repo: env('GITHUB_REPO'),
       projectNumber: process.env.GITHUB_PROJECT_NUMBER
-        ? Number(process.env.GITHUB_PROJECT_NUMBER)
+        ? (Number.isNaN(Number(process.env.GITHUB_PROJECT_NUMBER)) ? undefined : Number(process.env.GITHUB_PROJECT_NUMBER))
         : undefined,
     },
     claude: {

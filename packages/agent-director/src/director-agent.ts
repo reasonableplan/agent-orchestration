@@ -72,6 +72,7 @@ export class DirectorAgent extends BaseAgent {
     this.epicPlanner = new EpicPlanner(this.id, this.stateStore, this.gitService, this.messageBus);
     this.dispatcher = new Dispatcher(this.stateStore, this.gitService);
     this.dispatcher.setClaudeClient(this.claude);
+    this.dispatcher.setMessageBus(this.messageBus);
     this.reviewProcessor = new ReviewProcessor(
       this.stateStore,
       this.gitService,
@@ -131,6 +132,7 @@ Rules:
 
     try {
       const { data, usage } = await this.claude.chatJSON<DirectorAction>(systemPrompt, content);
+      await this.publishTokenUsage(usage.inputTokens, usage.outputTokens);
       log.info(
         { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
         'Claude usage',

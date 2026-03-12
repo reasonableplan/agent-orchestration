@@ -7,6 +7,8 @@ import type {
   Message,
   TaskRow,
 } from '@agent/core';
+import { MESSAGE_TYPES } from '@agent/core';
+import { EventMapper } from '@agent/dashboard-server';
 import { createAgentFactories } from './agent-factories.js';
 import {
   createDashboardDeps,
@@ -485,5 +487,133 @@ describe('E2E Pipeline — Task Lifecycle', () => {
     const promoted = await store.getTask('task-gh-402');
     expect(promoted?.status).toBe('ready');
     expect(promoted?.boardColumn).toBe('Ready');
+  });
+});
+
+describe('E2E Pipeline — Dashboard Event Mapping', () => {
+  let store: IStateStore;
+  let mapper: EventMapper;
+
+  beforeEach(() => {
+    store = createMockStateStore();
+    const dashStore = createDashboardStateStore(store);
+    mapper = new EventMapper(dashStore);
+  });
+
+  it('token.usage message maps to token.usage dashboard event', async () => {
+    const msg: Message = {
+      id: 'tu-1',
+      type: MESSAGE_TYPES.TOKEN_USAGE,
+      from: 'backend',
+      to: null,
+      payload: { inputTokens: 500, outputTokens: 200 },
+      traceId: 'trace-tu-1',
+      timestamp: new Date(),
+    };
+
+    const events = await mapper.map(msg);
+
+    const tokenEvent = events.find((e) => e.type === 'token.usage');
+    expect(tokenEvent).toBeDefined();
+    expect(tokenEvent!.payload).toMatchObject({
+      agentId: 'backend',
+      inputTokens: 500,
+      outputTokens: 200,
+    });
+
+    // Also emits raw message log
+    const messageEvent = events.find((e) => e.type === 'message');
+    expect(messageEvent).toBeDefined();
+  });
+
+  it('agent.status with taskId passes through to dashboard event', async () => {
+    const msg: Message = {
+      id: 'as-1',
+      type: MESSAGE_TYPES.AGENT_STATUS,
+      from: 'frontend',
+      to: null,
+      payload: { status: 'busy', taskId: 'task-gh-42' },
+      traceId: 'trace-as-1',
+      timestamp: new Date(),
+    };
+
+    const events = await mapper.map(msg);
+
+    const statusEvent = events.find((e) => e.type === 'agent.status');
+    expect(statusEvent).toBeDefined();
+    expect(statusEvent!.payload).toMatchObject({
+      agentId: 'frontend',
+      status: 'working',
+      task: 'task-gh-42',
+    });
+
+    const bubbleEvent = events.find((e) => e.type === 'agent.bubble');
+    expect(bubbleEvent).toBeDefined();
+    expect((bubbleEvent!.payload as any).bubble.type).toBe('task');
+  });
+
+  it('full message flow: MessageBus → EventMapper → DashboardEvents', async () => {
+    const bus = createMockMessageBus();
+    const dashBus = createDashboardMessageBus(bus);
+
+    const collectedEvents: Array<{ type: string; payload: unknown }> = [];
+
+    dashBus.subscribeAll(async (message) => {
+      const events = await mapper.map(message);
+      collectedEvents.push(...events);
+    });
+
+    // 1. Agent goes busy
+    await bus.publish({
+      id: 'f-1', type: MESSAGE_TYPES.AGENT_STATUS, from: 'backend', to: null,
+      payload: { status: 'busy', taskId: 'task-1' }, traceId: 't1', timestamp: new Date(),
+    });
+
+    // 2. Token usage reported
+    await bus.publish({
+      id: 'f-2', type: MESSAGE_TYPES.TOKEN_USAGE, from: 'backend', to: null,
+      payload: { inputTokens: 1000, outputTokens: 500 }, traceId: 't2', timestamp: new Date(),
+    });
+
+    // 3. Agent goes idle
+    await bus.publish({
+      id: 'f-3', type: MESSAGE_TYPES.AGENT_STATUS, from: 'backend', to: null,
+      payload: { status: 'idle' }, traceId: 't3', timestamp: new Date(),
+    });
+
+    // Verify event sequence
+    const types = collectedEvents.map((e) => e.type);
+    expect(types).toContain('agent.status');
+    expect(types).toContain('agent.bubble');
+    expect(types).toContain('token.usage');
+    expect(types).toContain('message');
+
+    // Verify token event content
+    const tokenEvt = collectedEvents.find((e) => e.type === 'token.usage');
+    expect((tokenEvt!.payload as any).inputTokens).toBe(1000);
+
+    // Verify idle clears bubble
+    const bubbleEvents = collectedEvents.filter((e) => e.type === 'agent.bubble');
+    const lastBubble = bubbleEvents[bubbleEvents.length - 1];
+    expect((lastBubble.payload as any).bubble).toBeNull();
+  });
+
+  it('epic.progress event flows correctly', async () => {
+    const msg: Message = {
+      id: 'ep-1',
+      type: MESSAGE_TYPES.EPIC_PROGRESS,
+      from: 'director',
+      to: null,
+      payload: { epicId: 'epic-1', title: 'Dashboard MVP', progress: 0.75 },
+      traceId: 'trace-ep-1',
+      timestamp: new Date(),
+    };
+
+    const events = await mapper.map(msg);
+    const epicEvent = events.find((e) => e.type === 'epic.progress');
+    expect(epicEvent!.payload).toMatchObject({
+      epicId: 'epic-1',
+      progress: 0.75,
+    });
   });
 });

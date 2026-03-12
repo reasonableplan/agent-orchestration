@@ -79,6 +79,10 @@ export class EventMapper {
       case MESSAGE_TYPES.BOARD_REMOVE:
         events.push(...this.mapBoardRemove(message));
         break;
+
+      case MESSAGE_TYPES.TOKEN_USAGE:
+        events.push(...this.mapTokenUsage(message));
+        break;
     }
 
     return events;
@@ -86,24 +90,26 @@ export class EventMapper {
 
   private mapAgentStatus(message: Message): DashboardEvent[] {
     const payload = message.payload as { status: string; taskId?: string };
+    // 클라이언트 렌더링은 'working'을 기대하므로 'busy' → 'working'으로 정규화
+    const normalizedStatus = payload.status === 'busy' ? 'working' : payload.status;
     const events: DashboardEvent[] = [
       {
         type: 'agent.status',
         payload: {
           agentId: message.from,
-          status: payload.status,
+          status: normalizedStatus,
           task: payload.taskId,
         },
       },
     ];
 
     // Generate bubble update for agent activity
-    if (payload.status === 'busy' || payload.status === 'working') {
+    if (normalizedStatus === 'working') {
       events.push({
         type: 'agent.bubble',
         payload: {
           agentId: message.from,
-          bubble: { content: 'Working...', type: 'working' },
+          bubble: { content: 'Working...', type: 'task' },
         },
       });
     } else if (payload.status === 'idle') {
@@ -181,7 +187,7 @@ export class EventMapper {
           type: 'agent.bubble',
           payload: {
             agentId: task.assignedAgent,
-            bubble: { content: payload.title, type: 'working' },
+            bubble: { content: payload.title, type: 'task' },
           },
         });
       } else if (payload.toColumn === 'Done' || payload.toColumn === 'Failed') {
@@ -229,6 +235,20 @@ export class EventMapper {
           epicId: payload.epicId,
           title: payload.title,
           progress: payload.progress,
+        },
+      },
+    ];
+  }
+
+  private mapTokenUsage(message: Message): DashboardEvent[] {
+    const payload = message.payload as { inputTokens: number; outputTokens: number };
+    return [
+      {
+        type: 'token.usage',
+        payload: {
+          agentId: message.from,
+          inputTokens: payload.inputTokens,
+          outputTokens: payload.outputTokens,
         },
       },
     ];

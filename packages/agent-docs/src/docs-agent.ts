@@ -80,6 +80,7 @@ export class DocsAgent extends BaseAgent {
   private async handleDocTask(task: Task, taskType: DocsTaskType): Promise<TaskResult> {
     // 1. Claude로 문서 생성
     const generated = await this.docGenerator.generate(task, taskType);
+    await this.publishTokenUsage(generated.usage.inputTokens, generated.usage.outputTokens);
     this.log.info(
       { fileCount: generated.files.length, summary: generated.summary },
       'Docs generated',

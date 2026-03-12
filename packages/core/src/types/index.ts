@@ -77,6 +77,7 @@ export const MESSAGE_TYPES = {
   REVIEW_FEEDBACK: 'review.feedback',
   EPIC_PROGRESS: 'epic.progress',
   AGENT_STATUS: 'agent.status',
+  TOKEN_USAGE: 'token.usage',
   USER_INPUT: 'user.input',
   SYSTEM_COMMAND: 'system.command',
 } as const;

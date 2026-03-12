@@ -53,14 +53,30 @@ export abstract class BaseAgent {
     return this._status;
   }
 
-  protected async setStatus(status: AgentStatus): Promise<void> {
+  protected async setStatus(status: AgentStatus, taskId?: string): Promise<void> {
     this._status = status;
     await this.messageBus.publish({
       id: crypto.randomUUID(),
       type: MESSAGE_TYPES.AGENT_STATUS,
       from: this.id,
       to: null,
-      payload: { status },
+      payload: { status, ...(taskId ? { taskId } : {}) },
+      traceId: crypto.randomUUID(),
+      timestamp: new Date(),
+    });
+  }
+
+  /**
+   * Claude API 호출 후 토큰 사용량을 MessageBus에 발행한다.
+   * Dashboard에서 에이전트별 토큰 사용량 추적에 사용.
+   */
+  protected async publishTokenUsage(inputTokens: number, outputTokens: number): Promise<void> {
+    await this.messageBus.publish({
+      id: crypto.randomUUID(),
+      type: MESSAGE_TYPES.TOKEN_USAGE,
+      from: this.id,
+      to: null,
+      payload: { inputTokens, outputTokens },
       traceId: crypto.randomUUID(),
       timestamp: new Date(),
     });
@@ -135,7 +151,7 @@ export abstract class BaseAgent {
 
           const task = await this.findNextTask();
           if (task) {
-            await this.setStatus('busy');
+            await this.setStatus('busy', task.id);
             const result = await this.executeTaskWithTimeout(task);
             await this.onTaskComplete(task, result);
             await this.setStatus('idle');
@@ -257,7 +273,14 @@ export abstract class BaseAgent {
     });
 
     if (task.githubIssueNumber) {
-      await this.gitService.moveIssueToColumn(task.githubIssueNumber, newColumn);
+      try {
+        await this.gitService.moveIssueToColumn(task.githubIssueNumber, newColumn);
+      } catch (error) {
+        this.log.warn(
+          { err: error instanceof Error ? error.message : error, taskId: task.id, column: newColumn },
+          'Failed to sync Board column after task complete, continuing with review',
+        );
+      }
     }
 
     await this.messageBus.publish({

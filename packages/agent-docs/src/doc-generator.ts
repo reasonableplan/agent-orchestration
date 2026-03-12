@@ -126,7 +126,7 @@ export class DocGenerator {
     private workDir?: string,
   ) {}
 
-  async generate(task: Task, taskType: DocsTaskType): Promise<GeneratedCode> {
+  async generate(task: Task, taskType: DocsTaskType): Promise<GeneratedCode & { usage: { inputTokens: number; outputTokens: number } }> {
     const systemPrompt = this.buildSystemPrompt(taskType);
     const userMessage = await this.buildUserMessage(task, taskType);
 
@@ -137,7 +137,7 @@ export class DocGenerator {
       throw new Error(`Invalid Claude response shape: missing "files" array or "summary" string`);
     }
 
-    return data;
+    return { ...data, usage };
   }
 
   private buildSystemPrompt(taskType: DocsTaskType): string {

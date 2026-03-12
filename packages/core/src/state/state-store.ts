@@ -172,7 +172,7 @@ export class StateStore implements IStateStore {
       from: r.fromAgent,
       to: r.toAgent,
       payload: r.payload as Record<string, unknown>,
-      traceId: r.traceId ?? crypto.randomUUID(),
+      traceId: r.traceId ?? '',
       timestamp: r.createdAt ?? new Date(),
     }));
   }

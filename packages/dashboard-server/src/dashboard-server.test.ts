@@ -82,14 +82,14 @@ describe('EventMapper', () => {
       expect(statusEvent).toBeDefined();
       expect(statusEvent!.payload).toMatchObject({
         agentId: 'backend',
-        status: 'busy',
+        status: 'working',
       });
 
       const bubbleEvent = events.find((e) => e.type === 'agent.bubble');
       expect(bubbleEvent).toBeDefined();
       expect(bubbleEvent!.payload).toMatchObject({
         agentId: 'backend',
-        bubble: { content: 'Working...', type: 'working' },
+        bubble: { content: 'Working...', type: 'task' },
       });
     });
 
@@ -208,7 +208,7 @@ describe('EventMapper', () => {
       expect(bubble).toBeDefined();
       expect(bubble!.payload).toMatchObject({
         agentId: 'frontend',
-        bubble: { content: 'UI task', type: 'working' },
+        bubble: { content: 'UI task', type: 'task' },
       });
     });
 
