@@ -47,6 +47,35 @@ export interface TokenUsageState {
   callCount: number;
 }
 
+export interface AgentStatsState {
+  agentId: string;
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  inProgressTasks: number;
+  completionRate: number;
+  avgDurationMs: number | null;
+  totalRetries: number;
+}
+
+export interface AgentConfigState {
+  agentId: string;
+  claudeModel: string;
+  maxTokens: number;
+  temperature: number;
+  tokenBudget: number;
+  taskTimeoutMs: number;
+  pollIntervalMs: number;
+}
+
+export interface HookState {
+  id: string;
+  event: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+}
+
 export interface OfficeStore {
   agents: Record<string, AgentState>;
   tasks: Record<string, TaskState>;
@@ -59,6 +88,10 @@ export interface OfficeStore {
   elapsedTime: number;
   tokenUsage: Record<string, TokenUsageState>;
   tokenBudget: number;
+  agentStats: Record<string, AgentStatsState>;
+  agentConfigs: Record<string, AgentConfigState>;
+  hooksList: HookState[];
+  settingsModalAgent: string | null;
   /** true when a real server has sent an init event */
   connected: boolean;
 
@@ -81,6 +114,12 @@ export interface OfficeStore {
   incrementTime(): void;
   updateTokenUsage(agentId: string, input: number, output: number): void;
   setTokenBudget(budget: number): void;
+  setAgentStats(agentId: string, stats: AgentStatsState): void;
+  setAgentConfig(agentId: string, config: AgentConfigState): void;
+  setHooks(hooks: HookState[]): void;
+  updateHookEnabled(id: string, enabled: boolean): void;
+  openSettingsModal(agentId: string): void;
+  closeSettingsModal(): void;
 }
 
 const DEFAULT_AGENTS: Record<string, AgentState> = {
@@ -141,6 +180,10 @@ export const useOfficeStore = create<OfficeStore>((set) => ({
   elapsedTime: 0,
   tokenUsage: { ...DEFAULT_TOKEN_USAGE },
   tokenBudget: 10_000_000,
+  agentStats: {},
+  agentConfigs: {},
+  hooksList: [],
+  settingsModalAgent: null,
   connected: false,
 
   setInitialState: (data) =>
@@ -270,4 +313,25 @@ export const useOfficeStore = create<OfficeStore>((set) => ({
     }),
 
   setTokenBudget: (budget) => set({ tokenBudget: budget }),
+
+  setAgentStats: (agentId, stats) =>
+    set((state) => ({
+      agentStats: { ...state.agentStats, [agentId]: stats },
+    })),
+
+  setAgentConfig: (agentId, config) =>
+    set((state) => ({
+      agentConfigs: { ...state.agentConfigs, [agentId]: config },
+    })),
+
+  setHooks: (hooks) => set({ hooksList: hooks }),
+
+  updateHookEnabled: (id, enabled) =>
+    set((state) => ({
+      hooksList: state.hooksList.map((h) => (h.id === id ? { ...h, enabled } : h)),
+    })),
+
+  openSettingsModal: (agentId) => set({ settingsModalAgent: agentId }),
+
+  closeSettingsModal: () => set({ settingsModalAgent: null }),
 }));

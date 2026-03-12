@@ -39,6 +39,10 @@ function createMockStateStore(): IStateStore {
     getAllEpics: vi.fn().mockResolvedValue([]),
     getRecentMessages: vi.fn().mockResolvedValue([]),
     transaction: vi.fn().mockImplementation((fn) => fn({})),
+    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
+    getTaskHistory: vi.fn().mockResolvedValue([]),
+    getAgentConfig: vi.fn().mockResolvedValue(null),
+    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
   };
 }
 

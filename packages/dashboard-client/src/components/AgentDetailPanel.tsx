@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOfficeStore } from '@/stores/office-store';
+import type { AgentStatsState } from '@/stores/office-store';
 
 const DOMAIN_COLORS: Record<string, string> = {
   director: '#FFD700',
@@ -34,6 +36,13 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+function formatDuration(ms: number | null): string {
+  if (ms == null) return '-';
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60_000).toFixed(1)}m`;
+}
+
 export default function AgentDetailPanel() {
   const selectedAgent = useOfficeStore((s) => s.selectedAgent);
   const agents = useOfficeStore((s) => s.agents);
@@ -42,6 +51,32 @@ export default function AgentDetailPanel() {
   const tokenUsage = useOfficeStore((s) => s.tokenUsage);
   const tokenBudget = useOfficeStore((s) => s.tokenBudget);
   const selectAgent = useOfficeStore((s) => s.selectAgent);
+  const openSettingsModal = useOfficeStore((s) => s.openSettingsModal);
+
+  const [stats, setStats] = useState<AgentStatsState | null>(null);
+
+  useEffect(() => {
+    if (!selectedAgent) {
+      setStats(null);
+      return;
+    }
+    let cancelled = false;
+    const fetchStats = () => {
+      const baseUrl = import.meta.env.VITE_API_URL ?? '';
+      fetch(`${baseUrl}/api/agents/${selectedAgent}/stats`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!cancelled && data.stats) setStats(data.stats);
+        })
+        .catch(() => {});
+    };
+    fetchStats();
+    const interval = setInterval(fetchStats, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [selectedAgent]);
 
   const agent = selectedAgent ? agents[selectedAgent] : null;
 
@@ -182,6 +217,47 @@ export default function AgentDetailPanel() {
             </div>
           )}
 
+          {/* Agent Stats */}
+          {stats && (
+            <div className="px-3 py-2 border-b border-[#0f3460]/50">
+              <span className="font-pixel text-[6px] text-gray-500">PERFORMANCE</span>
+              <div className="mt-1 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-pixel text-[5px] text-gray-400">COMPLETION</span>
+                  <span className="font-pixel text-[5px] text-green-400">
+                    {(stats.completionRate * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-gray-800">
+                  <div
+                    className="h-full bg-green-500 transition-all duration-300"
+                    style={{ width: `${Math.min(stats.completionRate * 100, 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-pixel text-[5px] text-gray-500">
+                    {stats.completedTasks}/{stats.totalTasks} tasks
+                  </span>
+                  <span className="font-pixel text-[5px] text-gray-500">
+                    avg: {formatDuration(stats.avgDurationMs)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  {stats.failedTasks > 0 && (
+                    <span className="font-pixel text-[5px] text-red-400">
+                      {stats.failedTasks} failed
+                    </span>
+                  )}
+                  {stats.totalRetries > 0 && (
+                    <span className="font-pixel text-[5px] text-yellow-400">
+                      {stats.totalRetries} retries
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Tasks */}
           <div className="px-3 py-2 border-b border-[#0f3460]/50">
             <span className="font-pixel text-[6px] text-gray-500">
@@ -237,6 +313,12 @@ export default function AgentDetailPanel() {
           <div className="px-3 py-2 border-t border-[#0f3460] flex gap-2">
             <button className="pixel-btn text-[6px] flex-1">FOCUS</button>
             <button className="pixel-btn text-[6px] flex-1">RESTART</button>
+            <button
+              className="pixel-btn text-[6px] flex-1"
+              onClick={() => agent && openSettingsModal(agent.id)}
+            >
+              SETTINGS
+            </button>
           </div>
         </motion.div>
       )}

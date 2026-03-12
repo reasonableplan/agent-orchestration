@@ -25,3 +25,5 @@ export {
   type AgentFactory,
   type BootstrapConfig,
 } from './agent/bootstrap.js';
+export { HookRegistry, type HookHandler } from './hooks/hook-registry.js';
+export { registerBuiltInHooks } from './hooks/built-in-hooks.js';

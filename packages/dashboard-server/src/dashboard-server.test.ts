@@ -23,6 +23,12 @@ function createMockStateStore(): DashboardStateStore {
       { id: 'epic-1', title: 'Test Epic', description: 'Test', status: 'active', progress: 0.5, createdAt: new Date(), completedAt: null, githubMilestoneNumber: null },
     ]),
     getRecentMessages: vi.fn().mockResolvedValue([]),
+    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
+    getTaskHistory: vi.fn().mockResolvedValue([]),
+    getAgentConfig: vi.fn().mockResolvedValue(null),
+    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
+    getAllHooks: vi.fn().mockResolvedValue([]),
+    toggleHook: vi.fn().mockResolvedValue(undefined),
   };
 }
 
