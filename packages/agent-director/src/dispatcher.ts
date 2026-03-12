@@ -65,6 +65,11 @@ export class Dispatcher {
     // Claude로 이슈 검토
     try {
       const issue = await this.gitService.getIssue(payload.issueNumber);
+      if (!issue) {
+        log.warn({ issueNumber: payload.issueNumber }, 'Issue not found, auto-approving');
+        await this.approveToReady(payload.issueNumber, payload.title, 'auto-approved (issue not found)');
+        return;
+      }
       const { data } = await this.claude.chatJSON<{ approved: boolean; reason: string }>(
         `You are reviewing a follow-up issue created by a worker agent.
 Decide if this issue should be approved for execution.

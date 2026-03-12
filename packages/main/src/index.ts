@@ -1,7 +1,12 @@
+import { existsSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { bootstrap, loadConfig, createLogger } from '@agent/core';
 import { createDashboardServer } from '@agent/dashboard-server';
 import { createAgentFactories } from './agent-factories.js';
 import { createDashboardDeps } from './dashboard-adapter.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const log = createLogger('Main');
 
@@ -27,8 +32,13 @@ async function main() {
     context.messageBus,
     context.agents,
   );
+  // Auto-detect built dashboard-client for single-port static serving
+  const clientDistPath = resolve(__dirname, '../../dashboard-client/dist');
+  const staticDir = existsSync(clientDistPath) ? clientDistPath : undefined;
+
   const dashboard = createDashboardServer(dashboardDeps, {
     corsOrigins: appConfig.dashboard.corsOrigins,
+    staticDir,
   });
   await dashboard.listen(appConfig.dashboard.port);
 

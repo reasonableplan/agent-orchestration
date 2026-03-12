@@ -26,7 +26,7 @@ export class StateStore implements IStateStore {
    * 에러 발생 시 자동 rollback.
    */
   async transaction<T>(fn: (tx: Database) => Promise<T>): Promise<T> {
-    return this.db.transaction(fn as Parameters<Database['transaction']>[0]) as Promise<T>;
+    return this.db.transaction(fn as unknown as Parameters<Database['transaction']>[0]) as Promise<T>;
   }
 
   // ===== Agent =====

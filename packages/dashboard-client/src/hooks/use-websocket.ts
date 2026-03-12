@@ -19,7 +19,7 @@ export function useWebSocket() {
 
     switch (type) {
       case 'init':
-        setInitialState(payload as Parameters<typeof setInitialState>[0]);
+        setInitialState(mapInitPayload(payload));
         break;
 
       case 'agent.status':
@@ -146,9 +146,11 @@ export function useWebSocket() {
   connectRef.current = connect;
 
   const sendCommand = useCallback((command: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'command', payload: { command } }));
-    }
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+
+    // Parse slash commands into proper DashboardCommand format
+    const msg = parseCommand(command);
+    wsRef.current.send(JSON.stringify(msg));
   }, []);
 
   useEffect(() => {
@@ -162,4 +164,103 @@ export function useWebSocket() {
   }, [connect]);
 
   return { sendCommand };
+}
+
+/**
+ * Convert server init payload (arrays) to client store format (Records keyed by id).
+ * Server sends: { agents: AgentRow[], tasks: TaskRow[], epics: EpicRow[] }
+ * Store expects: { agents: Record<id, AgentState>, tasks: Record<id, TaskState>, epics: Record<id, EpicState> }
+ */
+function mapInitPayload(payload: Record<string, unknown>) {
+  const result: Record<string, unknown> = {};
+
+  const rawAgents = payload.agents;
+  if (Array.isArray(rawAgents)) {
+    const agents: Record<string, Record<string, unknown>> = {};
+    for (const a of rawAgents) {
+      if (a && typeof a === 'object' && 'id' in a) {
+        const agent = a as Record<string, unknown>;
+        agents[agent.id as string] = {
+          id: agent.id,
+          status: agent.status ?? 'idle',
+          currentTask: null,
+          bubble: null,
+          domain: agent.domain ?? agent.id,
+          slot: undefined, // auto-assigned by setInitialState
+        };
+      }
+    }
+    result.agents = agents;
+  }
+
+  const rawTasks = payload.tasks;
+  if (Array.isArray(rawTasks)) {
+    const tasks: Record<string, Record<string, unknown>> = {};
+    for (const t of rawTasks) {
+      if (t && typeof t === 'object' && 'id' in t) {
+        const task = t as Record<string, unknown>;
+        tasks[task.id as string] = {
+          id: task.id,
+          title: task.title ?? '',
+          status: task.status ?? '',
+          boardColumn: task.boardColumn ?? 'Backlog',
+          assignedAgent: task.assignedAgent ?? null,
+          epicId: task.epicId ?? null,
+        };
+      }
+    }
+    result.tasks = tasks;
+  }
+
+  const rawEpics = payload.epics;
+  if (Array.isArray(rawEpics)) {
+    const epics: Record<string, Record<string, unknown>> = {};
+    for (const e of rawEpics) {
+      if (e && typeof e === 'object' && 'id' in e) {
+        const epic = e as Record<string, unknown>;
+        epics[epic.id as string] = {
+          id: epic.id,
+          title: epic.title ?? '',
+          progress: epic.progress ?? 0,
+        };
+      }
+    }
+    result.epics = epics;
+  }
+
+  return result;
+}
+
+/**
+ * Parse user input into a DashboardCommand object that the server expects.
+ * Slash commands: /pause [@agent], /resume [@agent], /retry <taskId>
+ * Everything else is sent as user-input text to the Director.
+ */
+function parseCommand(input: string): Record<string, unknown> {
+  const trimmed = input.trim();
+  const parts = trimmed.split(/\s+/);
+  const cmd = parts[0]?.toLowerCase();
+
+  if (cmd === '/pause') {
+    const target = parts[1]?.replace('@', '');
+    if (target) {
+      return { type: 'agent-pause', payload: { agentId: target } };
+    }
+    return { type: 'system-pause', payload: {} };
+  }
+
+  if (cmd === '/resume') {
+    const target = parts[1]?.replace('@', '');
+    if (target) {
+      return { type: 'agent-resume', payload: { agentId: target } };
+    }
+    return { type: 'system-resume', payload: {} };
+  }
+
+  if (cmd === '/retry' && parts[1]) {
+    return { type: 'task-retry', payload: { taskId: parts[1] } };
+  }
+
+  // Default: send as user-input text
+  return { type: 'user-input', payload: { text: trimmed } };
 }

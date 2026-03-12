@@ -1,4 +1,7 @@
 import { createServer, type Server } from 'http';
+import { existsSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
 import { createLogger } from '@agent/core';
@@ -34,6 +37,8 @@ export interface DashboardServer {
  */
 export interface DashboardServerOptions {
   corsOrigins?: string[];
+  /** Path to built dashboard-client dist folder. If provided, serves static files + SPA fallback. */
+  staticDir?: string;
 }
 
 export function createDashboardServer(
@@ -88,6 +93,16 @@ export function createDashboardServer(
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', uptime: process.uptime() });
   });
+
+  // Serve built dashboard-client static files (production single-port mode)
+  if (opts.staticDir && existsSync(opts.staticDir)) {
+    app.use(express.static(opts.staticDir));
+    // SPA fallback: any non-API route returns index.html
+    app.get('*', (_req, res) => {
+      res.sendFile(resolve(opts.staticDir!, 'index.html'));
+    });
+    log.info({ staticDir: opts.staticDir }, 'Serving static dashboard files');
+  }
 
   // Create HTTP server
   const httpServer = createServer(app);
@@ -326,9 +341,18 @@ export async function startStandalone(devPort?: number): Promise<DashboardServer
   const stateStore = new InMemoryStateStore();
   const messageBus = new InMemoryMessageBus(stateStore);
 
+  // No-op agent registry for standalone dev mode (pause/resume log instead of acting)
+  const noopRegistry = {
+    async pause(agentId: string) { log.info({ agentId }, '[dev] Agent pause requested (no-op)'); },
+    async resume(agentId: string) { log.info({ agentId }, '[dev] Agent resume requested (no-op)'); },
+    async pauseAll() { log.info('[dev] System pause requested (no-op)'); },
+    async resumeAll() { log.info('[dev] System resume requested (no-op)'); },
+  };
+
   const server = createDashboardServer({
     stateStore,
     messageBus,
+    agentRegistry: noopRegistry,
   });
 
   await server.listen(port);

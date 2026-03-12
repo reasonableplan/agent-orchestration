@@ -166,10 +166,8 @@ Use action "update" for modified files.`,
             ? content.slice(0, MAX_FILE_READ_CHARS) + '\n... (truncated)'
             : content;
 
-        const charCount = Math.min(content.length, MAX_FILE_READ_CHARS);
-        if (totalChars + charCount > MAX_TOTAL_READ_CHARS) break;
-
-        totalChars += charCount;
+        if (totalChars + truncated.length > MAX_TOTAL_READ_CHARS) break;
+        totalChars += truncated.length;
         results.push({ path: filePath, content: truncated });
       } catch (err) {
         log.warn({ path: filePath, err: err instanceof Error ? err.message : err }, 'Failed to read existing file, skipping');

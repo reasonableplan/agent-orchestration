@@ -11,6 +11,7 @@ export default defineConfig({
       '@agent/frontend': path.resolve(__dirname, 'packages/agent-frontend/src/index.ts'),
       '@agent/docs': path.resolve(__dirname, 'packages/agent-docs/src/index.ts'),
       '@agent/dashboard-server': path.resolve(__dirname, 'packages/dashboard-server/src/index.ts'),
+      '@agent/main': path.resolve(__dirname, 'packages/main/src/index.ts'),
     },
   },
   test: {

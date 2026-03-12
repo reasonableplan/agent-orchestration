@@ -99,12 +99,16 @@ export default function App() {
     return () => clearInterval(interval);
   }, [updateAgent, addMessage, updateTokenUsage]);
 
+  // Demo mode: only runs when no real server connection within 3 seconds
   useEffect(() => {
     let demoCleanup: (() => void) | null = null;
 
     const timeout = setTimeout(() => {
-      demoCleanup = startDemo();
-    }, 2000);
+      // Check if a real server sent an init event
+      if (!useOfficeStore.getState().connected) {
+        demoCleanup = startDemo();
+      }
+    }, 3000);
 
     return () => {
       clearTimeout(timeout);

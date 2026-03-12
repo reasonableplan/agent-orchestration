@@ -1,7 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CircuitBreaker } from './circuit-breaker.js';
 
 describe('CircuitBreaker', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('CLOSED 상태에서 정상 호출이 성공한다', async () => {
     const cb = new CircuitBreaker({ name: 'test' });
     const result = await cb.execute(() => Promise.resolve('ok'));
@@ -36,8 +44,8 @@ describe('CircuitBreaker', () => {
     await expect(cb.execute(() => Promise.reject(new Error('fail')))).rejects.toThrow();
     expect(cb.getState()).toBe('OPEN');
 
-    // 타임아웃 대기
-    await new Promise((r) => setTimeout(r, 20));
+    // Fake timer로 타임아웃 경과
+    vi.advanceTimersByTime(20);
 
     const result = await cb.execute(() => Promise.resolve('recovered'));
     expect(result).toBe('recovered');
@@ -48,7 +56,8 @@ describe('CircuitBreaker', () => {
     const cb = new CircuitBreaker({ name: 'test', failureThreshold: 1, resetTimeoutMs: 10 });
 
     await expect(cb.execute(() => Promise.reject(new Error('fail')))).rejects.toThrow();
-    await new Promise((r) => setTimeout(r, 20));
+
+    vi.advanceTimersByTime(20);
 
     await expect(cb.execute(() => Promise.reject(new Error('still failing')))).rejects.toThrow();
     expect(cb.getState()).toBe('OPEN');

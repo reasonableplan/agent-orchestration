@@ -83,12 +83,13 @@ export class CircuitBreaker {
 
   private onFailure(): void {
     this.failures++;
-    this.lastFailureTime = Date.now();
 
     if (this.state === 'HALF_OPEN') {
+      this.lastFailureTime = Date.now();
       this.state = 'OPEN';
       log.warn({ circuit: this.name }, 'Circuit re-opened (half-open probe failed)');
     } else if (this.failures >= this.failureThreshold) {
+      this.lastFailureTime = Date.now();
       this.state = 'OPEN';
       log.warn({ circuit: this.name, failures: this.failures }, 'Circuit opened');
     }

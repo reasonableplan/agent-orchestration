@@ -94,6 +94,7 @@ const MOCK_TASK_ROW = {
   priority: 3,
   complexity: 'medium',
   dependencies: [],
+  labels: [],
   retryCount: 0,
   createdAt: new Date(),
   startedAt: null,
