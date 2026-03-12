@@ -9,6 +9,8 @@ function createMockDb() {
     set: vi.fn().mockReturnThis(),
     where: vi.fn().mockResolvedValue([]),
     from: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue([]),
   };
 
   return {
@@ -166,6 +168,75 @@ describe('StateStore', () => {
         createdBy: 'git',
       });
       expect(mockDb.insert).toHaveBeenCalled();
+    });
+  });
+
+  describe('getAgentStats', () => {
+    it('returns stats with defaults when no tasks', async () => {
+      // The select chain returns aggregated row
+      mockDb._chain.where.mockResolvedValueOnce([
+        { totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, totalRetries: 0, avgDurationMs: null },
+      ]);
+      const stats = await store.getAgentStats('backend');
+      expect(stats).toMatchObject({
+        agentId: 'backend',
+        totalTasks: 0,
+        completionRate: 0,
+        avgDurationMs: null,
+      });
+    });
+
+    it('calculates completion rate correctly', async () => {
+      mockDb._chain.where.mockResolvedValueOnce([
+        { totalTasks: 10, completedTasks: 7, failedTasks: 2, inProgressTasks: 1, totalRetries: 3, avgDurationMs: 5000 },
+      ]);
+      const stats = await store.getAgentStats('backend');
+      expect(stats.completionRate).toBeCloseTo(0.7);
+      expect(stats.avgDurationMs).toBe(5000);
+      expect(stats.totalRetries).toBe(3);
+    });
+  });
+
+  describe('getTaskHistory', () => {
+    it('returns empty array when no messages', async () => {
+      // getTaskHistory chain: select().from().where().orderBy().limit()
+      // where needs to return chain (not resolve), limit is terminal
+      mockDb._chain.where.mockReturnValueOnce(mockDb._chain);
+      mockDb._chain.limit.mockResolvedValueOnce([]);
+      const result = await store.getTaskHistory('task-001');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('Agent config operations', () => {
+    it('getAgentConfig returns null when not found', async () => {
+      mockDb._chain.where.mockResolvedValueOnce([]);
+      const result = await store.getAgentConfig('backend');
+      expect(result).toBeNull();
+    });
+
+    it('upsertAgentConfig calls insert with onConflict', async () => {
+      await store.upsertAgentConfig('backend', { claudeModel: 'claude-opus-4-20250514', maxTokens: 8192 });
+      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb._chain.onConflictDoUpdate).toHaveBeenCalled();
+    });
+  });
+
+  describe('Hook operations', () => {
+    it('getAllHooks returns from DB', async () => {
+      const hookData = [{ id: 'h1', event: 'test', name: 'Test', description: null, enabled: true, createdAt: new Date() }];
+      // getAllHooks doesn't use where, mock the select chain
+      mockDb.select.mockReturnValueOnce({
+        from: vi.fn().mockResolvedValueOnce(hookData),
+      } as any);
+      const result = await store.getAllHooks();
+      expect(result).toEqual(hookData);
+    });
+
+    it('toggleHook calls update', async () => {
+      await store.toggleHook('h1', false);
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb._chain.set).toHaveBeenCalledWith({ enabled: false });
     });
   });
 });

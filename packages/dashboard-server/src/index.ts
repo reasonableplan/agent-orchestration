@@ -4,7 +4,7 @@ import { resolve } from 'path';
 import express from 'express';
 import cors from 'cors';
 import { createLogger } from '@agent/core';
-import type { Message, AgentRow, TaskRow, EpicRow } from '@agent/core';
+import type { Message, AgentRow, TaskRow, EpicRow, AgentStats, TaskHistoryEntry, AgentConfigRow, HookRow } from '@agent/core';
 import { createRoutes } from './routes.js';
 import { WSHandler } from './ws-handler.js';
 import type { DashboardDependencies, DashboardStateStore, DashboardMessageBus } from './types.js';
@@ -55,7 +55,7 @@ export function createDashboardServer(
   app.use(
     cors({
       origin: allowedOrigins,
-      methods: ['GET', 'POST'],
+      methods: ['GET', 'POST', 'PUT'],
       credentials: true,
     }),
   );
@@ -313,6 +313,63 @@ class InMemoryStateStore implements DashboardStateStore {
 
   async getRecentMessages(limit: number): Promise<Message[]> {
     return this.messages.slice(-limit);
+  }
+
+  // Stats & Config & Hooks (mock implementations for dev mode)
+  async getAgentStats(agentId: string): Promise<AgentStats> {
+    const agentTasks = this.tasks.filter((t) => t.assignedAgent === agentId);
+    const done = agentTasks.filter((t) => t.status === 'done').length;
+    const failed = agentTasks.filter((t) => t.status === 'failed').length;
+    const total = agentTasks.length;
+    return {
+      agentId,
+      totalTasks: total,
+      completedTasks: done,
+      failedTasks: failed,
+      inProgressTasks: agentTasks.filter((t) => t.status === 'in-progress').length,
+      completionRate: total > 0 ? done / total : 0,
+      avgDurationMs: null,
+      totalRetries: agentTasks.reduce((s, t) => s + (t.retryCount ?? 0), 0),
+    };
+  }
+
+  async getTaskHistory(_taskId: string): Promise<TaskHistoryEntry[]> {
+    return [];
+  }
+
+  private configs = new Map<string, AgentConfigRow>();
+
+  async getAgentConfig(agentId: string): Promise<AgentConfigRow | null> {
+    return this.configs.get(agentId) ?? null;
+  }
+
+  async upsertAgentConfig(agentId: string, config: Partial<AgentConfigRow>): Promise<void> {
+    const existing = this.configs.get(agentId);
+    this.configs.set(agentId, {
+      agentId,
+      claudeModel: config.claudeModel ?? existing?.claudeModel ?? 'claude-sonnet-4-20250514',
+      maxTokens: config.maxTokens ?? existing?.maxTokens ?? 4096,
+      temperature: config.temperature ?? existing?.temperature ?? 0.7,
+      tokenBudget: config.tokenBudget ?? existing?.tokenBudget ?? 10_000_000,
+      taskTimeoutMs: config.taskTimeoutMs ?? existing?.taskTimeoutMs ?? 300_000,
+      pollIntervalMs: config.pollIntervalMs ?? existing?.pollIntervalMs ?? 10_000,
+      updatedAt: new Date(),
+    });
+  }
+
+  private hookList: HookRow[] = [
+    { id: 'log-task-complete', event: 'hook.task.completed', name: 'Log Task Completion', description: 'Logs task completions', enabled: true, createdAt: new Date() },
+    { id: 'toast-on-failure', event: 'hook.task.failed', name: 'Toast on Failure', description: 'Toast on task failure', enabled: true, createdAt: new Date() },
+    { id: 'log-agent-error', event: 'hook.agent.error', name: 'Log Agent Error', description: 'Logs agent errors', enabled: true, createdAt: new Date() },
+  ];
+
+  async getAllHooks(): Promise<HookRow[]> {
+    return [...this.hookList];
+  }
+
+  async toggleHook(id: string, enabled: boolean): Promise<void> {
+    const hook = this.hookList.find((h) => h.id === id);
+    if (hook) hook.enabled = enabled;
   }
 
   // Allow the mock message bus to push messages

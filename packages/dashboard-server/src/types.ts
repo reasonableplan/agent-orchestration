@@ -1,4 +1,4 @@
-import type { AgentRow, TaskRow, EpicRow, Message } from '@agent/core';
+import type { AgentRow, TaskRow, EpicRow, Message, AgentStats, TaskHistoryEntry, AgentConfigRow, HookRow } from '@agent/core';
 
 // ===== Client → Server =====
 
@@ -24,6 +24,7 @@ export type DashboardEvent =
       payload: { type: 'success' | 'error' | 'info'; title: string; message: string };
     }
   | { type: 'token.usage'; payload: { agentId: string; inputTokens: number; outputTokens: number } }
+  | { type: 'agent.config'; payload: { agentId: string; config: AgentConfigRow } }
   | { type: 'message'; payload: { id: string; type: string; from: string; content: string; timestamp: string } };
 
 // ===== Server Dependencies =====
@@ -50,6 +51,13 @@ export interface DashboardStateStore {
   getAllTasks(): Promise<TaskRow[]>;
   getAllEpics(): Promise<EpicRow[]>;
   getRecentMessages(limit: number): Promise<Message[]>;
+  // Stats & Config & Hooks
+  getAgentStats(agentId: string): Promise<AgentStats>;
+  getTaskHistory(taskId: string): Promise<TaskHistoryEntry[]>;
+  getAgentConfig(agentId: string): Promise<AgentConfigRow | null>;
+  upsertAgentConfig(agentId: string, config: Partial<AgentConfigRow>): Promise<void>;
+  getAllHooks(): Promise<HookRow[]>;
+  toggleHook(id: string, enabled: boolean): Promise<void>;
 }
 
 /**

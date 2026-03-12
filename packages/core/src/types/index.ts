@@ -80,6 +80,7 @@ export const MESSAGE_TYPES = {
   TOKEN_USAGE: 'token.usage',
   USER_INPUT: 'user.input',
   SYSTEM_COMMAND: 'system.command',
+  AGENT_CONFIG_UPDATED: 'agent.config.updated',
 } as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[keyof typeof MESSAGE_TYPES];
@@ -220,6 +221,12 @@ export interface IStateStore {
   getAllTasks(): Promise<TaskRow[]>;
   getAllEpics(): Promise<EpicRow[]>;
   getRecentMessages(limit: number): Promise<Message[]>;
+  // Stats & History
+  getAgentStats(agentId: string): Promise<AgentStats>;
+  getTaskHistory(taskId: string): Promise<TaskHistoryEntry[]>;
+  // Agent Config
+  getAgentConfig(agentId: string): Promise<AgentConfigRow | null>;
+  upsertAgentConfig(agentId: string, config: Partial<AgentConfigRow>): Promise<void>;
 }
 
 // ===== IGitService =====
@@ -247,6 +254,56 @@ export interface UserInput {
   source: 'cli' | 'dashboard';
   content: string;
   timestamp: Date;
+}
+
+// ===== AgentStats =====
+export interface AgentStats {
+  agentId: string;
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  inProgressTasks: number;
+  completionRate: number;       // 0-1
+  avgDurationMs: number | null; // done tasks avg(completedAt - startedAt)
+  totalRetries: number;
+}
+
+export interface TaskHistoryEntry {
+  timestamp: Date;
+  type: string;      // message type
+  fromAgent: string;
+  detail: string;    // payload summary
+}
+
+// ===== AgentConfigRow =====
+export interface AgentConfigRow {
+  agentId: string;
+  claudeModel: string;
+  maxTokens: number;
+  temperature: number;
+  tokenBudget: number;
+  taskTimeoutMs: number;
+  pollIntervalMs: number;
+  updatedAt: Date;
+}
+
+// ===== Hook Types =====
+export const HOOK_EVENTS = {
+  TASK_COMPLETED: 'hook.task.completed',
+  TASK_FAILED: 'hook.task.failed',
+  AGENT_ERROR: 'hook.agent.error',
+  EPIC_COMPLETED: 'hook.epic.completed',
+} as const;
+
+export type HookEvent = (typeof HOOK_EVENTS)[keyof typeof HOOK_EVENTS];
+
+export interface HookRow {
+  id: string;
+  event: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  createdAt: Date;
 }
 
 // ===== MessageHandler =====

@@ -1,5 +1,5 @@
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import { index, pgTable, text, integer, real, timestamp, jsonb, uuid } from 'drizzle-orm/pg-core';
+import { index, pgTable, text, integer, real, timestamp, jsonb, uuid, boolean } from 'drizzle-orm/pg-core';
 
 // 에이전트 등록 및 상태 관리
 export const agents = pgTable('agents', {
@@ -73,6 +73,28 @@ export const messages = pgTable(
     index('idx_messages_trace_id').on(table.traceId),
   ],
 );
+
+// 에이전트 설정 (동적 변경 가능)
+export const agentConfig = pgTable('agent_config', {
+  agentId: text('agent_id').primaryKey().references(() => agents.id),
+  claudeModel: text('claude_model').notNull().default('claude-sonnet-4-20250514'),
+  maxTokens: integer('max_tokens').notNull().default(4096),
+  temperature: real('temperature').notNull().default(0.7),
+  tokenBudget: integer('token_budget').notNull().default(10_000_000),
+  taskTimeoutMs: integer('task_timeout_ms').notNull().default(300_000),
+  pollIntervalMs: integer('poll_interval_ms').notNull().default(10_000),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// 플러그인 훅 등록
+export const hooks = pgTable('hooks', {
+  id: text('id').primaryKey(),
+  event: text('event').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
 
 // 생성된 산출물 (파일) 추적
 export const artifacts = pgTable('artifacts', {

@@ -5,12 +5,14 @@ import SystemStatusBar from '@/components/SystemStatusBar';
 import OfficeScene from '@/components/OfficeScene';
 import ActivityLog from '@/components/ActivityLog';
 import TokenUsagePanel from '@/components/TokenUsagePanel';
+import StatsPanel from '@/components/StatsPanel';
 import CommandBar from '@/components/CommandBar';
 import AgentDetailPanel from '@/components/AgentDetailPanel';
+import AgentSettingsModal from '@/components/AgentSettingsModal';
 import BoardExpandedView from '@/components/BoardExpandedView';
 import ToastContainer from '@/components/ToastContainer';
 
-type SidePanel = 'activity' | 'tokens';
+type SidePanel = 'activity' | 'tokens' | 'stats';
 
 export default function App() {
   const { sendCommand } = useWebSocket();
@@ -179,10 +181,22 @@ export default function App() {
             >
               TOKENS
             </button>
+            <button
+              onClick={() => setSidePanel('stats')}
+              className={`flex-1 py-1.5 font-pixel text-[6px] transition-colors ${
+                sidePanel === 'stats'
+                  ? 'text-cyan-300 bg-[#1a1a3e] border-b-2 border-cyan-400'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              STATS
+            </button>
           </div>
           {/* Panel content */}
           <div className="flex-1 min-h-0">
-            {sidePanel === 'activity' ? <ActivityLog /> : <TokenUsagePanel />}
+            {sidePanel === 'activity' && <ActivityLog />}
+            {sidePanel === 'tokens' && <TokenUsagePanel />}
+            {sidePanel === 'stats' && <StatsPanel />}
           </div>
         </div>
       </div>
@@ -192,6 +206,7 @@ export default function App() {
 
       {/* Overlays */}
       <BoardExpandedView />
+      <AgentSettingsModal />
       <ToastContainer />
     </div>
   );

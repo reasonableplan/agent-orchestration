@@ -5,6 +5,8 @@ import { GitService, type GitServiceConfig } from '../git-service/index.js';
 import { BoardWatcher } from '../board/board-watcher.js';
 import { SystemController } from './system-controller.js';
 import { OrphanCleaner } from '../resilience/orphan-cleaner.js';
+import { HookRegistry } from '../hooks/hook-registry.js';
+import { registerBuiltInHooks } from '../hooks/built-in-hooks.js';
 import { startCLI } from './cli.js';
 import { createLogger } from '../logging/logger.js';
 import { loadConfig, type AppConfig } from '../config.js';
@@ -21,6 +23,7 @@ export interface SystemContext {
   gitService: GitService;
   boardWatcher: BoardWatcher;
   systemController: SystemController;
+  hookRegistry: HookRegistry;
   agents: BaseAgent[];
   deps: AgentDependencies;
   /** 시작된 리소스를 안전하게 정리한다. */
@@ -177,6 +180,11 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
     // 8. SystemController
     const systemController = new SystemController(agents, stateStore);
 
+    // 8.5 HookRegistry — 내장 훅 등록
+    const hookRegistry = new HookRegistry(stateStore);
+    await registerBuiltInHooks(hookRegistry, messageBus);
+    log.info('HookRegistry initialized with built-in hooks');
+
     // 9. 에이전트 폴링 시작
     for (const agent of agents) {
       agent.startPolling();
@@ -223,6 +231,7 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
       gitService,
       boardWatcher,
       systemController,
+      hookRegistry,
       agents,
       deps,
       shutdown: async () => {

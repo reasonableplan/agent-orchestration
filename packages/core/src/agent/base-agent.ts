@@ -47,6 +47,34 @@ export abstract class BaseAgent {
     this.stateStore = deps.stateStore;
     this.gitService = deps.gitService;
     this.log = createLogger(config.id);
+
+    // Subscribe to config updates for hot-reload
+    this.messageBus.subscribe(MESSAGE_TYPES.AGENT_CONFIG_UPDATED, (msg) => {
+      const payload = msg.payload as { agentId: string };
+      if (payload.agentId === this.id) {
+        this.reloadConfig().catch((err) => {
+          this.log.error({ err }, 'Failed to reload config');
+        });
+      }
+    });
+  }
+
+  /**
+   * DB에서 최신 설정을 로드하여 config 객체를 갱신한다.
+   * agent.config.updated 메시지 수신 시 자동 호출.
+   */
+  async reloadConfig(): Promise<void> {
+    const dbConfig = await this.stateStore.getAgentConfig(this.id);
+    if (!dbConfig) return;
+
+    const mutableConfig = this.config as unknown as Record<string, unknown>;
+    mutableConfig.claudeModel = dbConfig.claudeModel;
+    mutableConfig.maxTokens = dbConfig.maxTokens;
+    mutableConfig.temperature = dbConfig.temperature;
+    mutableConfig.tokenBudget = dbConfig.tokenBudget;
+    mutableConfig.taskTimeoutMs = dbConfig.taskTimeoutMs;
+
+    this.log.info({ config: dbConfig }, 'Config reloaded');
   }
 
   get status(): AgentStatus {

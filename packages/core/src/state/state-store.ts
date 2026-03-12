@@ -1,6 +1,6 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql, count } from 'drizzle-orm';
 import type { Database } from '../db/index.js';
-import { agents, epics, tasks, messages, artifacts } from '../db/schema.js';
+import { agents, epics, tasks, messages, artifacts, agentConfig, hooks } from '../db/schema.js';
 import type {
   AgentInsert,
   AgentRow,
@@ -12,6 +12,10 @@ import type {
   Message,
   TaskStatus,
   IStateStore,
+  AgentStats,
+  TaskHistoryEntry,
+  AgentConfigRow,
+  HookRow,
 } from '../types/index.js';
 import { isValidTransition } from './task-state-machine.js';
 import { createLogger } from '../logging/logger.js';
@@ -175,5 +179,127 @@ export class StateStore implements IStateStore {
       traceId: r.traceId ?? '',
       timestamp: r.createdAt ?? new Date(),
     }));
+  }
+
+  // ===== Stats & History =====
+
+  async getAgentStats(agentId: string): Promise<AgentStats> {
+    const rows = await this.db
+      .select({
+        totalTasks: count(),
+        completedTasks: count(sql`CASE WHEN ${tasks.status} = 'done' THEN 1 END`),
+        failedTasks: count(sql`CASE WHEN ${tasks.status} = 'failed' THEN 1 END`),
+        inProgressTasks: count(sql`CASE WHEN ${tasks.status} = 'in-progress' THEN 1 END`),
+        totalRetries: sql<number>`COALESCE(SUM(${tasks.retryCount}), 0)`.as('total_retries'),
+        avgDurationMs: sql<number | null>`AVG(
+          CASE WHEN ${tasks.status} = 'done' AND ${tasks.completedAt} IS NOT NULL AND ${tasks.startedAt} IS NOT NULL
+          THEN EXTRACT(EPOCH FROM (${tasks.completedAt} - ${tasks.startedAt})) * 1000
+          END
+        )`.as('avg_duration_ms'),
+      })
+      .from(tasks)
+      .where(eq(tasks.assignedAgent, agentId));
+
+    const row = rows[0];
+    const total = Number(row?.totalTasks ?? 0);
+    const completed = Number(row?.completedTasks ?? 0);
+
+    return {
+      agentId,
+      totalTasks: total,
+      completedTasks: completed,
+      failedTasks: Number(row?.failedTasks ?? 0),
+      inProgressTasks: Number(row?.inProgressTasks ?? 0),
+      completionRate: total > 0 ? completed / total : 0,
+      avgDurationMs: row?.avgDurationMs != null ? Math.round(Number(row.avgDurationMs)) : null,
+      totalRetries: Number(row?.totalRetries ?? 0),
+    };
+  }
+
+  async getTaskHistory(taskId: string): Promise<TaskHistoryEntry[]> {
+    const rows = await this.db
+      .select()
+      .from(messages)
+      .where(sql`${messages.payload}->>'taskId' = ${taskId}`)
+      .orderBy(desc(messages.createdAt))
+      .limit(50);
+
+    return rows.map((r) => {
+      const payload = r.payload as Record<string, unknown>;
+      const detail = payload.status
+        ? `status: ${payload.status}`
+        : payload.result
+          ? `result: ${(payload.result as Record<string, unknown>).success ? 'success' : 'failure'}`
+          : JSON.stringify(payload).slice(0, 120);
+
+      return {
+        timestamp: r.createdAt ?? new Date(),
+        type: r.type,
+        fromAgent: r.fromAgent,
+        detail,
+      };
+    });
+  }
+
+  // ===== Agent Config =====
+
+  async getAgentConfig(agentId: string): Promise<AgentConfigRow | null> {
+    const rows = await this.db
+      .select()
+      .from(agentConfig)
+      .where(eq(agentConfig.agentId, agentId));
+    return rows[0] ?? null;
+  }
+
+  async upsertAgentConfig(agentId: string, config: Partial<AgentConfigRow>): Promise<void> {
+    await this.db
+      .insert(agentConfig)
+      .values({
+        agentId,
+        ...(config.claudeModel != null && { claudeModel: config.claudeModel }),
+        ...(config.maxTokens != null && { maxTokens: config.maxTokens }),
+        ...(config.temperature != null && { temperature: config.temperature }),
+        ...(config.tokenBudget != null && { tokenBudget: config.tokenBudget }),
+        ...(config.taskTimeoutMs != null && { taskTimeoutMs: config.taskTimeoutMs }),
+        ...(config.pollIntervalMs != null && { pollIntervalMs: config.pollIntervalMs }),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: agentConfig.agentId,
+        set: {
+          ...(config.claudeModel != null && { claudeModel: config.claudeModel }),
+          ...(config.maxTokens != null && { maxTokens: config.maxTokens }),
+          ...(config.temperature != null && { temperature: config.temperature }),
+          ...(config.tokenBudget != null && { tokenBudget: config.tokenBudget }),
+          ...(config.taskTimeoutMs != null && { taskTimeoutMs: config.taskTimeoutMs }),
+          ...(config.pollIntervalMs != null && { pollIntervalMs: config.pollIntervalMs }),
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  // ===== Hooks =====
+
+  async getAllHooks(): Promise<HookRow[]> {
+    return this.db.select().from(hooks);
+  }
+
+  async getHook(id: string): Promise<HookRow | null> {
+    const rows = await this.db.select().from(hooks).where(eq(hooks.id, id));
+    return rows[0] ?? null;
+  }
+
+  async upsertHook(hook: HookRow): Promise<void> {
+    await this.db
+      .insert(hooks)
+      .values(hook)
+      .onConflictDoUpdate({
+        target: hooks.id,
+        set: { enabled: hook.enabled, name: hook.name, description: hook.description },
+      });
+  }
+
+  async toggleHook(id: string, enabled: boolean): Promise<void> {
+    await this.db.update(hooks).set({ enabled }).where(eq(hooks.id, id));
   }
 }

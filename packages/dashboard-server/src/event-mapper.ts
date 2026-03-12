@@ -101,6 +101,10 @@ export class EventMapper {
       case MESSAGE_TYPES.TOKEN_USAGE:
         events.push(...this.mapTokenUsage(message));
         break;
+
+      case MESSAGE_TYPES.AGENT_CONFIG_UPDATED:
+        events.push(...this.mapAgentConfigUpdated(message));
+        break;
     }
 
     return events;
@@ -267,6 +271,27 @@ export class EventMapper {
           agentId: message.from,
           inputTokens: payload.inputTokens,
           outputTokens: payload.outputTokens,
+        },
+      },
+    ];
+  }
+
+  private mapAgentConfigUpdated(message: Message): DashboardEvent[] {
+    const payload = message.payload as { agentId: string; config: Record<string, unknown> };
+    return [
+      {
+        type: 'agent.config' as const,
+        payload: {
+          agentId: payload.agentId,
+          config: payload.config as unknown as import('@agent/core').AgentConfigRow,
+        },
+      },
+      {
+        type: 'toast',
+        payload: {
+          type: 'info',
+          title: 'Config Updated',
+          message: `Agent ${payload.agentId} configuration updated`,
         },
       },
     ];

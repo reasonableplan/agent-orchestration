@@ -77,6 +77,13 @@ export function useWebSocket() {
         }
         break;
 
+      case 'agent.config':
+        if (payload.agentId && typeof payload.agentId === 'string' && payload.config) {
+          const { setAgentConfig } = useOfficeStore.getState();
+          setAgentConfig(payload.agentId, payload.config as Record<string, unknown> as Parameters<typeof setAgentConfig>[1]);
+        }
+        break;
+
       case 'toast':
         addToast({
           id: `toast-${Date.now()}`,

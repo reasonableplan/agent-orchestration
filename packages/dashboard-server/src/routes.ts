@@ -49,7 +49,7 @@ export function createRoutes(deps: RouteDependencies): Router {
   // GET /api/tasks/:id — returns single task
   router.get('/api/tasks/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = req.params.id;
+      const id = req.params.id as string;
       const task = await stateStore.getTask(id);
       if (!task) {
         res.status(404).json({ error: 'Task not found' });
@@ -123,6 +123,133 @@ export function createRoutes(deps: RouteDependencies): Router {
           uptime: process.uptime(),
         },
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/agents/:id/stats — returns agent task statistics
+  router.get('/api/agents/:id/stats', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const stats = await stateStore.getAgentStats(req.params.id as string);
+      res.json({ stats });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/tasks/:id/history — returns task history from messages
+  router.get('/api/tasks/:id/history', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const history = await stateStore.getTaskHistory(req.params.id as string);
+      res.json({ history });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/stats/summary — returns overall system statistics
+  router.get('/api/stats/summary', async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const agents = await stateStore.getAllAgents();
+      const allTasks = await stateStore.getAllTasks();
+
+      const totalTasks = allTasks.length;
+      const doneTasks = allTasks.filter((t) => t.status === 'done').length;
+      const failedTasks = allTasks.filter((t) => t.status === 'failed').length;
+      const completionRate = totalTasks > 0 ? doneTasks / totalTasks : 0;
+
+      const agentSummaries = await Promise.all(
+        agents.map((a) => stateStore.getAgentStats(a.id)),
+      );
+
+      res.json({
+        summary: {
+          totalTasks,
+          doneTasks,
+          failedTasks,
+          completionRate,
+          agentStats: agentSummaries,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/agents/:id/config — returns agent configuration
+  router.get('/api/agents/:id/config', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = req.params.id as string;
+      const config = await stateStore.getAgentConfig(id);
+      res.json({
+        config: config ?? {
+          agentId: id,
+          claudeModel: 'claude-sonnet-4-20250514',
+          maxTokens: 4096,
+          temperature: 0.7,
+          tokenBudget: 10_000_000,
+          taskTimeoutMs: 300_000,
+          pollIntervalMs: 10_000,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // PUT /api/agents/:id/config — update agent configuration
+  router.put('/api/agents/:id/config', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const agentId = req.params.id as string;
+      const updates = req.body as Record<string, unknown>;
+
+      // Validate fields
+      const allowed = ['claudeModel', 'maxTokens', 'temperature', 'tokenBudget', 'taskTimeoutMs', 'pollIntervalMs'];
+      const filtered: Record<string, unknown> = {};
+      for (const key of allowed) {
+        if (updates[key] !== undefined) filtered[key] = updates[key];
+      }
+
+      await stateStore.upsertAgentConfig(agentId, filtered);
+
+      // Publish config update event so agents can hot-reload
+      await messageBus.publish({
+        id: crypto.randomUUID(),
+        type: MESSAGE_TYPES.AGENT_CONFIG_UPDATED,
+        from: 'dashboard',
+        to: agentId,
+        payload: { agentId, config: filtered },
+        traceId: crypto.randomUUID(),
+        timestamp: new Date(),
+      });
+
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/hooks — returns registered hooks
+  router.get('/api/hooks', async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const allHooks = await stateStore.getAllHooks();
+      res.json({ hooks: allHooks });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // PUT /api/hooks/:id/toggle — toggle hook enabled/disabled
+  router.put('/api/hooks/:id/toggle', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { enabled } = req.body as { enabled: boolean };
+      if (typeof enabled !== 'boolean') {
+        res.status(400).json({ error: 'Missing required field: enabled (boolean)' });
+        return;
+      }
+      await stateStore.toggleHook(req.params.id as string, enabled);
+      res.json({ ok: true });
     } catch (err) {
       next(err);
     }
