@@ -204,6 +204,7 @@ export const useOfficeStore = create<OfficeStore>((set) => ({
           assigned[key] = { ...agent, slot: nextSlot };
           usedSlots.add(nextSlot);
           nextSlot++;
+          while (usedSlots.has(nextSlot) && nextSlot < DESK_SLOTS.length) nextSlot++;
         }
       }
       return {

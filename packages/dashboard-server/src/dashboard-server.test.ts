@@ -1,17 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Message } from '@agent/core';
+import type { Message, TaskRow } from '@agent/core';
 import { MESSAGE_TYPES } from '@agent/core';
+import type { DashboardEvent } from './types.js';
+import { createMockStateStore, createMockMessage } from '@agent/testing';
 import { EventMapper } from './event-mapper.js';
-import type { DashboardStateStore, DashboardMessageBus } from './types.js';
+import type { DashboardStateStore } from './types.js';
 
 // ===== Mock Factories =====
 
-function createMockStateStore(): DashboardStateStore {
-  return {
-    getAgent: vi.fn().mockResolvedValue(null),
-    getTask: vi.fn().mockResolvedValue(null),
-    updateTask: vi.fn(),
-    getTasksByColumn: vi.fn().mockResolvedValue([]),
+function createLocalMockStateStore(): DashboardStateStore {
+  return createMockStateStore({
     getAllAgents: vi.fn().mockResolvedValue([
       { id: 'director', domain: 'orchestration', level: 0, status: 'idle', parentId: null, createdAt: new Date(), lastHeartbeat: new Date() },
       { id: 'backend', domain: 'backend', level: 2, status: 'idle', parentId: 'director', createdAt: new Date(), lastHeartbeat: new Date() },
@@ -22,35 +20,17 @@ function createMockStateStore(): DashboardStateStore {
     getAllEpics: vi.fn().mockResolvedValue([
       { id: 'epic-1', title: 'Test Epic', description: 'Test', status: 'active', progress: 0.5, createdAt: new Date(), completedAt: null, githubMilestoneNumber: null },
     ]),
-    getRecentMessages: vi.fn().mockResolvedValue([]),
-    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
-    getTaskHistory: vi.fn().mockResolvedValue([]),
-    getAgentConfig: vi.fn().mockResolvedValue(null),
-    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
-    getAllHooks: vi.fn().mockResolvedValue([]),
-    toggleHook: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for future test expansion
-function createMockMessageBus(): DashboardMessageBus {
-  return {
-    publish: vi.fn(),
-    subscribeAll: vi.fn(),
-  };
+  }) as unknown as DashboardStateStore;
 }
 
 function createMessage(overrides: Partial<Message> = {}): Message {
-  return {
-    id: 'msg-1',
+  return createMockMessage({
     type: MESSAGE_TYPES.AGENT_STATUS,
     from: 'backend',
-    to: null,
     payload: { status: 'busy' },
-    traceId: 'trace-1',
     timestamp: new Date('2026-01-01T00:00:00Z'),
     ...overrides,
-  };
+  });
 }
 
 // ===== EventMapper Tests =====
@@ -60,21 +40,21 @@ describe('EventMapper', () => {
   let stateStore: DashboardStateStore;
 
   beforeEach(() => {
-    stateStore = createMockStateStore();
+    stateStore = createLocalMockStateStore();
     mapper = new EventMapper(stateStore);
   });
 
-  it('always emits a raw message log event', async () => {
+  it('emits a raw message log event for non-high-frequency events', async () => {
+    // agent.status is a high-frequency event and should NOT emit a message log
     const msg = createMessage();
     const events = await mapper.map(msg);
 
     const messageEvent = events.find((e) => e.type === 'message');
-    expect(messageEvent).toBeDefined();
-    expect(messageEvent!.payload).toMatchObject({
-      id: 'msg-1',
-      type: MESSAGE_TYPES.AGENT_STATUS,
-      from: 'backend',
-    });
+    expect(messageEvent).toBeUndefined();
+
+    // agent.status still emits agent.status event
+    const statusEvent = events.find((e) => e.type === 'agent.status');
+    expect(statusEvent).toBeDefined();
   });
 
   describe('agent.status mapping', () => {
@@ -138,7 +118,7 @@ describe('EventMapper', () => {
         assignedAgent: 'backend',
         status: 'in-progress',
       };
-      vi.mocked(stateStore.getTask).mockResolvedValue(taskRow as any);
+      vi.mocked(stateStore.getTask).mockResolvedValue(taskRow as unknown as TaskRow);
 
       const msg = createMessage({
         type: MESSAGE_TYPES.BOARD_MOVE,
@@ -197,7 +177,7 @@ describe('EventMapper', () => {
         id: 'task-gh-10',
         assignedAgent: 'frontend',
         boardColumn: 'In Progress',
-      } as any);
+      } as unknown as TaskRow);
 
       const msg = createMessage({
         type: MESSAGE_TYPES.BOARD_MOVE,
@@ -224,7 +204,7 @@ describe('EventMapper', () => {
         id: 'task-gh-10',
         assignedAgent: 'backend',
         boardColumn: 'Done',
-      } as any);
+      } as unknown as TaskRow);
 
       const msg = createMessage({
         type: MESSAGE_TYPES.BOARD_MOVE,
@@ -294,7 +274,7 @@ describe('EventMapper', () => {
         type: 'info',
         title: 'Task Removed',
       });
-      expect((toast!.payload as any).message).toContain('#42');
+      expect((toast!.payload as Extract<DashboardEvent, { type: 'toast' }>['payload']).message).toContain('#42');
     });
   });
 

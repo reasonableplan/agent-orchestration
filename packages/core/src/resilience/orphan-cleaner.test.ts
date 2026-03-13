@@ -1,38 +1,16 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { OrphanCleaner } from './orphan-cleaner.js';
 import type { IStateStore, AgentRow, TaskRow } from '../types/index.js';
+import { createMockStateStore } from '@agent/testing';
 
-function createMockStateStore(
+function makeStateStore(
   agents: AgentRow[] = [],
   inProgressTasks: TaskRow[] = [],
 ): IStateStore {
-  return {
-    registerAgent: vi.fn(),
-    getAgent: vi.fn(),
-    updateAgentStatus: vi.fn(),
-    updateHeartbeat: vi.fn(),
-    createTask: vi.fn(),
-    getTask: vi.fn(),
-    updateTask: vi.fn(),
-    getTasksByColumn: vi.fn().mockResolvedValue(inProgressTasks),
-    getTasksByAgent: vi.fn().mockResolvedValue([]),
-    getReadyTasksForAgent: vi.fn().mockResolvedValue([]),
-    claimTask: vi.fn().mockResolvedValue(false),
-    createEpic: vi.fn(),
-    getEpic: vi.fn(),
-    updateEpic: vi.fn(),
-    saveMessage: vi.fn(),
-    saveArtifact: vi.fn(),
-    transaction: vi.fn().mockImplementation((fn) => fn({})),
+  return createMockStateStore({
     getAllAgents: vi.fn().mockResolvedValue(agents),
-    getAllTasks: vi.fn().mockResolvedValue([]),
-    getAllEpics: vi.fn().mockResolvedValue([]),
-    getRecentMessages: vi.fn().mockResolvedValue([]),
-    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
-    getTaskHistory: vi.fn().mockResolvedValue([]),
-    getAgentConfig: vi.fn().mockResolvedValue(null),
-    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
-  };
+    getTasksByColumn: vi.fn().mockResolvedValue(inProgressTasks),
+  });
 }
 
 describe('OrphanCleaner', () => {
@@ -44,7 +22,7 @@ describe('OrphanCleaner', () => {
   });
 
   it('returns 0 when no stale agents exist', async () => {
-    store = createMockStateStore(
+    store = makeStateStore(
       [{ id: 'backend', status: 'idle', lastHeartbeat: new Date() } as AgentRow],
     );
     cleaner = new OrphanCleaner(store, { heartbeatTimeoutMs: 60_000 });
@@ -56,7 +34,7 @@ describe('OrphanCleaner', () => {
 
   it('restores orphan tasks from stale agents to Ready', async () => {
     const staleHeartbeat = new Date(Date.now() - 120_000);
-    store = createMockStateStore(
+    store = makeStateStore(
       [{ id: 'backend', status: 'idle', lastHeartbeat: staleHeartbeat } as AgentRow],
       [
         { id: 'task-1', title: 'API endpoint', assignedAgent: 'backend', boardColumn: 'In Progress' } as TaskRow,
@@ -77,7 +55,7 @@ describe('OrphanCleaner', () => {
   });
 
   it('treats agents with no heartbeat as stale', async () => {
-    store = createMockStateStore(
+    store = makeStateStore(
       [{ id: 'git', status: 'idle', lastHeartbeat: null } as unknown as AgentRow],
       [{ id: 'task-3', title: 'Branch task', assignedAgent: 'git', boardColumn: 'In Progress' } as TaskRow],
     );
@@ -88,7 +66,7 @@ describe('OrphanCleaner', () => {
   });
 
   it('skips tasks assigned to healthy agents', async () => {
-    store = createMockStateStore(
+    store = makeStateStore(
       [{ id: 'backend', status: 'busy', lastHeartbeat: new Date() } as AgentRow],
     );
     cleaner = new OrphanCleaner(store, { heartbeatTimeoutMs: 60_000 });
@@ -99,7 +77,7 @@ describe('OrphanCleaner', () => {
 
   it('handles multiple stale agents at once', async () => {
     const staleHeartbeat = new Date(Date.now() - 120_000);
-    store = createMockStateStore(
+    store = makeStateStore(
       [
         { id: 'backend', status: 'idle', lastHeartbeat: staleHeartbeat } as AgentRow,
         { id: 'frontend', status: 'idle', lastHeartbeat: staleHeartbeat } as AgentRow,
@@ -118,7 +96,7 @@ describe('OrphanCleaner', () => {
 
   it('start/stop manages timer', () => {
     vi.useFakeTimers();
-    store = createMockStateStore();
+    store = makeStateStore();
     cleaner = new OrphanCleaner(store);
 
     cleaner.start();
@@ -132,7 +110,7 @@ describe('OrphanCleaner', () => {
 
   it('skips tasks with no assignedAgent', async () => {
     const staleHeartbeat = new Date(Date.now() - 120_000);
-    store = createMockStateStore(
+    store = makeStateStore(
       [{ id: 'backend', status: 'idle', lastHeartbeat: staleHeartbeat } as AgentRow],
       [{ id: 'task-1', title: 'Unassigned', assignedAgent: null, boardColumn: 'In Progress' } as TaskRow],
     );

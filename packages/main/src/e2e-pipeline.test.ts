@@ -6,9 +6,12 @@ import type {
   IGitService,
   Message,
   TaskRow,
+  BaseAgent,
 } from '@agent/core';
 import { MESSAGE_TYPES } from '@agent/core';
+import { createMockGitService } from '@agent/testing';
 import { EventMapper } from '@agent/dashboard-server';
+import type { DashboardEvent } from '@agent/dashboard-server';
 import { createAgentFactories } from './agent-factories.js';
 import {
   createDashboardDeps,
@@ -106,34 +109,25 @@ function createMockStateStore(): IStateStore {
   };
 }
 
-function createMockGitService(): IGitService {
-  let issueCounter = 100;
-  return {
-    validateConnection: vi.fn(),
-    createIssue: vi.fn().mockImplementation(() => Promise.resolve(++issueCounter)),
-    updateIssue: vi.fn(),
-    closeIssue: vi.fn(),
-    getIssue: vi.fn().mockImplementation((n: number) =>
-      Promise.resolve({
-        issueNumber: n,
-        title: `Issue #${n}`,
-        body: 'test body',
-        labels: [],
-        column: 'Backlog',
-        dependencies: [],
-        assignee: null,
-        generatedBy: 'test',
-        epicId: null,
-      }),
-    ),
-    getIssuesByLabel: vi.fn().mockResolvedValue([]),
-    getEpicIssues: vi.fn().mockResolvedValue([]),
-    getAllProjectItems: vi.fn().mockResolvedValue([]),
-    moveIssueToColumn: vi.fn(),
-    addComment: vi.fn(),
-    createBranch: vi.fn(),
-    createPR: vi.fn(),
-  };
+function createLocalMockGitService(): IGitService {
+  return createMockGitService(
+    { issueCounterStart: 100 },
+    {
+      getIssue: vi.fn().mockImplementation((n: number) =>
+        Promise.resolve({
+          issueNumber: n,
+          title: `Issue #${n}`,
+          body: 'test body',
+          labels: [],
+          column: 'Backlog',
+          dependencies: [],
+          assignee: null,
+          generatedBy: 'test',
+          epicId: null,
+        }),
+      ),
+    },
+  );
 }
 
 // ===== Tests =====
@@ -147,7 +141,7 @@ describe('E2E Pipeline — Dashboard Adapter Integration', () => {
   beforeEach(() => {
     bus = createMockMessageBus();
     store = createMockStateStore();
-    git = createMockGitService();
+    git = createLocalMockGitService();
     deps = { messageBus: bus, stateStore: store, gitService: git };
   });
 
@@ -192,7 +186,7 @@ describe('E2E Pipeline — Dashboard Adapter Integration', () => {
     // Start polling so pause/resume have effect
     for (const a of agents) a.startPolling(600_000);
 
-    const registry = createAgentRegistry(agents as any[]);
+    const registry = createAgentRegistry(agents as BaseAgent[]);
 
     await registry.pause('backend');
     const backendAgent = agents.find((a) => a.id === 'backend')!;
@@ -211,7 +205,7 @@ describe('E2E Pipeline — Dashboard Adapter Integration', () => {
     const agents = Object.values(factories).map((f) => f(deps));
     for (const a of agents) a.startPolling(600_000);
 
-    const registry = createAgentRegistry(agents as any[]);
+    const registry = createAgentRegistry(agents as BaseAgent[]);
 
     await registry.pauseAll();
     for (const a of agents) {
@@ -231,7 +225,7 @@ describe('E2E Pipeline — Dashboard Adapter Integration', () => {
     const factories = createAgentFactories(config);
     const agents = Object.values(factories).map((f) => f(deps));
 
-    const dashDeps = createDashboardDeps(store, bus, agents as any[]);
+    const dashDeps = createDashboardDeps(store, bus, agents as BaseAgent[]);
 
     expect(dashDeps.stateStore).toBeDefined();
     expect(dashDeps.messageBus).toBeDefined();
@@ -274,7 +268,7 @@ describe('E2E Pipeline — Message Flow', () => {
 
     expect(received).toHaveLength(1);
     expect(received[0].type).toBe('board.move');
-    expect((received[0].payload as any).issueNumber).toBe(42);
+    expect((received[0].payload as Record<string, unknown>).issueNumber).toBe(42);
   });
 
   it('review.request triggers Director review flow', async () => {
@@ -298,7 +292,7 @@ describe('E2E Pipeline — Message Flow', () => {
     await bus.publish(reviewMsg);
 
     expect(reviewRequests).toHaveLength(1);
-    expect((reviewRequests[0].payload as any).taskId).toBe('task-gh-42');
+    expect((reviewRequests[0].payload as Record<string, unknown>).taskId).toBe('task-gh-42');
   });
 
   it('subscribeAll receives all message types for dashboard broadcast', async () => {
@@ -523,9 +517,9 @@ describe('E2E Pipeline — Dashboard Event Mapping', () => {
       outputTokens: 200,
     });
 
-    // Also emits raw message log
+    // token.usage is a high-frequency event — raw message log is skipped
     const messageEvent = events.find((e) => e.type === 'message');
-    expect(messageEvent).toBeDefined();
+    expect(messageEvent).toBeUndefined();
   });
 
   it('agent.status with taskId passes through to dashboard event', async () => {
@@ -551,7 +545,7 @@ describe('E2E Pipeline — Dashboard Event Mapping', () => {
 
     const bubbleEvent = events.find((e) => e.type === 'agent.bubble');
     expect(bubbleEvent).toBeDefined();
-    expect((bubbleEvent!.payload as any).bubble.type).toBe('task');
+    expect((bubbleEvent!.payload as Extract<DashboardEvent, { type: 'agent.bubble' }>['payload']).bubble?.type).toBe('task');
   });
 
   it('full message flow: MessageBus → EventMapper → DashboardEvents', async () => {
@@ -588,16 +582,17 @@ describe('E2E Pipeline — Dashboard Event Mapping', () => {
     expect(types).toContain('agent.status');
     expect(types).toContain('agent.bubble');
     expect(types).toContain('token.usage');
-    expect(types).toContain('message');
+    // agent.status and token.usage are high-frequency — no raw message log emitted
+    expect(types).not.toContain('message');
 
     // Verify token event content
     const tokenEvt = collectedEvents.find((e) => e.type === 'token.usage');
-    expect((tokenEvt!.payload as any).inputTokens).toBe(1000);
+    expect((tokenEvt!.payload as Extract<DashboardEvent, { type: 'token.usage' }>['payload']).inputTokens).toBe(1000);
 
     // Verify idle clears bubble
     const bubbleEvents = collectedEvents.filter((e) => e.type === 'agent.bubble');
     const lastBubble = bubbleEvents[bubbleEvents.length - 1];
-    expect((lastBubble.payload as any).bubble).toBeNull();
+    expect((lastBubble.payload as Extract<DashboardEvent, { type: 'agent.bubble' }>['payload']).bubble).toBeNull();
   });
 
   it('epic.progress event flows correctly', async () => {

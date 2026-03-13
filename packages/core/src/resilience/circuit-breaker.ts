@@ -52,6 +52,7 @@ export class CircuitBreaker {
       if (Date.now() - this.lastFailureTime >= this.resetTimeoutMs) {
         this.state = 'HALF_OPEN';
         this.halfOpenSuccesses = 0;
+        this.failures = 0;
         log.info({ circuit: this.name }, 'Circuit half-open, allowing probe request');
       } else {
         throw new CircuitBreakerError(this.name);

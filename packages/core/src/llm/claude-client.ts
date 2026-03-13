@@ -114,7 +114,7 @@ export class ClaudeClient implements IClaudeClient {
 
   static extractJSON(text: string): string {
     const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    if (codeBlockMatch) return codeBlockMatch[1].trim();
+    if (codeBlockMatch) return codeBlockMatch[1]!.trim();
 
     const firstBrace = text.indexOf('{');
     const firstBracket = text.indexOf('[');

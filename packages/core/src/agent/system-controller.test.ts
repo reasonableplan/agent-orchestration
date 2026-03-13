@@ -2,48 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SystemController } from './system-controller.js';
 import type { BaseAgent } from './base-agent.js';
 import type { IStateStore, UserInput } from '../types/index.js';
+import { createMockStateStore } from '@agent/testing';
 
 function createMockAgent(id: string, domain: string): BaseAgent {
   return {
     id,
     domain,
     status: 'idle',
-    config: { id, domain, level: 2, claudeModel: '', maxTokens: 0, temperature: 0, tokenBudget: 0 },
+    config: { id, domain, level: 2, claudeModel: '', maxTokens: 0, temperature: 0, tokenBudget: 0, taskTimeoutMs: 300_000, pollIntervalMs: 10_000 },
     startPolling: vi.fn(),
     stopPolling: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
   } as unknown as BaseAgent;
-}
-
-function createMockStateStore(): IStateStore {
-  return {
-    registerAgent: vi.fn(),
-    getAgent: vi.fn(),
-    updateAgentStatus: vi.fn(),
-    updateHeartbeat: vi.fn(),
-    createTask: vi.fn(),
-    getTask: vi.fn(),
-    updateTask: vi.fn(),
-    getTasksByColumn: vi.fn(),
-    getTasksByAgent: vi.fn(),
-    getReadyTasksForAgent: vi.fn(),
-    claimTask: vi.fn(),
-    createEpic: vi.fn(),
-    getEpic: vi.fn(),
-    updateEpic: vi.fn(),
-    saveMessage: vi.fn(),
-    saveArtifact: vi.fn(),
-    getAllAgents: vi.fn().mockResolvedValue([]),
-    getAllTasks: vi.fn().mockResolvedValue([]),
-    getAllEpics: vi.fn().mockResolvedValue([]),
-    getRecentMessages: vi.fn().mockResolvedValue([]),
-    transaction: vi.fn().mockImplementation((fn) => fn({})),
-    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
-    getTaskHistory: vi.fn().mockResolvedValue([]),
-    getAgentConfig: vi.fn().mockResolvedValue(null),
-    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
-  };
 }
 
 function makeInput(content: string): UserInput {

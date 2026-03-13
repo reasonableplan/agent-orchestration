@@ -1,76 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BoardWatcher } from './board-watcher.js';
-import type { IGitService, IStateStore, IMessageBus, BoardIssue } from '../types/index.js';
+import type { IGitService, IStateStore, IMessageBus, TaskRow } from '../types/index.js';
+import {
+  createMockGitService,
+  createMockStateStore,
+  createMockMessageBus,
+  createMockBoardIssue,
+} from '@agent/testing';
 
-function createMockGitService(): IGitService {
-  return {
-    validateConnection: vi.fn(),
-    createIssue: vi.fn(),
-    updateIssue: vi.fn(),
-    closeIssue: vi.fn(),
-    getIssue: vi.fn(),
-    getIssuesByLabel: vi.fn(),
-    getEpicIssues: vi.fn(),
-    getAllProjectItems: vi.fn().mockResolvedValue([]),
-    moveIssueToColumn: vi.fn(),
-    addComment: vi.fn(),
-    createBranch: vi.fn(),
-    createPR: vi.fn(),
-  };
-}
-
-function createMockStateStore(): IStateStore {
-  return {
-    registerAgent: vi.fn(),
-    getAgent: vi.fn(),
-    updateAgentStatus: vi.fn(),
-    updateHeartbeat: vi.fn(),
-    createTask: vi.fn(),
-    getTask: vi.fn().mockResolvedValue(null),
-    updateTask: vi.fn(),
-    getTasksByColumn: vi.fn(),
-    getTasksByAgent: vi.fn(),
-    getReadyTasksForAgent: vi.fn().mockResolvedValue([]),
-    claimTask: vi.fn().mockResolvedValue(true),
-    createEpic: vi.fn(),
-    getEpic: vi.fn(),
-    updateEpic: vi.fn(),
-    saveMessage: vi.fn(),
-    saveArtifact: vi.fn(),
-    getAllAgents: vi.fn().mockResolvedValue([]),
-    getAllTasks: vi.fn().mockResolvedValue([]),
-    getAllEpics: vi.fn().mockResolvedValue([]),
-    getRecentMessages: vi.fn().mockResolvedValue([]),
-    transaction: vi.fn().mockImplementation((fn) => fn({})),
-    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
-    getTaskHistory: vi.fn().mockResolvedValue([]),
-    getAgentConfig: vi.fn().mockResolvedValue(null),
-    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-function createMockMessageBus(): IMessageBus {
-  return {
-    publish: vi.fn(),
-    subscribe: vi.fn(),
-    subscribeAll: vi.fn(),
-    unsubscribe: vi.fn(),
-  };
-}
-
-function makeIssue(overrides: Partial<BoardIssue> = {}): BoardIssue {
-  return {
-    issueNumber: 1,
-    title: 'Test issue',
-    body: 'Test body',
+function makeIssue(overrides: Parameters<typeof createMockBoardIssue>[0] = {}) {
+  return createMockBoardIssue({
     labels: ['agent:git'],
     column: 'Ready',
-    dependencies: [],
-    assignee: null,
-    generatedBy: 'git',
-    epicId: null,
     ...overrides,
-  };
+  });
 }
 
 describe('BoardWatcher', () => {
@@ -112,8 +55,7 @@ describe('BoardWatcher', () => {
   it('sync updates existing tasks', async () => {
     const issue = makeIssue({ issueNumber: 42, column: 'In Progress' });
     vi.mocked(gitService.getAllProjectItems).mockResolvedValueOnce([issue]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(stateStore.getTask).mockResolvedValue({ id: 'task-gh-42' } as any);
+    vi.mocked(stateStore.getTask).mockResolvedValue({ id: 'task-gh-42' } as unknown as Awaited<ReturnType<typeof stateStore.getTask>>);
 
     await watcher.sync();
 
@@ -207,11 +149,10 @@ describe('BoardWatcher', () => {
     // Column changed → should sync
     const issueInProgress = makeIssue({ issueNumber: 10, column: 'In Progress' });
     vi.mocked(gitService.getAllProjectItems).mockResolvedValueOnce([issueInProgress]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(stateStore.getTask).mockResolvedValueOnce({
       id: 'task-gh-10',
       status: 'ready',
-    } as any);
+    } as unknown as TaskRow);
     await watcher.sync();
 
     expect(stateStore.getTask).toHaveBeenCalledWith('task-gh-10');

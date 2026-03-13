@@ -1,98 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BackendAgent } from './backend-agent.js';
-import type { IClaudeClient } from './code-generator.js';
+import {
+  createMockMessageBus,
+  createMockStateStore,
+  createMockGitService,
+  createMockClaude,
+  createMockTask,
+} from '@agent/testing';
+import type { IClaudeClient } from '@agent/testing';
 import type { AgentDependencies, IMessageBus, IStateStore, IGitService, Task } from '@agent/core';
-
-// ===== Mocks =====
-
-function createMockMessageBus(): IMessageBus {
-  return {
-    publish: vi.fn(),
-    subscribe: vi.fn(),
-    subscribeAll: vi.fn(),
-    unsubscribe: vi.fn(),
-  };
-}
-
-function createMockStateStore(): IStateStore {
-  return {
-    registerAgent: vi.fn(),
-    getAgent: vi.fn(),
-    updateAgentStatus: vi.fn(),
-    updateHeartbeat: vi.fn(),
-    createTask: vi.fn(),
-    getTask: vi.fn(),
-    updateTask: vi.fn(),
-    getTasksByColumn: vi.fn().mockResolvedValue([]),
-    getTasksByAgent: vi.fn(),
-    getReadyTasksForAgent: vi.fn().mockResolvedValue([]),
-    claimTask: vi.fn(),
-    createEpic: vi.fn(),
-    getEpic: vi.fn(),
-    updateEpic: vi.fn(),
-    saveMessage: vi.fn(),
-    saveArtifact: vi.fn(),
-    getAllAgents: vi.fn().mockResolvedValue([]),
-    getAllTasks: vi.fn().mockResolvedValue([]),
-    getAllEpics: vi.fn().mockResolvedValue([]),
-    getRecentMessages: vi.fn().mockResolvedValue([]),
-    transaction: vi.fn().mockImplementation((fn) => fn({})),
-    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
-    getTaskHistory: vi.fn().mockResolvedValue([]),
-    getAgentConfig: vi.fn().mockResolvedValue(null),
-    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-function createMockGitService(): IGitService {
-  let issueCounter = 200;
-  return {
-    validateConnection: vi.fn(),
-    createIssue: vi.fn().mockImplementation(() => Promise.resolve(++issueCounter)),
-    updateIssue: vi.fn(),
-    closeIssue: vi.fn(),
-    getIssue: vi.fn(),
-    getIssuesByLabel: vi.fn(),
-    getEpicIssues: vi.fn().mockResolvedValue([]),
-    getAllProjectItems: vi.fn(),
-    moveIssueToColumn: vi.fn(),
-    addComment: vi.fn(),
-    createBranch: vi.fn(),
-    createPR: vi.fn(),
-  };
-}
-
-function createMockClaude(response: unknown): IClaudeClient {
-  return {
-    chat: vi.fn().mockResolvedValue({
-      content: JSON.stringify(response),
-      usage: { inputTokens: 200, outputTokens: 150 },
-    }),
-    chatJSON: vi.fn().mockResolvedValue({
-      data: response,
-      usage: { inputTokens: 200, outputTokens: 150 },
-    }),
-  };
-}
-
-function makeTask(overrides: Partial<Task> = {}): Task {
-  return {
-    id: 'task-1',
-    epicId: 'epic-1',
-    title: 'Create user API endpoint',
-    description: 'POST /api/users endpoint with email/password validation',
-    assignedAgent: 'backend',
-    status: 'in-progress',
-    githubIssueNumber: 50,
-    boardColumn: 'In Progress',
-    dependencies: [],
-    priority: 3,
-    complexity: 'medium',
-    retryCount: 0,
-    artifacts: [],
-    ...overrides,
-  };
-}
 
 const MOCK_GENERATED = {
   files: [
@@ -131,7 +47,7 @@ describe('BackendAgent', () => {
   beforeEach(() => {
     messageBus = createMockMessageBus();
     stateStore = createMockStateStore();
-    gitService = createMockGitService();
+    gitService = createMockGitService({ issueCounterStart: 200 });
     deps = { messageBus, stateStore, gitService };
     mockClaude = createMockClaude(MOCK_GENERATED);
     agent = new BackendAgent(deps, { workDir: '/tmp/test-workspace', claudeClient: mockClaude });
@@ -148,7 +64,7 @@ describe('BackendAgent', () => {
   // ===== Task Type Detection =====
 
   it('detects api.create from labels', async () => {
-    const task = makeTask({ title: 'Something' }) as Task & { labels: string[] };
+    const task = createMockTask({ title: 'Something', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' }) as Task & { labels: string[] };
     task.labels = ['type:api.create'];
     const result = await callExecuteTask(agent, task);
     expect(result.success).toBe(true);
@@ -156,31 +72,31 @@ describe('BackendAgent', () => {
   });
 
   it('detects api.create from title when no labels', async () => {
-    const task = makeTask({ title: 'Create user API endpoint' });
+    const task = createMockTask({ title: 'Create user API endpoint', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
     expect(result.success).toBe(true);
   });
 
   it('detects model.create from title', async () => {
-    const task = makeTask({ title: 'Create User model schema' });
+    const task = createMockTask({ title: 'Create User model schema', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
     expect(result.success).toBe(true);
   });
 
   it('detects middleware.create from title', async () => {
-    const task = makeTask({ title: 'Create auth middleware' });
+    const task = createMockTask({ title: 'Create auth middleware', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
     expect(result.success).toBe(true);
   });
 
   it('detects test.create from title', async () => {
-    const task = makeTask({ title: 'Create tests for user API' });
+    const task = createMockTask({ title: 'Create tests for user API', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
     expect(result.success).toBe(true);
   });
 
   it('returns error for unknown task type', async () => {
-    const task = makeTask({ title: 'do something random', description: 'unrelated work' });
+    const task = createMockTask({ title: 'do something random', description: 'unrelated work', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain('Unknown backend task type');
@@ -189,7 +105,16 @@ describe('BackendAgent', () => {
   // ===== Code Generation Flow =====
 
   it('generates code, writes files, saves artifacts, and creates commit request', async () => {
-    const task = makeTask();
+    const task = createMockTask({
+      id: 'task-1',
+      epicId: 'epic-1',
+      title: 'Create user API endpoint',
+      description: 'POST /api/users endpoint with email/password validation',
+      assignedAgent: 'backend',
+      status: 'in-progress',
+      githubIssueNumber: 50,
+      boardColumn: 'In Progress',
+    });
     const result = await callExecuteTask(agent, task);
 
     // Success
@@ -228,7 +153,16 @@ describe('BackendAgent', () => {
   });
 
   it('creates commit request even without epicId', async () => {
-    const task = makeTask({ epicId: null });
+    const task = createMockTask({
+      id: 'task-1',
+      epicId: null,
+      title: 'Create user API endpoint',
+      description: 'POST /api/users endpoint with email/password validation',
+      assignedAgent: 'backend',
+      status: 'in-progress',
+      githubIssueNumber: 50,
+      boardColumn: 'In Progress',
+    });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(true);
@@ -249,7 +183,7 @@ describe('BackendAgent', () => {
     });
     agent = new BackendAgent(deps, { workDir: '/tmp/test', claudeClient: analyzeClaude });
 
-    const task = makeTask({ title: 'Analyze codebase routes' });
+    const task = createMockTask({ title: 'Analyze codebase routes', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(true);
@@ -264,7 +198,7 @@ describe('BackendAgent', () => {
     mockClaude = { chatJSON: vi.fn().mockRejectedValue(new Error('API rate limit exceeded')) };
     agent = new BackendAgent(deps, { workDir: '/tmp/test', claudeClient: mockClaude });
 
-    const task = makeTask();
+    const task = createMockTask({ title: 'Create user API endpoint', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(false);
@@ -275,7 +209,7 @@ describe('BackendAgent', () => {
     mockClaude = createMockClaude({ files: [], summary: 'Nothing generated' });
     agent = new BackendAgent(deps, { workDir: '/tmp/test', claudeClient: mockClaude });
 
-    const task = makeTask();
+    const task = createMockTask({ title: 'Create user API endpoint', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(false);
@@ -285,7 +219,7 @@ describe('BackendAgent', () => {
   it('succeeds even when commit request fails', async () => {
     vi.mocked(gitService.createIssue).mockRejectedValueOnce(new Error('GitHub API down'));
 
-    const task = makeTask();
+    const task = createMockTask({ title: 'Create user API endpoint', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     // Task itself succeeds — commit request failure is non-fatal
@@ -296,7 +230,7 @@ describe('BackendAgent', () => {
   // ===== Korean Title Detection =====
 
   it('detects task types from Korean titles', async () => {
-    const task = makeTask({ title: '사용자 모델 스키마 생성' });
+    const task = createMockTask({ title: '사용자 모델 스키마 생성', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
     expect(result.success).toBe(true);
     // Should detect as model.create due to '모델' and '스키마'
@@ -305,7 +239,7 @@ describe('BackendAgent', () => {
   // ===== Context in Claude prompt =====
 
   it('includes epicId and existing artifacts in Claude prompt', async () => {
-    const task = makeTask({ epicId: 'epic-42', artifacts: ['src/models/user.ts'] });
+    const task = createMockTask({ epicId: 'epic-42', artifacts: ['src/models/user.ts'], title: 'Create user API endpoint', assignedAgent: 'backend', status: 'in-progress', githubIssueNumber: 50, boardColumn: 'In Progress' });
     await callExecuteTask(agent, task);
 
     expect(mockClaude.chatJSON).toHaveBeenCalledWith(

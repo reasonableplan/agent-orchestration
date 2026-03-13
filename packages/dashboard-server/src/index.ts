@@ -130,8 +130,10 @@ export function createDashboardServer(
     httpServer,
     wsHandler,
     listen(port: number): Promise<void> {
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
+        httpServer.once('error', reject);
         httpServer.listen(port, () => {
+          httpServer.removeListener('error', reject);
           log.info({ port }, 'Dashboard server listening');
           resolve();
         });
@@ -291,8 +293,9 @@ class InMemoryStateStore implements DashboardStateStore {
 
   async updateTask(id: string, updates: Partial<TaskRow>): Promise<void> {
     const idx = this.tasks.findIndex((t) => t.id === id);
-    if (idx >= 0) {
-      this.tasks[idx] = { ...this.tasks[idx], ...updates };
+    const existing = this.tasks[idx];
+    if (idx >= 0 && existing !== undefined) {
+      this.tasks[idx] = { ...existing, ...updates };
     }
   }
 

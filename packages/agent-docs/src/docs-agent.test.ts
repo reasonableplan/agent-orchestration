@@ -1,99 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DocsAgent } from './docs-agent.js';
 import { detectTaskType } from './task-router.js';
-import type { IClaudeClient } from './doc-generator.js';
+import {
+  createMockMessageBus,
+  createMockStateStore,
+  createMockGitService,
+  createMockClaude,
+  createMockTask,
+} from '@agent/testing';
+import type { IClaudeClient } from '@agent/testing';
 import type { AgentDependencies, IMessageBus, IStateStore, IGitService, Task } from '@agent/core';
-
-// ===== Mocks =====
-
-function createMockMessageBus(): IMessageBus {
-  return {
-    publish: vi.fn(),
-    subscribe: vi.fn(),
-    subscribeAll: vi.fn(),
-    unsubscribe: vi.fn(),
-  };
-}
-
-function createMockStateStore(): IStateStore {
-  return {
-    registerAgent: vi.fn(),
-    getAgent: vi.fn(),
-    updateAgentStatus: vi.fn(),
-    updateHeartbeat: vi.fn(),
-    createTask: vi.fn(),
-    getTask: vi.fn(),
-    updateTask: vi.fn(),
-    getTasksByColumn: vi.fn().mockResolvedValue([]),
-    getTasksByAgent: vi.fn(),
-    getReadyTasksForAgent: vi.fn().mockResolvedValue([]),
-    claimTask: vi.fn(),
-    createEpic: vi.fn(),
-    getEpic: vi.fn(),
-    updateEpic: vi.fn(),
-    saveMessage: vi.fn(),
-    saveArtifact: vi.fn(),
-    getAllAgents: vi.fn().mockResolvedValue([]),
-    getAllTasks: vi.fn().mockResolvedValue([]),
-    getAllEpics: vi.fn().mockResolvedValue([]),
-    getRecentMessages: vi.fn().mockResolvedValue([]),
-    transaction: vi.fn().mockImplementation((fn) => fn({})),
-    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
-    getTaskHistory: vi.fn().mockResolvedValue([]),
-    getAgentConfig: vi.fn().mockResolvedValue(null),
-    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-function createMockGitService(): IGitService {
-  let issueCounter = 400;
-  return {
-    validateConnection: vi.fn(),
-    createIssue: vi.fn().mockImplementation(() => Promise.resolve(++issueCounter)),
-    updateIssue: vi.fn(),
-    closeIssue: vi.fn(),
-    getIssue: vi.fn(),
-    getIssuesByLabel: vi.fn(),
-    getEpicIssues: vi.fn().mockResolvedValue([]),
-    getAllProjectItems: vi.fn(),
-    moveIssueToColumn: vi.fn(),
-    addComment: vi.fn(),
-    createBranch: vi.fn(),
-    createPR: vi.fn(),
-  };
-}
-
-function createMockClaude(response: unknown): IClaudeClient {
-  return {
-    chat: vi.fn().mockResolvedValue({
-      content: JSON.stringify(response),
-      usage: { inputTokens: 250, outputTokens: 300 },
-    }),
-    chatJSON: vi.fn().mockResolvedValue({
-      data: response,
-      usage: { inputTokens: 250, outputTokens: 300 },
-    }),
-  };
-}
-
-function makeTask(overrides: Partial<Task> = {}): Task {
-  return {
-    id: 'task-1',
-    epicId: 'epic-1',
-    title: 'Generate README.md',
-    description: 'Create a comprehensive README for the project',
-    assignedAgent: 'docs',
-    status: 'in-progress',
-    githubIssueNumber: 70,
-    boardColumn: 'In Progress',
-    dependencies: [],
-    priority: 3,
-    complexity: 'medium',
-    retryCount: 0,
-    artifacts: [],
-    ...overrides,
-  };
-}
 
 const MOCK_README_GENERATED = {
   files: [
@@ -141,117 +57,117 @@ const MOCK_CHANGELOG_GENERATED = {
 
 describe('detectTaskType', () => {
   it('returns label-based type when type:* label exists', () => {
-    const task = makeTask({ labels: ['type:changelog.update'] });
+    const task = createMockTask({ labels: ['type:changelog.update'] });
     expect(detectTaskType(task)).toBe('changelog.update');
   });
 
   it('ignores invalid label values', () => {
-    const task = makeTask({ title: 'Generate README.md', labels: ['type:invalid'] });
+    const task = createMockTask({ title: 'Generate README.md', labels: ['type:invalid'] });
     expect(detectTaskType(task)).toBe('readme.generate');
   });
 
   it('detects analyze from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Analyze documentation gaps', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Analyze documentation gaps', description: '' }))).toBe(
       'analyze',
     );
   });
 
   it('detects readme.generate from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate README.md', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Generate README.md', description: '' }))).toBe(
       'readme.generate',
     );
   });
 
   it('detects readme.update from title', () => {
     expect(
-      detectTaskType(makeTask({ title: 'Update README with new features', description: '' })),
+      detectTaskType(createMockTask({ title: 'Update README with new features', description: '' })),
     ).toBe('readme.update');
   });
 
   it('detects api-docs.generate from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate API documentation', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Generate API documentation', description: '' }))).toBe(
       'api-docs.generate',
     );
   });
 
   it('detects api-docs.update from description', () => {
     expect(
-      detectTaskType(makeTask({ title: 'Update API docs', description: 'API 문서 수정' })),
+      detectTaskType(createMockTask({ title: 'Update API docs', description: 'API 문서 수정' })),
     ).toBe('api-docs.update');
   });
 
   it('detects changelog.update from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Update CHANGELOG', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Update CHANGELOG', description: '' }))).toBe(
       'changelog.update',
     );
   });
 
   it('detects architecture.generate from title', () => {
     expect(
-      detectTaskType(makeTask({ title: 'Generate architecture document', description: '' })),
+      detectTaskType(createMockTask({ title: 'Generate architecture document', description: '' })),
     ).toBe('architecture.generate');
   });
 
   it('detects jsdoc.add from title', () => {
     expect(
-      detectTaskType(makeTask({ title: 'Add JSDoc comments to auth module', description: '' })),
+      detectTaskType(createMockTask({ title: 'Add JSDoc comments to auth module', description: '' })),
     ).toBe('jsdoc.add');
   });
 
   it('detects contributing.generate from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate CONTRIBUTING.md', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Generate CONTRIBUTING.md', description: '' }))).toBe(
       'contributing.generate',
     );
   });
 
   it('detects env-example.update from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Update .env.example', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Update .env.example', description: '' }))).toBe(
       'env-example.update',
     );
   });
 
   it('detects activity-log from Korean keyword', () => {
-    expect(detectTaskType(makeTask({ title: '작업 이력 문서 생성', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: '작업 이력 문서 생성', description: '' }))).toBe(
       'activity-log.generate',
     );
   });
 
   it('detects report.daily from keyword', () => {
-    expect(detectTaskType(makeTask({ title: 'Generate daily report', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Generate daily report', description: '' }))).toBe(
       'report.daily',
     );
   });
 
   it('detects report.epic from keyword', () => {
     expect(
-      detectTaskType(makeTask({ title: 'Generate epic progress report', description: '' })),
+      detectTaskType(createMockTask({ title: 'Generate epic progress report', description: '' })),
     ).toBe('report.epic');
   });
 
   it('detects Korean readme', () => {
-    expect(detectTaskType(makeTask({ title: '리드미 생성', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: '리드미 생성', description: '' }))).toBe(
       'readme.generate',
     );
   });
 
   it('detects Korean changelog', () => {
-    expect(detectTaskType(makeTask({ title: '변경 이력 갱신', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: '변경 이력 갱신', description: '' }))).toBe(
       'changelog.update',
     );
   });
 
   it('detects generic document keyword with create intent as readme', () => {
-    expect(detectTaskType(makeTask({ title: '프로젝트 문서 작성', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: '프로젝트 문서 작성', description: '' }))).toBe(
       'readme.generate',
     );
   });
 
   it('detects generic document keyword without create intent as analyze', () => {
-    expect(detectTaskType(makeTask({ title: '문서 리뷰', description: '' }))).toBe('analyze');
+    expect(detectTaskType(createMockTask({ title: '문서 리뷰', description: '' }))).toBe('analyze');
   });
 
   it('returns unknown for unrecognizable task', () => {
-    expect(detectTaskType(makeTask({ title: 'do something', description: 'unrelated work' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'do something', description: 'unrelated work' }))).toBe(
       'unknown',
     );
   });
@@ -270,7 +186,7 @@ describe('DocsAgent', () => {
   beforeEach(() => {
     messageBus = createMockMessageBus();
     stateStore = createMockStateStore();
-    gitService = createMockGitService();
+    gitService = createMockGitService({ issueCounterStart: 400 });
     deps = { messageBus, stateStore, gitService };
     mockClaude = createMockClaude(MOCK_README_GENERATED);
     agent = new DocsAgent(deps, { workDir: '/tmp/test-docs', claudeClient: mockClaude });
@@ -287,7 +203,16 @@ describe('DocsAgent', () => {
   // ===== README Generation Flow =====
 
   it('generates README, writes files, saves artifacts, and creates commit request', async () => {
-    const task = makeTask();
+    const task = createMockTask({
+      id: 'task-1',
+      epicId: 'epic-1',
+      title: 'Generate README.md',
+      description: 'Create a comprehensive README for the project',
+      assignedAgent: 'docs',
+      status: 'in-progress',
+      githubIssueNumber: 70,
+      boardColumn: 'In Progress',
+    });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(true);
@@ -326,9 +251,14 @@ describe('DocsAgent', () => {
     mockClaude = createMockClaude(MOCK_API_DOCS_GENERATED);
     agent = new DocsAgent(deps, { workDir: '/tmp/test-docs', claudeClient: mockClaude });
 
-    const task = makeTask({
+    const task = createMockTask({
       title: 'Generate API documentation',
       labels: ['type:api-docs.generate'],
+      assignedAgent: 'docs',
+      status: 'in-progress',
+      githubIssueNumber: 70,
+      boardColumn: 'In Progress',
+      epicId: 'epic-1',
     });
     const result = await callExecuteTask(agent, task);
 
@@ -343,7 +273,7 @@ describe('DocsAgent', () => {
     mockClaude = createMockClaude(MOCK_CHANGELOG_GENERATED);
     agent = new DocsAgent(deps, { workDir: '/tmp/test-docs', claudeClient: mockClaude });
 
-    const task = makeTask({ title: 'Update CHANGELOG', labels: ['type:changelog.update'] });
+    const task = createMockTask({ title: 'Update CHANGELOG', labels: ['type:changelog.update'], assignedAgent: 'docs', status: 'in-progress', githubIssueNumber: 70, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(true);
@@ -356,7 +286,7 @@ describe('DocsAgent', () => {
   // ===== Label-based Task Type =====
 
   it('uses label-based task type for system prompt', async () => {
-    const task = makeTask({ title: 'Something vague', labels: ['type:architecture.generate'] });
+    const task = createMockTask({ title: 'Something vague', labels: ['type:architecture.generate'], assignedAgent: 'docs', status: 'in-progress', githubIssueNumber: 70, boardColumn: 'In Progress', epicId: 'epic-1' });
     await callExecuteTask(agent, task);
 
     expect(mockClaude.chatJSON).toHaveBeenCalledWith(
@@ -366,7 +296,7 @@ describe('DocsAgent', () => {
   });
 
   it('uses jsdoc prompt when type:jsdoc.add label', async () => {
-    const task = makeTask({ title: 'Add comments', labels: ['type:jsdoc.add'] });
+    const task = createMockTask({ title: 'Add comments', labels: ['type:jsdoc.add'], assignedAgent: 'docs', status: 'in-progress', githubIssueNumber: 70, boardColumn: 'In Progress', epicId: 'epic-1' });
     await callExecuteTask(agent, task);
 
     expect(mockClaude.chatJSON).toHaveBeenCalledWith(
@@ -378,7 +308,15 @@ describe('DocsAgent', () => {
   // ===== Commit Request =====
 
   it('creates commit request even without epicId', async () => {
-    const task = makeTask({ epicId: null });
+    const task = createMockTask({
+      epicId: null,
+      title: 'Generate README.md',
+      description: 'Create a comprehensive README for the project',
+      assignedAgent: 'docs',
+      status: 'in-progress',
+      githubIssueNumber: 70,
+      boardColumn: 'In Progress',
+    });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(true);
@@ -392,7 +330,7 @@ describe('DocsAgent', () => {
   // ===== Unknown Task Type =====
 
   it('returns error for unknown task type', async () => {
-    const task = makeTask({ title: 'do something random', description: 'unrelated work' });
+    const task = createMockTask({ title: 'do something random', description: 'unrelated work', assignedAgent: 'docs', status: 'in-progress', githubIssueNumber: 70, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain('Unknown docs task type');
@@ -407,7 +345,7 @@ describe('DocsAgent', () => {
     });
     agent = new DocsAgent(deps, { workDir: '/tmp/test', claudeClient: analyzeClaude });
 
-    const task = makeTask({ title: 'Analyze documentation gaps', description: '' });
+    const task = createMockTask({ title: 'Analyze documentation gaps', description: '', assignedAgent: 'docs', status: 'in-progress', githubIssueNumber: 70, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(true);
@@ -422,7 +360,7 @@ describe('DocsAgent', () => {
     mockClaude = { chatJSON: vi.fn().mockRejectedValue(new Error('API rate limit exceeded')) };
     agent = new DocsAgent(deps, { workDir: '/tmp/test', claudeClient: mockClaude });
 
-    const result = await callExecuteTask(agent, makeTask());
+    const result = await callExecuteTask(agent, createMockTask({ title: 'Generate README.md', assignedAgent: 'docs', status: 'in-progress', githubIssueNumber: 70, boardColumn: 'In Progress', epicId: 'epic-1' }));
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain('API rate limit exceeded');
   });
@@ -431,7 +369,7 @@ describe('DocsAgent', () => {
     mockClaude = createMockClaude({ files: [], summary: 'Nothing generated' });
     agent = new DocsAgent(deps, { workDir: '/tmp/test', claudeClient: mockClaude });
 
-    const result = await callExecuteTask(agent, makeTask());
+    const result = await callExecuteTask(agent, createMockTask({ title: 'Generate README.md', assignedAgent: 'docs', status: 'in-progress', githubIssueNumber: 70, boardColumn: 'In Progress', epicId: 'epic-1' }));
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain('no files');
   });
@@ -439,7 +377,7 @@ describe('DocsAgent', () => {
   it('succeeds even when commit request fails', async () => {
     vi.mocked(gitService.createIssue).mockRejectedValueOnce(new Error('GitHub API down'));
 
-    const result = await callExecuteTask(agent, makeTask());
+    const result = await callExecuteTask(agent, createMockTask({ title: 'Generate README.md', assignedAgent: 'docs', status: 'in-progress', githubIssueNumber: 70, boardColumn: 'In Progress', epicId: 'epic-1' }));
     expect(result.success).toBe(true);
     expect(result.artifacts.length).toBe(1);
   });
@@ -447,7 +385,7 @@ describe('DocsAgent', () => {
   // ===== Context in Claude prompt =====
 
   it('includes epicId and existing artifacts in Claude prompt', async () => {
-    const task = makeTask({ epicId: 'epic-42', artifacts: ['docs/old-readme.md'] });
+    const task = createMockTask({ epicId: 'epic-42', artifacts: ['docs/old-readme.md'], title: 'Generate README.md', assignedAgent: 'docs', status: 'in-progress', githubIssueNumber: 70, boardColumn: 'In Progress' });
     await callExecuteTask(agent, task);
 
     expect(mockClaude.chatJSON).toHaveBeenCalledWith(
@@ -466,7 +404,7 @@ describe('DocsAgent', () => {
     mockClaude = createMockClaude(MOCK_CHANGELOG_GENERATED);
     agent = new DocsAgent(deps, { workDir: '/tmp/test', claudeClient: mockClaude });
 
-    const task = makeTask({ title: '변경 이력 업데이트', description: '최근 커밋 반영' });
+    const task = createMockTask({ title: '변경 이력 업데이트', description: '최근 커밋 반영', assignedAgent: 'docs', status: 'in-progress', githubIssueNumber: 70, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(true);

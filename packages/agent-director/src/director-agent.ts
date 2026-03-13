@@ -52,6 +52,8 @@ export class DirectorAgent extends BaseAgent {
       maxTokens: 8192,
       temperature: 0.3,
       tokenBudget: 200_000,
+      taskTimeoutMs: 5 * 60 * 1000,
+      pollIntervalMs: 10_000,
     };
     super(config, deps);
 

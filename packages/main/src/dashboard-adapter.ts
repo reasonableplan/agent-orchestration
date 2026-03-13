@@ -1,5 +1,8 @@
 import type { IStateStore, IMessageBus, MessageHandler } from '@agent/core';
+import { createLogger } from '@agent/core';
 import type { BaseAgent } from '@agent/core';
+
+const log = createLogger('DashboardAdapter');
 import type {
   DashboardStateStore,
   DashboardMessageBus,
@@ -57,14 +60,16 @@ export function createAgentRegistry(agents: BaseAgent[]): AgentRegistry {
       if (agent) await agent.resume();
     },
     async pauseAll(): Promise<void> {
-      for (const agent of agents) {
-        await agent.pause();
-      }
+      const results = await Promise.allSettled(agents.map((a) => a.pause()));
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') log.error({ agentId: agents[i]?.id, err: r.reason }, 'Failed to pause');
+      });
     },
     async resumeAll(): Promise<void> {
-      for (const agent of agents) {
-        await agent.resume();
-      }
+      const results = await Promise.allSettled(agents.map((a) => a.resume()));
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') log.error({ agentId: agents[i]?.id, err: r.reason }, 'Failed to resume');
+      });
     },
   };
 }

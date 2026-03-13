@@ -49,6 +49,8 @@ export default function CharacterOverlay() {
   const agents = useOfficeStore((s) => s.agents);
   const positionsRef = useRef<Map<string, PosState>>(new Map());
   const [positions, setPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
+  const renderedPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const rafRef = useRef<number>(0);
 
   // Check if any agent has a bubble — skip rAF when none
   const hasBubbles = useMemo(() => Object.values(agents).some((a) => a.bubble !== null), [agents]);
@@ -66,7 +68,6 @@ export default function CharacterOverlay() {
     if (!hasBubbles) return undefined;
 
     let lastTime = 0;
-    let raf = 0;
 
     const loop = (time: number) => {
       const dt = lastTime === 0 ? 16 : time - lastTime;
@@ -83,18 +84,19 @@ export default function CharacterOverlay() {
         const nx = Math.round(s.x * RENDER_SCALE);
         const ny = Math.round(s.y * RENDER_SCALE);
         newPositions.set(agent.id, { x: nx, y: ny });
-        const prev = positions.get(agent.id);
+        const prev = renderedPositionsRef.current.get(agent.id);
         if (!prev || prev.x !== nx || prev.y !== ny) changed = true;
       }
-      if (changed || newPositions.size !== positions.size) {
+      if (changed || newPositions.size !== renderedPositionsRef.current.size) {
+        renderedPositionsRef.current = newPositions;
         setPositions(newPositions);
       }
 
-      raf = requestAnimationFrame(loop);
+      rafRef.current = requestAnimationFrame(loop);
     };
 
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
   }, [agents, hasBubbles]);
 
   // The overlay is sized to match the canvas internal resolution (CANVAS_W x CANVAS_H)

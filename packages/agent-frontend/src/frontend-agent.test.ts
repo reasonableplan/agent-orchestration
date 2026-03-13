@@ -2,99 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FrontendAgent } from './frontend-agent.js';
 import { detectTaskType } from './task-router.js';
 import { parseApiSpec } from './api-spec-parser.js';
-import type { IClaudeClient } from './code-generator.js';
+import {
+  createMockMessageBus,
+  createMockStateStore,
+  createMockGitService,
+  createMockClaude,
+  createMockTask,
+} from '@agent/testing';
+import type { IClaudeClient } from '@agent/testing';
 import type { AgentDependencies, IMessageBus, IStateStore, IGitService, Task } from '@agent/core';
-
-// ===== Mocks =====
-
-function createMockMessageBus(): IMessageBus {
-  return {
-    publish: vi.fn(),
-    subscribe: vi.fn(),
-    subscribeAll: vi.fn(),
-    unsubscribe: vi.fn(),
-  };
-}
-
-function createMockStateStore(): IStateStore {
-  return {
-    registerAgent: vi.fn(),
-    getAgent: vi.fn(),
-    updateAgentStatus: vi.fn(),
-    updateHeartbeat: vi.fn(),
-    createTask: vi.fn(),
-    getTask: vi.fn(),
-    updateTask: vi.fn(),
-    getTasksByColumn: vi.fn().mockResolvedValue([]),
-    getTasksByAgent: vi.fn(),
-    getReadyTasksForAgent: vi.fn().mockResolvedValue([]),
-    claimTask: vi.fn(),
-    createEpic: vi.fn(),
-    getEpic: vi.fn(),
-    updateEpic: vi.fn(),
-    saveMessage: vi.fn(),
-    saveArtifact: vi.fn(),
-    getAllAgents: vi.fn().mockResolvedValue([]),
-    getAllTasks: vi.fn().mockResolvedValue([]),
-    getAllEpics: vi.fn().mockResolvedValue([]),
-    getRecentMessages: vi.fn().mockResolvedValue([]),
-    transaction: vi.fn().mockImplementation((fn) => fn({})),
-    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
-    getTaskHistory: vi.fn().mockResolvedValue([]),
-    getAgentConfig: vi.fn().mockResolvedValue(null),
-    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-function createMockGitService(): IGitService {
-  let issueCounter = 300;
-  return {
-    validateConnection: vi.fn(),
-    createIssue: vi.fn().mockImplementation(() => Promise.resolve(++issueCounter)),
-    updateIssue: vi.fn(),
-    closeIssue: vi.fn(),
-    getIssue: vi.fn(),
-    getIssuesByLabel: vi.fn(),
-    getEpicIssues: vi.fn().mockResolvedValue([]),
-    getAllProjectItems: vi.fn(),
-    moveIssueToColumn: vi.fn(),
-    addComment: vi.fn(),
-    createBranch: vi.fn(),
-    createPR: vi.fn(),
-  };
-}
-
-function createMockClaude(response: unknown): IClaudeClient {
-  return {
-    chat: vi.fn().mockResolvedValue({
-      content: JSON.stringify(response),
-      usage: { inputTokens: 300, outputTokens: 200 },
-    }),
-    chatJSON: vi.fn().mockResolvedValue({
-      data: response,
-      usage: { inputTokens: 300, outputTokens: 200 },
-    }),
-  };
-}
-
-function makeTask(overrides: Partial<Task> = {}): Task {
-  return {
-    id: 'task-1',
-    epicId: 'epic-1',
-    title: 'Create LoginForm component',
-    description: 'Login form with email/password validation',
-    assignedAgent: 'frontend',
-    status: 'in-progress',
-    githubIssueNumber: 60,
-    boardColumn: 'In Progress',
-    dependencies: [],
-    priority: 3,
-    complexity: 'medium',
-    retryCount: 0,
-    artifacts: [],
-    ...overrides,
-  };
-}
 
 const MOCK_GENERATED = {
   files: [
@@ -124,75 +40,75 @@ const MOCK_GENERATED = {
 
 describe('detectTaskType', () => {
   it('returns label-based type when type:* label exists', () => {
-    const task = makeTask({ labels: ['type:page.create'] });
+    const task = createMockTask({ labels: ['type:page.create'] });
     expect(detectTaskType(task)).toBe('page.create');
   });
 
   it('ignores invalid label values', () => {
-    const task = makeTask({ title: 'Create LoginForm component', labels: ['type:invalid'] });
+    const task = createMockTask({ title: 'Create LoginForm component', description: '', labels: ['type:invalid'] });
     expect(detectTaskType(task)).toBe('component.create');
   });
 
   it('detects analyze from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Analyze project structure', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Analyze project structure', description: '' }))).toBe(
       'analyze',
     );
   });
 
   it('detects test.create from title', () => {
-    expect(detectTaskType(makeTask({ title: 'Create tests for Button', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Create tests for Button', description: '' }))).toBe(
       'test.create',
     );
   });
 
   it('detects hook.create from useXxx pattern', () => {
-    expect(detectTaskType(makeTask({ title: 'Create useAuth hook', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Create useAuth hook', description: '' }))).toBe(
       'hook.create',
     );
   });
 
   it('detects hook.create from Korean keyword', () => {
-    expect(detectTaskType(makeTask({ title: '인증 훅 생성', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: '인증 훅 생성', description: '' }))).toBe(
       'hook.create',
     );
   });
 
   it('does not false-positive hook from "user" or "used"', () => {
-    const task = makeTask({ title: 'Create user profile component', description: '' });
+    const task = createMockTask({ title: 'Create user profile component', description: '' });
     expect(detectTaskType(task)).toBe('component.create');
   });
 
   it('detects store.create from zustand keyword', () => {
-    expect(detectTaskType(makeTask({ title: 'Create auth zustand store', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Create auth zustand store', description: '' }))).toBe(
       'store.create',
     );
   });
 
   it('does not false-positive store from "restore"', () => {
-    const task = makeTask({ title: 'Restore settings page', description: '' });
+    const task = createMockTask({ title: 'Restore settings page', description: '' });
     expect(detectTaskType(task)).toBe('page.create');
   });
 
   it('detects page.create from page keyword', () => {
-    expect(detectTaskType(makeTask({ title: 'Create login page', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Create login page', description: '' }))).toBe(
       'page.create',
     );
   });
 
   it('detects page.modify from page + modify keywords', () => {
-    expect(detectTaskType(makeTask({ title: 'Modify login page layout', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Modify login page layout', description: '' }))).toBe(
       'page.modify',
     );
   });
 
   it('detects component.create from component keyword', () => {
-    expect(detectTaskType(makeTask({ title: 'Create LoginForm component', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'Create LoginForm component', description: '' }))).toBe(
       'component.create',
     );
   });
 
   it('detects component.modify from Korean keyword', () => {
-    expect(detectTaskType(makeTask({ title: '로그인 컴포넌트 수정', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: '로그인 컴포넌트 수정', description: '' }))).toBe(
       'component.modify',
     );
   });
@@ -200,14 +116,14 @@ describe('detectTaskType', () => {
   it('detects style.generate from tailwind keyword', () => {
     expect(
       detectTaskType(
-        makeTask({ title: 'Generate tailwind styles for dashboard', description: '' }),
+        createMockTask({ title: 'Generate tailwind styles for dashboard', description: '' }),
       ),
     ).toBe('style.generate');
   });
 
   it('style does not override more specific types', () => {
     // description에 tailwind가 있어도 title의 component가 우선
-    const task = makeTask({
+    const task = createMockTask({
       title: 'Create LoginForm component',
       description: 'Use tailwind for styling',
     });
@@ -215,13 +131,13 @@ describe('detectTaskType', () => {
   });
 
   it('detects Korean page correctly', () => {
-    expect(detectTaskType(makeTask({ title: '로그인 페이지 생성', description: '' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: '로그인 페이지 생성', description: '' }))).toBe(
       'page.create',
     );
   });
 
   it('returns unknown for unrecognizable task', () => {
-    expect(detectTaskType(makeTask({ title: 'do something', description: 'unrelated' }))).toBe(
+    expect(detectTaskType(createMockTask({ title: 'do something', description: 'unrelated' }))).toBe(
       'unknown',
     );
   });
@@ -240,7 +156,7 @@ describe('FrontendAgent', () => {
   beforeEach(() => {
     messageBus = createMockMessageBus();
     stateStore = createMockStateStore();
-    gitService = createMockGitService();
+    gitService = createMockGitService({ issueCounterStart: 300 });
     deps = { messageBus, stateStore, gitService };
     mockClaude = createMockClaude(MOCK_GENERATED);
     agent = new FrontendAgent(deps, { workDir: '/tmp/test-workspace', claudeClient: mockClaude });
@@ -257,7 +173,16 @@ describe('FrontendAgent', () => {
   // ===== Code Generation Flow =====
 
   it('generates code, writes files, saves artifacts, and creates commit request', async () => {
-    const task = makeTask();
+    const task = createMockTask({
+      id: 'task-1',
+      epicId: 'epic-1',
+      title: 'Create LoginForm component',
+      description: 'Login form with email/password validation',
+      assignedAgent: 'frontend',
+      status: 'in-progress',
+      githubIssueNumber: 60,
+      boardColumn: 'In Progress',
+    });
     const result = await callExecuteTask(agent, task);
 
     // Success
@@ -296,7 +221,7 @@ describe('FrontendAgent', () => {
   });
 
   it('uses label-based task type for system prompt', async () => {
-    const task = makeTask({ title: 'Something vague', labels: ['type:hook.create'] });
+    const task = createMockTask({ title: 'Something vague', labels: ['type:hook.create'], assignedAgent: 'frontend', status: 'in-progress', githubIssueNumber: 60, boardColumn: 'In Progress', epicId: 'epic-1' });
     await callExecuteTask(agent, task);
 
     expect(mockClaude.chatJSON).toHaveBeenCalledWith(
@@ -306,7 +231,15 @@ describe('FrontendAgent', () => {
   });
 
   it('creates commit request even without epicId', async () => {
-    const task = makeTask({ epicId: null });
+    const task = createMockTask({
+      epicId: null,
+      title: 'Create LoginForm component',
+      description: 'Login form with email/password validation',
+      assignedAgent: 'frontend',
+      status: 'in-progress',
+      githubIssueNumber: 60,
+      boardColumn: 'In Progress',
+    });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(true);
@@ -319,7 +252,7 @@ describe('FrontendAgent', () => {
   });
 
   it('returns error for unknown task type', async () => {
-    const task = makeTask({ title: 'do something random', description: 'unrelated work' });
+    const task = createMockTask({ title: 'do something random', description: 'unrelated work', assignedAgent: 'frontend', status: 'in-progress', githubIssueNumber: 60, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain('Unknown frontend task type');
@@ -334,7 +267,7 @@ describe('FrontendAgent', () => {
     });
     agent = new FrontendAgent(deps, { workDir: '/tmp/test', claudeClient: analyzeClaude });
 
-    const task = makeTask({ title: 'Analyze component structure', description: '' });
+    const task = createMockTask({ title: 'Analyze component structure', description: '', assignedAgent: 'frontend', status: 'in-progress', githubIssueNumber: 60, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(true);
@@ -349,7 +282,7 @@ describe('FrontendAgent', () => {
     mockClaude = { chatJSON: vi.fn().mockRejectedValue(new Error('API rate limit exceeded')) };
     agent = new FrontendAgent(deps, { workDir: '/tmp/test', claudeClient: mockClaude });
 
-    const task = makeTask();
+    const task = createMockTask({ title: 'Create LoginForm component', assignedAgent: 'frontend', status: 'in-progress', githubIssueNumber: 60, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(false);
@@ -360,7 +293,7 @@ describe('FrontendAgent', () => {
     mockClaude = createMockClaude({ files: [], summary: 'Nothing generated' });
     agent = new FrontendAgent(deps, { workDir: '/tmp/test', claudeClient: mockClaude });
 
-    const task = makeTask();
+    const task = createMockTask({ title: 'Create LoginForm component', assignedAgent: 'frontend', status: 'in-progress', githubIssueNumber: 60, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     expect(result.success).toBe(false);
@@ -370,7 +303,7 @@ describe('FrontendAgent', () => {
   it('succeeds even when commit request fails', async () => {
     vi.mocked(gitService.createIssue).mockRejectedValueOnce(new Error('GitHub API down'));
 
-    const task = makeTask();
+    const task = createMockTask({ title: 'Create LoginForm component', assignedAgent: 'frontend', status: 'in-progress', githubIssueNumber: 60, boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = await callExecuteTask(agent, task);
 
     // Task itself succeeds — commit request failure is non-fatal
@@ -381,7 +314,7 @@ describe('FrontendAgent', () => {
   // ===== Context in Claude prompt =====
 
   it('includes epicId and existing artifacts in Claude prompt', async () => {
-    const task = makeTask({ epicId: 'epic-42', artifacts: ['src/components/Button.tsx'] });
+    const task = createMockTask({ epicId: 'epic-42', artifacts: ['src/components/Button.tsx'], title: 'Create LoginForm component', assignedAgent: 'frontend', status: 'in-progress', githubIssueNumber: 60, boardColumn: 'In Progress' });
     await callExecuteTask(agent, task);
 
     expect(mockClaude.chatJSON).toHaveBeenCalledWith(

@@ -74,7 +74,8 @@ export function createRoutes(deps: RouteDependencies): Router {
   // GET /api/messages — returns recent messages (last 50)
   router.get('/api/messages', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const rawLimit = Number(req.query.limit);
+      const limit = Math.min(Math.max(1, isNaN(rawLimit) ? 50 : rawLimit), 200);
       const messages = await stateStore.getRecentMessages(limit);
       res.json({ messages });
     } catch (err) {

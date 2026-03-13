@@ -12,7 +12,7 @@ export function parseApiSpec(issueBody: string): ApiSpec | null {
   if (!match) return null;
 
   try {
-    return JSON.parse(match[1]) as ApiSpec;
+    return JSON.parse(match[1] ?? '') as ApiSpec;
   } catch {
     return null;
   }

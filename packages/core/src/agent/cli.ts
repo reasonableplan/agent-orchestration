@@ -57,10 +57,11 @@ export function startCLI(options: CLIOptions): readline.Interface {
   });
 
   rl.on('close', () => {
-    // process.exit를 직접 호출하지 않고 SIGINT를 보내
+    // process.exit를 직접 호출하지 않고 SIGINT를 emit하여
     // bootstrap의 시그널 핸들러가 graceful shutdown을 수행하도록 한다.
+    // process.kill은 Windows에서 신뢰할 수 없으므로 직접 emit한다.
     console.log('\n[CLI] Closing...');
-    process.kill(process.pid, 'SIGINT');
+    process.emit('SIGINT', 'SIGINT');
   });
 
   return rl;

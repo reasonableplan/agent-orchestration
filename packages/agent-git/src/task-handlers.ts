@@ -71,6 +71,10 @@ export class TaskHandlers {
   // ========== Commit Task ==========
 
   async handleCommitTask(task: Task): Promise<TaskResult> {
+    if (!task.epicId) {
+      return { success: false, error: { message: 'Commit task missing epicId' }, artifacts: [] };
+    }
+
     if (task.reviewNote) {
       log.info(
         { reviewNote: task.reviewNote, attempt: task.retryCount + 1 },
@@ -78,7 +82,7 @@ export class TaskHandlers {
       );
     }
 
-    const epicId = task.epicId ?? 'unknown';
+    const epicId = task.epicId;
     const workDir = await this.workspaceManager.getEpicWorkDir(epicId);
     const message = task.description || task.title;
 
@@ -106,9 +110,7 @@ export class TaskHandlers {
     log.info({ message }, 'Committed and pushed');
 
     // After commit, check if all commits for this epic are done → trigger PR
-    if (task.epicId) {
-      await this.checkAndTriggerPR(task.epicId);
-    }
+    await this.checkAndTriggerPR(epicId);
 
     return {
       success: true,
@@ -120,6 +122,10 @@ export class TaskHandlers {
   // ========== PR Task ==========
 
   async handlePRTask(task: Task): Promise<TaskResult> {
+    if (!task.epicId) {
+      return { success: false, error: { message: 'PR task missing epicId' }, artifacts: [] };
+    }
+
     if (task.reviewNote) {
       log.info(
         { reviewNote: task.reviewNote, attempt: task.retryCount + 1 },
@@ -127,7 +133,7 @@ export class TaskHandlers {
       );
     }
 
-    const epicId = task.epicId ?? 'unknown';
+    const epicId = task.epicId;
     const branchName = `epic/${epicId}`;
 
     // Director 피드백이 있으면 PR 설명에 반영
@@ -163,7 +169,7 @@ export class TaskHandlers {
     const epicIssues = await this.gitService.getEpicIssues(epicId);
 
     const codeIssues = epicIssues.filter(
-      (i) => !i.labels.some((l) => l.startsWith('type:commit') || l.startsWith('type:pr')),
+      (i) => i.labels.some((l) => l.startsWith('agent:backend') || l.startsWith('agent:frontend') || l.startsWith('agent:docs')),
     );
     const commitIssues = epicIssues.filter((i) => i.labels.some((l) => l === 'type:commit'));
 

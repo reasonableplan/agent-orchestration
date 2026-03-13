@@ -92,16 +92,19 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
 
   const CLEANUP_TIMEOUT_MS = 10_000;
 
-  async function cleanup() {
+  async function cleanup(): Promise<boolean> {
+    let timedOut = false;
     await Promise.race([
       cleanupInternal(),
       new Promise<void>((resolve) =>
         setTimeout(() => {
+          timedOut = true;
           log.error('Cleanup timed out, forcing exit');
           resolve();
         }, CLEANUP_TIMEOUT_MS),
       ),
     ]);
+    return timedOut;
   }
 
   // OS 시그널 핸들링 — try 밖에 선언하여 catch에서도 접근 가능
@@ -110,8 +113,8 @@ export async function bootstrap(cfg: BootstrapConfig): Promise<SystemContext> {
     if (shuttingDown) return;
     shuttingDown = true;
     log.info('Signal received, shutting down...');
-    await cleanup();
-    process.exit(0);
+    const timedOut = await cleanup();
+    process.exit(timedOut ? 1 : 0);
   };
 
   try {

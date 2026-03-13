@@ -2,7 +2,7 @@ import type { IssueSpec, BoardIssue } from '../types/index.js';
 import type { GitHubContext } from './types.js';
 import type { ProjectSetup } from './project-setup.js';
 import type { BoardOperations } from './board-operations.js';
-import { toBoardIssue } from './issue-parser.js';
+import { toBoardIssue, type GitHubIssueData } from './issue-parser.js';
 import { withRetry } from '../resilience/api-retry.js';
 
 export class IssueManager {
@@ -95,14 +95,19 @@ export class IssueManager {
   }
 
   async getIssue(issueNumber: number): Promise<BoardIssue> {
-    const { data: issue } = await this.ctx.octokit.rest.issues.get({
-      owner: this.ctx.owner,
-      repo: this.ctx.repo,
-      issue_number: issueNumber,
-    });
+    const { data: issue } = await withRetry(
+      () =>
+        this.ctx.octokit.rest.issues.get({
+          owner: this.ctx.owner,
+          repo: this.ctx.repo,
+          issue_number: issueNumber,
+        }),
+      {},
+      'getIssue',
+    );
 
     const column = await this.getIssueColumn(issue.node_id);
-    return toBoardIssue(issue, column);
+    return toBoardIssue(issue as unknown as GitHubIssueData, column);
   }
 
   async getIssuesByLabel(label: string): Promise<BoardIssue[]> {
@@ -126,7 +131,7 @@ export class IssueManager {
     for (const issue of issues) {
       if (issue.pull_request) continue; // skip PRs
       const column = await this.getIssueColumn(issue.node_id);
-      boardIssues.push(toBoardIssue(issue, column));
+      boardIssues.push(toBoardIssue(issue as unknown as GitHubIssueData, column));
     }
     return boardIssues;
   }
@@ -150,21 +155,18 @@ export class IssueManager {
   }
 
   async getProjectItemId(issueNodeId: string): Promise<string | null> {
+    type ProjectItemNode = { id: string; content: { id: string } | null };
+    type ProjectItemsPage = {
+      nodes: ProjectItemNode[];
+      pageInfo: { hasNextPage: boolean; endCursor: string };
+    };
+    type GetProjectItemIdResult = { node: { items: ProjectItemsPage } | null };
+
     let cursor: string | null = null;
     let hasNextPage = true;
 
     while (hasNextPage) {
-      const result = await this.ctx.graphqlWithAuth<{
-        node: {
-          items: {
-            nodes: Array<{
-              id: string;
-              content: { id: string } | null;
-            }>;
-            pageInfo: { hasNextPage: boolean; endCursor: string };
-          };
-        };
-      }>(
+      const result: GetProjectItemIdResult = await this.ctx.graphqlWithAuth<GetProjectItemIdResult>(
         `query($projectId: ID!, $cursor: String) {
           node(id: $projectId) {
             ... on ProjectV2 {
@@ -181,11 +183,12 @@ export class IssueManager {
         { projectId: this.setup.projectId, cursor },
       );
 
-      const page = result.node.items;
-      const item = page.nodes.find((i) => i.content?.id === issueNodeId);
+      if (!result.node) return null;
+      const page: ProjectItemsPage = result.node.items;
+      const item = page.nodes.find((i: ProjectItemNode) => i.content?.id === issueNodeId);
       if (item) return item.id;
 
-      hasNextPage = page.pageInfo.hasNextPage;
+      hasNextPage = page.pageInfo.hasNextPage && !!page.pageInfo.endCursor;
       cursor = page.pageInfo.endCursor;
     }
 
@@ -223,6 +226,7 @@ export class IssueManager {
       { itemId },
     );
 
+    if (!result.node?.fieldValues?.nodes) return 'Backlog';
     const statusValue = result.node.fieldValues.nodes.find((fv) => fv.field?.name === 'Status');
     return statusValue?.name ?? 'Backlog';
   }

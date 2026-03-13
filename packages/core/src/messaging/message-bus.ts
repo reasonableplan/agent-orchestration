@@ -30,7 +30,7 @@ export class MessageBus implements IMessageBus {
     }
 
     // 타입별 구독자에게 전달 (async handler를 수집하여 await)
-    const typeHandlers = this.emitter.listeners(message.type) as MessageHandler[];
+    const typeHandlers = [...(this.emitter.listeners(message.type) as MessageHandler[])];
     for (const handler of typeHandlers) {
       try {
         await handler(message);

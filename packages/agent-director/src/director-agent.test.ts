@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DirectorAgent } from './director-agent.js';
-import type { IClaudeClient } from './director-agent.js';
+import type { IClaudeClient } from '@agent/testing';
+import {
+  createMockMessageBus,
+  createMockStateStore,
+  createMockGitService,
+  createMockClaude,
+  createMockTask,
+} from '@agent/testing';
 import type {
   AgentDependencies,
   IMessageBus,
@@ -9,97 +16,6 @@ import type {
   Message,
   Task,
 } from '@agent/core';
-
-// ===== Mocks =====
-
-function createMockMessageBus(): IMessageBus {
-  return {
-    publish: vi.fn(),
-    subscribe: vi.fn(),
-    subscribeAll: vi.fn(),
-    unsubscribe: vi.fn(),
-  };
-}
-
-function createMockStateStore(): IStateStore {
-  return {
-    registerAgent: vi.fn(),
-    getAgent: vi.fn(),
-    updateAgentStatus: vi.fn(),
-    updateHeartbeat: vi.fn(),
-    createTask: vi.fn(),
-    getTask: vi.fn(),
-    updateTask: vi.fn(),
-    getTasksByColumn: vi.fn().mockResolvedValue([]),
-    getTasksByAgent: vi.fn(),
-    getReadyTasksForAgent: vi.fn().mockResolvedValue([]),
-    claimTask: vi.fn(),
-    createEpic: vi.fn(),
-    getEpic: vi.fn(),
-    updateEpic: vi.fn(),
-    saveMessage: vi.fn(),
-    saveArtifact: vi.fn(),
-    getAllAgents: vi.fn().mockResolvedValue([]),
-    getAllTasks: vi.fn().mockResolvedValue([]),
-    getAllEpics: vi.fn().mockResolvedValue([]),
-    getRecentMessages: vi.fn().mockResolvedValue([]),
-    transaction: vi.fn().mockImplementation((fn) => fn({})),
-    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
-    getTaskHistory: vi.fn().mockResolvedValue([]),
-    getAgentConfig: vi.fn().mockResolvedValue(null),
-    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-function createMockGitService(): IGitService {
-  let issueCounter = 100;
-  return {
-    validateConnection: vi.fn(),
-    createIssue: vi.fn().mockImplementation(() => Promise.resolve(++issueCounter)),
-    updateIssue: vi.fn(),
-    closeIssue: vi.fn(),
-    getIssue: vi.fn(),
-    getIssuesByLabel: vi.fn(),
-    getEpicIssues: vi.fn().mockResolvedValue([]),
-    getAllProjectItems: vi.fn(),
-    moveIssueToColumn: vi.fn(),
-    addComment: vi.fn(),
-    createBranch: vi.fn(),
-    createPR: vi.fn(),
-  };
-}
-
-function createMockClaude(response: unknown): IClaudeClient {
-  return {
-    chat: vi.fn().mockResolvedValue({
-      content: JSON.stringify(response),
-      usage: { inputTokens: 100, outputTokens: 50 },
-    }),
-    chatJSON: vi.fn().mockResolvedValue({
-      data: response,
-      usage: { inputTokens: 100, outputTokens: 50 },
-    }),
-  };
-}
-
-function makeTask(overrides: Partial<Task> = {}): Task {
-  return {
-    id: 'task-1',
-    epicId: null,
-    title: 'Test task',
-    description: 'Test description',
-    assignedAgent: 'director',
-    status: 'in-progress',
-    githubIssueNumber: null,
-    boardColumn: 'In Progress',
-    dependencies: [],
-    priority: 3,
-    complexity: 'medium',
-    retryCount: 0,
-    artifacts: [],
-    ...overrides,
-  };
-}
 
 function makeReviewMessage(taskId: string, success: boolean): Message {
   return {
@@ -131,7 +47,7 @@ describe('DirectorAgent', () => {
   beforeEach(() => {
     messageBus = createMockMessageBus();
     stateStore = createMockStateStore();
-    gitService = createMockGitService();
+    gitService = createMockGitService({ issueCounterStart: 100 });
     deps = { messageBus, stateStore, gitService };
     mockClaude = createMockClaude({ action: 'clarify', message: 'default' });
     agent = new DirectorAgent(deps, { claudeClient: mockClaude });
@@ -330,7 +246,7 @@ describe('DirectorAgent', () => {
     agent = new DirectorAgent(deps, { claudeClient: reviewClaude });
 
     vi.mocked(stateStore.getTask).mockResolvedValueOnce(
-      makeTask({
+      createMockTask({
         id: 'task-gh-50',
         title: 'API endpoint',
         description: 'Build login API',
@@ -370,7 +286,7 @@ describe('DirectorAgent', () => {
     agent = new DirectorAgent(deps, { claudeClient: reviewClaude });
 
     vi.mocked(stateStore.getTask).mockResolvedValueOnce(
-      makeTask({ id: 'task-gh-50', retryCount: 0, githubIssueNumber: 50 }),
+      createMockTask({ id: 'task-gh-50', retryCount: 0, githubIssueNumber: 50, assignedAgent: 'director' }),
     );
 
     await (agent as never as { onReviewRequest: (m: Message) => Promise<void> }).onReviewRequest(
@@ -402,7 +318,7 @@ describe('DirectorAgent', () => {
     expect(messageBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'review.feedback',
-        to: 'director', // makeTask default assignedAgent
+        to: 'director',
         payload: expect.objectContaining({
           taskId: 'task-gh-50',
           feedback: 'Missing tests',
@@ -419,7 +335,7 @@ describe('DirectorAgent', () => {
     agent = new DirectorAgent(deps, { claudeClient: reviewClaude });
 
     vi.mocked(stateStore.getTask).mockResolvedValueOnce(
-      makeTask({ id: 'task-gh-50', githubIssueNumber: 50, retryCount: 0 }),
+      createMockTask({ id: 'task-gh-50', githubIssueNumber: 50, retryCount: 0 }),
     );
 
     await (agent as never as { onReviewRequest: (m: Message) => Promise<void> }).onReviewRequest(
@@ -495,7 +411,7 @@ describe('DirectorAgent', () => {
     mockClaude = createMockClaude({ action: 'clarify', message: 'What do you need?' });
     agent = new DirectorAgent(deps, { claudeClient: mockClaude });
 
-    const task = makeTask({ title: 'Plan new feature', description: 'Build a todo app' });
+    const task = createMockTask({ title: 'Plan new feature', description: 'Build a todo app', assignedAgent: 'director', status: 'in-progress', boardColumn: 'In Progress', epicId: null });
     const result = await (
       agent as never as {
         executeTask: (t: Task) => Promise<{ success: boolean; data: { response: string } }>;

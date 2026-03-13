@@ -3,6 +3,7 @@ import { MESSAGE_TYPES } from '@agent/core';
 import type { DashboardEvent, DashboardStateStore } from './types.js';
 
 const TASK_CACHE_TTL_MS = 5_000; // 5초 TTL
+const SKIP_LOG_EVENTS = new Set(['token.usage', 'agent.status']);
 
 interface CachedTask {
   task: TaskRow;
@@ -64,17 +65,19 @@ export class EventMapper {
   async map(message: Message): Promise<DashboardEvent[]> {
     const events: DashboardEvent[] = [];
 
-    // Always emit the raw message log
-    events.push({
-      type: 'message',
-      payload: {
-        id: message.id,
-        type: message.type,
-        from: message.from,
-        content: JSON.stringify(message.payload),
-        timestamp: message.timestamp.toISOString(),
-      },
-    });
+    // Emit the raw message log, but skip high-frequency events to reduce noise
+    if (!SKIP_LOG_EVENTS.has(message.type)) {
+      events.push({
+        type: 'message',
+        payload: {
+          id: message.id,
+          type: message.type,
+          from: message.from,
+          content: JSON.stringify(message.payload),
+          timestamp: message.timestamp.toISOString(),
+        },
+      });
+    }
 
     // Type-specific mappings
     switch (message.type) {
@@ -105,6 +108,19 @@ export class EventMapper {
       case MESSAGE_TYPES.AGENT_CONFIG_UPDATED:
         events.push(...this.mapAgentConfigUpdated(message));
         break;
+
+      case MESSAGE_TYPES.REVIEW_FEEDBACK: {
+        const reviewPayload = message.payload as { approved: boolean; taskId: string };
+        events.push({
+          type: 'toast',
+          payload: {
+            type: reviewPayload.approved ? 'success' : 'info',
+            title: reviewPayload.approved ? 'Review Approved' : 'Revision Requested',
+            message: `Task ${reviewPayload.taskId}`,
+          },
+        });
+        break;
+      }
     }
 
     return events;

@@ -49,7 +49,10 @@ async function main() {
 
   // Graceful shutdown에 dashboard 포함
   const originalShutdown = context.shutdown;
+  let shuttingDown = false;
   context.shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     try {
       await dashboard.close();
     } finally {

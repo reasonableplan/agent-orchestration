@@ -82,7 +82,10 @@ export class FileWriter {
 
       for (const ch of stripped) {
         if (ch in balance) balance[ch as keyof typeof balance]++;
-        else if (ch in pairs) balance[pairs[ch]]--;
+        else if (ch in pairs) {
+          const key = pairs[ch];
+          if (key !== undefined) balance[key]--;
+        }
       }
 
       for (const [bracket, count] of Object.entries(balance)) {

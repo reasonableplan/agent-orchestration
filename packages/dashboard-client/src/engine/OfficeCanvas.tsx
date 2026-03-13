@@ -224,7 +224,7 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
   const agentsRef = useRef<Record<string, AgentState>>({});
   const selectedAgentRef = useRef<string | null>(null);
   const rafRef = useRef<number>(0);
-  const retryTimerRef = useRef<number>(0);
+  const retryTimerRef = useRef<ReturnType<typeof window.setTimeout> | number>(0);
 
   // Subscribe to store
   const agents = useOfficeStore((s) => s.agents);
@@ -241,8 +241,9 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
 
     // Try async image-based sprites first, fallback to pixel-map
     charCacheRef.current = prerenderCharacters(); // sync fallback immediately
+    let cancelled = false;
     prerenderCharactersAsync().then((cache) => {
-      if (cache.size > 0) {
+      if (!cancelled && cache.size > 0) {
         charCacheRef.current = cache; // upgrade to image sprites when ready
       }
     });
@@ -253,6 +254,8 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
         animStatesRef.current.set(agent.id, createAgentAnimState(agent.slot));
       }
     }
+
+    return () => { cancelled = true; };
   }, []);
 
   // Ensure anim states exist for new agents
@@ -276,8 +279,10 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
       if (!ctx || !bgBufferRef.current || !charCacheRef.current) {
         // Retry after a short delay to avoid CPU spike during initialization
         retryTimerRef.current = window.setTimeout(() => {
-          rafRef.current = requestAnimationFrame(loop);
-        }, 100) as unknown as number;
+          if (rafRef.current === 0) {
+            rafRef.current = requestAnimationFrame(loop);
+          }
+        }, 100);
         return;
       }
 
@@ -386,7 +391,7 @@ export default function OfficeCanvas({ onAgentClick }: OfficeCanvasProps) {
           ctx.drawImage(
             frame,
             cx - ((CHAR_W + 16) * RENDER_SCALE) / 2,
-            cy - (CHAR_H + 8) * RENDER_SCALE,
+            cy - (CHAR_H + 16) * RENDER_SCALE,
           );
         }
 

@@ -46,13 +46,24 @@ export function useWebSocket() {
 
       case 'task.update':
         if (payload.taskId && typeof payload.taskId === 'string') {
-          updateTask(payload.taskId, payload as Record<string, unknown>);
+          const { taskId, status, boardColumn, assignedAgent, title, epicId } = payload as Record<string, unknown>;
+          updateTask(taskId as string, {
+            ...(status != null && { status: status as string }),
+            ...(boardColumn != null && { boardColumn: boardColumn as string }),
+            ...(assignedAgent !== undefined && { assignedAgent: assignedAgent as string | null }),
+            ...(title != null && { title: title as string }),
+            ...(epicId !== undefined && { epicId: epicId as string | null }),
+          });
         }
         break;
 
       case 'epic.progress':
         if (payload.epicId && typeof payload.epicId === 'string') {
-          updateEpic(payload.epicId, payload as Record<string, unknown>);
+          const { epicId, title, progress } = payload as Record<string, unknown>;
+          updateEpic(epicId as string, {
+            ...(title != null && { title: title as string }),
+            ...(progress != null && { progress: progress as number }),
+          });
         }
         break;
 
@@ -111,8 +122,13 @@ export function useWebSocket() {
         id: `toast-max-reconnect-${Date.now()}`,
         type: 'error',
         title: 'Connection Lost',
-        message: `Failed to reconnect after ${MAX_RECONNECT_ATTEMPTS} attempts. Please refresh the page.`,
+        message: `Failed to reconnect after ${MAX_RECONNECT_ATTEMPTS} attempts. Retrying in 30s...`,
       });
+      // Instead of giving up permanently, reset counter after a long delay and retry
+      reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectAttemptRef.current = 0;
+        connectRef.current?.();
+      }, 30000);
       return;
     }
 

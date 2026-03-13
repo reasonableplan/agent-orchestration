@@ -34,6 +34,7 @@ export abstract class BaseAgent {
   private abortController: AbortController | null = null;
   private pollPromise: Promise<void> | null = null;
   private configHandler: MessageHandler;
+  private subscriptions: Array<{ type: string; handler: MessageHandler }> = [];
 
   protected messageBus: IMessageBus;
   protected stateStore: IStateStore;
@@ -58,7 +59,7 @@ export abstract class BaseAgent {
         });
       }
     };
-    this.messageBus.subscribe(MESSAGE_TYPES.AGENT_CONFIG_UPDATED, this.configHandler);
+    this.subscribe(MESSAGE_TYPES.AGENT_CONFIG_UPDATED, this.configHandler);
   }
 
   /**
@@ -69,7 +70,7 @@ export abstract class BaseAgent {
     const dbConfig = await this.stateStore.getAgentConfig(this.id);
     if (!dbConfig) return;
 
-    const mutableConfig = this.config as unknown as Record<string, unknown>;
+    const mutableConfig = this.config as AgentConfig;
     mutableConfig.claudeModel = dbConfig.claudeModel;
     mutableConfig.maxTokens = dbConfig.maxTokens;
     mutableConfig.temperature = dbConfig.temperature;
@@ -136,7 +137,10 @@ export abstract class BaseAgent {
    */
   async drain(): Promise<void> {
     this.stopPolling();
-    this.messageBus.unsubscribe(MESSAGE_TYPES.AGENT_CONFIG_UPDATED, this.configHandler);
+    for (const { type, handler } of this.subscriptions) {
+      this.messageBus.unsubscribe(type, handler);
+    }
+    this.subscriptions = [];
     if (this.pollPromise) {
       await this.pollPromise;
       this.pollPromise = null;
@@ -155,6 +159,10 @@ export abstract class BaseAgent {
    * 에이전트를 재개한다. 상태를 idle로 변경 + 폴링 시작.
    */
   async resume(intervalMs = 10_000): Promise<void> {
+    if (this.pollPromise) {
+      await this.pollPromise;
+      this.pollPromise = null;
+    }
     await this.setStatus('idle');
     this.startPolling(intervalMs);
   }
@@ -182,12 +190,12 @@ export abstract class BaseAgent {
           }
 
           const task = await this.findNextTask();
+          this.consecutiveErrors = 0; // 태스크 유무와 관계없이 에러 없이 완료 시 리셋
           if (task) {
             await this.setStatus('busy', task.id);
             const result = await this.executeTaskWithTimeout(task);
             await this.onTaskComplete(task, result);
             await this.setStatus('idle');
-            this.consecutiveErrors = 0; // 성공 시 리셋
           }
         } catch (error) {
           this.consecutiveErrors++;
@@ -200,7 +208,7 @@ export abstract class BaseAgent {
       }
 
       // Read current poll interval dynamically (hot-reload support)
-      const currentIntervalMs = (this.config as unknown as Record<string, unknown>).pollIntervalMs as number | undefined ?? initialIntervalMs;
+      const currentIntervalMs = this.config.pollIntervalMs ?? initialIntervalMs;
 
       // 지수 백오프: 연속 에러 시 대기 시간 증가
       const backoff =
@@ -219,7 +227,7 @@ export abstract class BaseAgent {
   private async executeTaskWithTimeout(task: Task): Promise<TaskResult> {
     const timeoutMs = this.config.taskTimeoutMs ?? DEFAULT_TASK_TIMEOUT_MS;
 
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<TaskResult>((_, reject) => {
       timer = setTimeout(
         () => reject(new Error(`Task "${task.title}" timed out after ${timeoutMs}ms`)),
@@ -230,7 +238,7 @@ export abstract class BaseAgent {
     try {
       return await Promise.race([this.executeTask(task), timeoutPromise]);
     } finally {
-      clearTimeout(timer!);
+      if (timer !== undefined) clearTimeout(timer);
     }
   }
 
@@ -239,6 +247,7 @@ export abstract class BaseAgent {
    */
   protected subscribe(type: string, handler: MessageHandler) {
     this.messageBus.subscribe(type, handler);
+    this.subscriptions.push({ type, handler });
   }
 
   /**
@@ -305,6 +314,7 @@ export abstract class BaseAgent {
     await this.stateStore.updateTask(task.id, {
       status: newStatus,
       boardColumn: newColumn,
+      ...(result.success ? { completedAt: new Date() } : {}),
     });
 
     if (task.githubIssueNumber) {

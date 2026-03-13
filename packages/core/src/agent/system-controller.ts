@@ -14,12 +14,12 @@ export class SystemController {
   ) {}
 
   isSystemCommand(content: string): boolean {
-    const command = content.trim().split(' ')[0].toLowerCase();
+    const command = (content.trim().split(' ')[0] ?? '').toLowerCase();
     return (this.systemCommands as readonly string[]).includes(command);
   }
 
   async handleSystemCommand(input: UserInput): Promise<string> {
-    const command = input.content.trim().split(' ')[0].toLowerCase();
+    const command = (input.content.trim().split(' ')[0] ?? '').toLowerCase();
 
     switch (command) {
       case 'pause':

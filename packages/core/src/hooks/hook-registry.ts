@@ -47,12 +47,19 @@ export class HookRegistry {
    * Dispatch an event to all matching enabled hooks.
    */
   async dispatch(event: string, payload: Record<string, unknown>): Promise<void> {
-    for (const [, hook] of this.handlers) {
-      if (hook.event !== event) continue;
+    const matching = Array.from(this.handlers.values()).filter((h) => h.event === event);
+    if (matching.length === 0) return;
 
-      // Check DB for enabled status
-      const dbHook = await this.stateStore.getHook(hook.id);
-      if (!dbHook?.enabled) continue;
+    // Batch-load DB enabled status for all matching hooks
+    const dbHookResults = await Promise.allSettled(matching.map((h) => this.stateStore.getHook(h.id)));
+
+    for (const [i, hook] of matching.entries()) {
+      const result = dbHookResults[i]!;
+      if (result.status === 'rejected') {
+        log.error({ err: result.reason, hookId: hook.id, event }, 'Failed to load hook from DB');
+        continue;
+      }
+      if (!result.value?.enabled) continue;
 
       try {
         await hook.handler(payload);

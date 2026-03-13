@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MessageBus } from './message-bus.js';
-import type { Message } from '../types/index.js';
+import type { Message, IStateStore } from '../types/index.js';
 
 function createMessage(type: string, payload: unknown = {}): Message {
   return {
@@ -122,7 +122,7 @@ describe('MessageBus', () => {
 
   it('stateStore가 주입되면 publish 시 메시지를 DB에 저장한다', async () => {
     const mockStateStore = { saveMessage: vi.fn().mockResolvedValue(undefined) };
-    const bus = new MessageBus(mockStateStore as any);
+    const bus = new MessageBus(mockStateStore as unknown as IStateStore);
     const msg = createMessage('board.move');
 
     await bus.publish(msg);
@@ -145,7 +145,7 @@ describe('MessageBus', () => {
     const bus = new MessageBus();
     const mockStateStore = { saveMessage: vi.fn().mockResolvedValue(undefined) };
 
-    bus.setStateStore(mockStateStore as any);
+    bus.setStateStore(mockStateStore as unknown as IStateStore);
     await bus.publish(createMessage('board.move'));
 
     expect(mockStateStore.saveMessage).toHaveBeenCalledTimes(1);
@@ -153,7 +153,7 @@ describe('MessageBus', () => {
 
   it('stateStore.saveMessage 실패해도 handler는 정상 실행된다', async () => {
     const mockStateStore = { saveMessage: vi.fn().mockRejectedValue(new Error('DB error')) };
-    const bus = new MessageBus(mockStateStore as any);
+    const bus = new MessageBus(mockStateStore as unknown as IStateStore);
     const handler = vi.fn();
     bus.subscribe('test', handler);
 

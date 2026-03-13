@@ -38,6 +38,18 @@ export class ReviewProcessor {
         if (reviewResult.approved) {
           log.info({ taskId: payload.taskId, reason: reviewResult.reason }, 'Task approved');
           // Done으로 이동 + 후속 의존성 체인 트리거
+          // Board 이동 먼저 — 실패 시 DB 업데이트 안 함
+          if (task.githubIssueNumber) {
+            await this.gitService.moveIssueToColumn(task.githubIssueNumber, 'Done');
+            try {
+              await this.gitService.addComment(
+                task.githubIssueNumber,
+                `✅ **[Director Review] Approved**\n\n${reviewResult.reason}`,
+              );
+            } catch (err) {
+              log.warn({ err }, 'Failed to add approval comment (non-fatal)');
+            }
+          }
           await this.stateStore.updateTask(payload.taskId, {
             status: 'done',
             boardColumn: 'Done',
@@ -45,11 +57,6 @@ export class ReviewProcessor {
             reviewNote: null, // 승인 시 이전 피드백 제거
           });
           if (task.githubIssueNumber) {
-            await this.gitService.moveIssueToColumn(task.githubIssueNumber, 'Done');
-            await this.gitService.addComment(
-              task.githubIssueNumber,
-              `✅ **[Director Review] Approved**\n\n${reviewResult.reason}`,
-            );
             await this.dispatcher.checkAndPromoteDependents(task.githubIssueNumber);
           }
         } else {
@@ -114,25 +121,29 @@ Respond with JSON only:
    * @param feedback Director의 리뷰 피드백 (거절 사유 또는 에러 메시지)
    */
   private async retryOrFail(task: Task, taskId: string, feedback: string): Promise<void> {
-    if ((task.retryCount ?? 0) < 3) {
+    if ((task.retryCount ?? 0) < 2) {
       const newRetryCount = (task.retryCount ?? 0) + 1;
 
-      // 1. DB에 피드백 저장 + Ready로 되돌림
+      // 1. GitHub Board 이동 먼저 — 실패 시 DB 업데이트 안 함
+      if (task.githubIssueNumber) {
+        await this.gitService.moveIssueToColumn(task.githubIssueNumber, 'Ready');
+        try {
+          await this.gitService.addComment(
+            task.githubIssueNumber,
+            `🔄 **[Director Review] Revision Requested** (attempt ${newRetryCount}/3)\n\n${feedback}`,
+          );
+        } catch (err) {
+          log.warn({ err }, 'Failed to add comment (non-fatal)');
+        }
+      }
+
+      // 2. DB에 피드백 저장 + Ready로 되돌림
       await this.stateStore.updateTask(taskId, {
         retryCount: newRetryCount,
         status: 'ready',
         boardColumn: 'Ready',
         reviewNote: feedback,
       });
-
-      // 2. GitHub Issue에 피드백 코멘트 작성
-      if (task.githubIssueNumber) {
-        await this.gitService.moveIssueToColumn(task.githubIssueNumber, 'Ready');
-        await this.gitService.addComment(
-          task.githubIssueNumber,
-          `🔄 **[Director Review] Revision Requested** (attempt ${newRetryCount}/3)\n\n${feedback}`,
-        );
-      }
 
       // 3. review.feedback 메시지 발행 (대시보드 실시간 알림 + 감사 로그용, 워커는 DB reviewNote로 피드백 수신)
       if (this.messageBus) {
@@ -158,18 +169,23 @@ Respond with JSON only:
       );
     } else {
       // 최대 재시도 초과 → Failed로 마킹
+      // Board 이동 먼저 — 실패 시 DB 업데이트 안 함
+      if (task.githubIssueNumber) {
+        await this.gitService.moveIssueToColumn(task.githubIssueNumber, 'Failed');
+        try {
+          await this.gitService.addComment(
+            task.githubIssueNumber,
+            `❌ **[Director Review] Failed** — max retries exceeded\n\nLast feedback: ${feedback}`,
+          );
+        } catch (err) {
+          log.warn({ err }, 'Failed to add comment (non-fatal)');
+        }
+      }
       await this.stateStore.updateTask(taskId, {
         status: 'failed',
         boardColumn: 'Failed',
         reviewNote: `Final failure after 3 attempts. Last feedback: ${feedback}`,
       });
-      if (task.githubIssueNumber) {
-        await this.gitService.moveIssueToColumn(task.githubIssueNumber, 'Failed');
-        await this.gitService.addComment(
-          task.githubIssueNumber,
-          `❌ **[Director Review] Failed** — max retries exceeded\n\nLast feedback: ${feedback}`,
-        );
-      }
       log.error({ taskId, feedback }, 'Task failed after max retries');
     }
   }

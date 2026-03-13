@@ -40,7 +40,7 @@ export async function withRetry<T>(
 
   // TypeScript: this point is logically unreachable because the loop always
   // returns on success or throws on final failure, but the compiler needs it.
-  throw (undefined as never);
+  throw new Error('Exhausted retries');
 }
 
 function isRetryable(error: unknown): boolean {
@@ -58,6 +58,10 @@ function isRetryable(error: unknown): boolean {
   // Rate limit
   if (msg.includes('rate limit') || msg.includes('429') || msg.includes('secondary rate'))
     return true;
+
+  // GraphQL RATE_LIMITED error type
+  const gqlErrors = (error as { errors?: Array<{ type?: string }> }).errors;
+  if (gqlErrors?.some((e) => e.type === 'RATE_LIMITED')) return true;
 
   // 인증/권한 에러는 재시도 불가
   if (msg.includes('401') || msg.includes('403') || msg.includes('404')) return false;

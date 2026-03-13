@@ -19,6 +19,12 @@ export class BoardOperations {
   }
 
   async moveIssueToColumn(issueNumber: number, column: string): Promise<void> {
+    if (!this.setup.projectId) {
+      throw new Error('Project not initialized: projectId is null');
+    }
+    if (!this.setup.columnFieldId) {
+      throw new Error('Project not initialized: columnFieldId is null');
+    }
     const optionId = this.setup.columnOptions.get(column);
     if (!optionId) {
       throw new Error(`Unknown column: ${column}`);
@@ -40,7 +46,7 @@ export class BoardOperations {
         'getIssue (board cache miss)',
       );
 
-      itemId = await this.issueManager.getProjectItemId(issue.node_id);
+      itemId = (await this.issueManager.getProjectItemId(issue.node_id)) ?? undefined;
       if (!itemId) {
         throw new Error(`Issue #${issueNumber} is not on the project board`);
       }
@@ -75,14 +81,19 @@ export class BoardOperations {
   }
 
   async getAllProjectItems(): Promise<BoardIssue[]> {
+    if (!this.setup.projectId) {
+      throw new Error('Project not initialized: projectId is null');
+    }
     const allItems: BoardIssue[] = [];
     const newItemIdCache = new Map<number, string>();
     let cursor: string | null = null;
     let hasNextPage = true;
 
     while (hasNextPage) {
-      const result: ProjectItemsResponse = await this.ctx.graphqlWithAuth(
-        `query($projectId: ID!, $cursor: String) {
+      const result: ProjectItemsResponse = await withRetry(
+        () =>
+          this.ctx.graphqlWithAuth(
+            `query($projectId: ID!, $cursor: String) {
           node(id: $projectId) {
             ... on ProjectV2 {
               items(first: 100, after: $cursor) {
@@ -109,8 +120,15 @@ export class BoardOperations {
             }
           }
         }`,
-        { projectId: this.setup.projectId, cursor },
+            { projectId: this.setup.projectId, cursor },
+          ),
+        {},
+        'getAllProjectItems',
       );
+
+      if (!result.node) {
+        throw new Error(`Project node not found for projectId: ${this.setup.projectId}`);
+      }
 
       const page = result.node.items;
 
@@ -137,7 +155,7 @@ export class BoardOperations {
         });
       }
 
-      hasNextPage = page.pageInfo.hasNextPage;
+      hasNextPage = page.pageInfo.hasNextPage && !!page.pageInfo.endCursor;
       cursor = page.pageInfo.endCursor;
     }
 

@@ -73,13 +73,20 @@ export class StateStore implements IStateStore {
     // 상태 전환 검증: status가 포함된 경우에만 현재 상태를 조회하여 검증
     if (updates.status) {
       const current = await this.db.select({ status: tasks.status }).from(tasks).where(eq(tasks.id, id));
+      if (current.length === 0) {
+        log.warn({ taskId: id }, 'updateTask: task not found');
+        return;
+      }
       if (current.length > 0) {
-        const from = current[0].status as TaskStatus;
+        const from = current[0]!.status as TaskStatus;
         const to = updates.status as TaskStatus;
         if (!isValidTransition(from, to)) {
           log.warn({ taskId: id, from, to }, 'Invalid task status transition, skipping');
           return;
         }
+        // Atomic update: include current status in WHERE clause to prevent races
+        await this.db.update(tasks).set(updates).where(and(eq(tasks.id, id), eq(tasks.status, from)));
+        return;
       }
     }
     await this.db.update(tasks).set(updates).where(eq(tasks.id, id));

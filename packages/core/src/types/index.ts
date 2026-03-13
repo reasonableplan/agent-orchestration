@@ -145,7 +145,8 @@ export interface AgentConfig {
   maxTokens: number;
   temperature: number;
   tokenBudget: number;
-  taskTimeoutMs?: number;
+  taskTimeoutMs: number;
+  pollIntervalMs: number;
 }
 
 // ===== ApiSpec =====
@@ -227,6 +228,9 @@ export interface IStateStore {
   // Agent Config
   getAgentConfig(agentId: string): Promise<AgentConfigRow | null>;
   upsertAgentConfig(agentId: string, config: Partial<AgentConfigRow>): Promise<void>;
+  // Hooks
+  getAllHooks(): Promise<HookRow[]>;
+  toggleHook(id: string, enabled: boolean): Promise<void>;
 }
 
 // ===== IGitService =====

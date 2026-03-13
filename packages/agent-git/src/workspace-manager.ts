@@ -11,6 +11,8 @@ export interface WorkspaceConfig {
 }
 
 export class WorkspaceManager {
+  private inProgress = new Map<string, Promise<string>>();
+
   constructor(
     private workDir: string,
     private gitCli: GitCli,
@@ -18,6 +20,16 @@ export class WorkspaceManager {
   ) {}
 
   async getEpicWorkDir(epicId: string): Promise<string> {
+    const existing = this.inProgress.get(epicId);
+    if (existing) return existing;
+    const promise = this._doGetEpicWorkDir(epicId).finally(() => {
+      this.inProgress.delete(epicId);
+    });
+    this.inProgress.set(epicId, promise);
+    return promise;
+  }
+
+  private async _doGetEpicWorkDir(epicId: string): Promise<string> {
     const epicDir = path.resolve(this.workDir, epicId);
     try {
       // .git 디렉토리가 있으면 이미 클론된 repo
@@ -31,8 +43,14 @@ export class WorkspaceManager {
         await this.gitCli.exec(this.workDir, 'clone', '--branch', branchName, repoUrl, epicId);
       } catch {
         // branch가 아직 없으면 main으로 clone 후 branch 생성
-        await this.gitCli.exec(this.workDir, 'clone', repoUrl, epicId);
-        await this.gitCli.exec(epicDir, 'checkout', '-b', branchName);
+        try {
+          await this.gitCli.exec(this.workDir, 'clone', repoUrl, epicId);
+          await this.gitCli.exec(epicDir, 'checkout', '-b', branchName);
+        } catch (err) {
+          // 두 번째 clone도 실패 시 orphaned 디렉토리 정리
+          await fs.rm(epicDir, { recursive: true, force: true }).catch(() => {});
+          throw err;
+        }
       }
     }
     return epicDir;

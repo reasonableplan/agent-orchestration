@@ -87,11 +87,9 @@ export default function CommandBar({ onSend }: CommandBarProps) {
         return;
       }
       if (e.key === 'Tab' || e.key === 'Enter') {
-        if (suggestions.length > 0 && e.key === 'Tab') {
-          e.preventDefault();
-          applySuggestion(suggestions[selectedSuggestion]);
-          return;
-        }
+        e.preventDefault();
+        applySuggestion(suggestions[selectedSuggestion]);
+        return;
       }
       if (e.key === 'Escape') {
         setSuggestions([]);

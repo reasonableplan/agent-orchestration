@@ -29,6 +29,8 @@ export class GitAgent extends BaseAgent {
       maxTokens: 8192,
       temperature: 0.2,
       tokenBudget: 50_000,
+      taskTimeoutMs: 5 * 60 * 1000,
+      pollIntervalMs: 10_000,
     };
     super(config, deps);
 

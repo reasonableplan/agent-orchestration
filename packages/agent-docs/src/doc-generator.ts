@@ -136,6 +136,9 @@ export class DocGenerator {
     if (!data || !Array.isArray(data.files) || typeof data.summary !== 'string') {
       throw new Error(`Invalid Claude response shape: missing "files" array or "summary" string`);
     }
+    if (!data.files.every((f: unknown) => typeof (f as Record<string, unknown>).path === 'string' && typeof (f as Record<string, unknown>).content === 'string')) {
+      throw new Error('Invalid Claude response: file entry missing path or content');
+    }
 
     return { ...data, usage };
   }
@@ -145,14 +148,15 @@ export class DocGenerator {
   }
 
   private async buildUserMessage(task: Task, taskType: DocsTaskType): Promise<string> {
-    const lines = [`Task: ${task.title}`, `Description: ${task.description}`];
+    const lines = [`<task>\n<title>${task.title}</title>\n<description>${task.description ?? ''}</description>\n</task>`];
 
     if (task.reviewNote) {
       lines.push(
         '',
-        '⚠️ PREVIOUS REVIEW FEEDBACK (address these issues):',
+        '<review_feedback>',
         task.reviewNote,
-        `Attempt: ${task.retryCount + 1}/3`,
+        '</review_feedback>',
+        `Attempt: ${(task.retryCount ?? 0) + 1}/3`,
       );
     }
 

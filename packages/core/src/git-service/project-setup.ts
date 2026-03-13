@@ -3,6 +3,15 @@ import { createLogger } from '../logging/logger.js';
 
 const log = createLogger('GitService');
 
+function isNotFoundError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  if (msg.includes('not found') || msg.includes('404') || msg.includes('could not resolve')) return true;
+  const gqlErrors = (err as { errors?: Array<{ type?: string }> }).errors;
+  if (gqlErrors?.some((e) => e.type === 'NOT_FOUND')) return true;
+  return false;
+}
+
 const REQUIRED_COLUMNS: readonly string[] = [
   'Backlog',
   'Ready',
@@ -32,8 +41,11 @@ export class ProjectSetup {
 
     // Token scope 경고: classic PAT의 경우 x-oauth-scopes 헤더에서 확인 가능
     const scopes = (response.headers as Record<string, string>)['x-oauth-scopes'] ?? '';
-    if (scopes && !scopes.includes('project')) {
-      log.warn('Token may lack "project" scope — Board operations may fail');
+    if (scopes) {
+      const scopeList = scopes.split(',').map((s) => s.trim());
+      if (!scopeList.some((s) => s === 'project' || s === 'read:project')) {
+        log.warn('Token may lack "project" scope — Board operations may fail');
+      }
     }
 
     // 2. Find or create Project
@@ -68,7 +80,8 @@ export class ProjectSetup {
         { login: this.ctx.owner, number },
       );
       return result.user.projectV2.id;
-    } catch {
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
       // Try as organization
       try {
         const result = await this.ctx.graphqlWithAuth<{
@@ -82,7 +95,8 @@ export class ProjectSetup {
           { login: this.ctx.owner, number },
         );
         return result.organization.projectV2.id;
-      } catch {
+      } catch (err2) {
+        if (!isNotFoundError(err2)) throw err2;
         return null;
       }
     }
@@ -104,7 +118,8 @@ export class ProjectSetup {
       );
       const project = result.user.projectsV2.nodes.find((p) => p.title === title);
       return project?.id ?? null;
-    } catch {
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
       return null;
     }
   }
@@ -157,6 +172,9 @@ export class ProjectSetup {
       { projectId: this.projectId },
     );
 
+    if (!result.node) {
+      throw new Error(`Project node not found for projectId: ${this.projectId}`);
+    }
     const statusField = result.node.fields.nodes.find((f) => f.name === 'Status');
     if (!statusField) {
       throw new Error('Status field not found in project');
@@ -178,32 +196,39 @@ export class ProjectSetup {
   }
 
   async createColumnOption(name: string): Promise<void> {
-    // ProjectV2 single select field option creation via GraphQL
+    // Build merged options list: existing options + new one
+    const existingOptions = Array.from(this.columnOptions.entries()).map(([optName, id]) => ({
+      id,
+      name: optName,
+    }));
+    const singleSelectOptions = [
+      ...existingOptions.map((o) => ({ id: o.id, name: o.name, color: 'GRAY', description: '' })),
+      { name, color: 'GRAY', description: '' },
+    ];
+
     const result = await this.ctx.graphqlWithAuth<{
-      createProjectV2FieldOption: {
+      updateProjectV2Field: {
         projectV2Field: {
           options: Array<{ id: string; name: string }>;
         };
       };
     }>(
-      `mutation($fieldId: ID!, $projectId: ID!, $name: String!) {
-        createProjectV2FieldOption(input: {
-          projectId: $projectId,
-          fieldId: $fieldId,
-          name: $name
+      `mutation($projectId: ID!, $fieldId: ID!, $singleSelectOptions: [ProjectV2SingleSelectFieldOptionInput!]!) {
+        updateProjectV2Field(input: {
+          projectId: $projectId
+          fieldId: $fieldId
+          singleSelectOptions: $singleSelectOptions
         }) {
           projectV2Field {
-            ... on ProjectV2SingleSelectField {
-              options { id name }
-            }
+            ... on ProjectV2SingleSelectField { options { id name } }
           }
         }
       }`,
-      { fieldId: this.columnFieldId, projectId: this.projectId, name },
+      { projectId: this.projectId, fieldId: this.columnFieldId, singleSelectOptions },
     );
 
     // mutation 응답에서 직접 캐시 업데이트 (ensureColumns 재호출로 인한 무한재귀 방지)
-    const updatedOptions = result.createProjectV2FieldOption.projectV2Field.options;
+    const updatedOptions = result.updateProjectV2Field.projectV2Field.options;
     for (const opt of updatedOptions) {
       this.columnOptions.set(opt.name, opt.id);
     }

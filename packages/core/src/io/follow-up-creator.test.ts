@@ -1,23 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FollowUpCreator } from './follow-up-creator.js';
-import type { IGitService, Task, FollowUp } from '../types/index.js';
-
-function createMockGitService(): IGitService {
-  return {
-    validateConnection: vi.fn(),
-    createIssue: vi.fn().mockResolvedValue(100),
-    updateIssue: vi.fn(),
-    closeIssue: vi.fn(),
-    getIssue: vi.fn(),
-    getIssuesByLabel: vi.fn().mockResolvedValue([]),
-    getEpicIssues: vi.fn().mockResolvedValue([]),
-    getAllProjectItems: vi.fn(),
-    moveIssueToColumn: vi.fn(),
-    addComment: vi.fn(),
-    createBranch: vi.fn(),
-    createPR: vi.fn(),
-  };
-}
+import type { Task, FollowUp } from '../types/index.js';
+import { createMockGitService } from '@agent/testing';
 
 function createTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -40,7 +24,7 @@ function createTask(overrides: Partial<Task> = {}): Task {
 
 describe('FollowUpCreator', () => {
   it('후속 이슈를 생성한다', async () => {
-    const gitService = createMockGitService();
+    const gitService = createMockGitService(undefined, { createIssue: vi.fn().mockResolvedValue(100) });
     const creator = new FollowUpCreator(gitService);
     const task = createTask();
 

@@ -1,11 +1,13 @@
 import type { BoardIssue } from '../types/index.js';
 
 export function parseDependencies(body: string): number[] {
+  const depsSection = body.match(/### Dependencies\r?\n([\s\S]*?)(?:\r?\n###|$)/);
+  if (!depsSection) return [];
   const deps: number[] = [];
   const regex = /- #(\d+)/g;
   let match;
-  while ((match = regex.exec(body)) !== null) {
-    deps.push(parseInt(match[1], 10));
+  while ((match = regex.exec(depsSection[1]!)) !== null) {
+    deps.push(parseInt(match[1]!, 10));
   }
   return deps;
 }

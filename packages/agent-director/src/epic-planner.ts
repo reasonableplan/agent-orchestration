@@ -110,11 +110,13 @@ export class EpicPlanner {
     // 의존성 없는 Task를 Ready로 이동 (backfill 이후 DB 기준으로 판별)
     let readyCount = 0;
     for (let i = 0; i < action.tasks.length; i++) {
-      const dbTaskId = `task-gh-${issueNumbers[i]}`;
+      const issueNumber = issueNumbers[i];
+      if (issueNumber === undefined) continue;
+      const dbTaskId = `task-gh-${issueNumber}`;
       const taskRow = await this.stateStore.getTask(dbTaskId);
       const deps = (taskRow?.dependencies as string[]) ?? [];
       if (deps.length === 0) {
-        await this.gitService.moveIssueToColumn(issueNumbers[i], 'Ready');
+        await this.gitService.moveIssueToColumn(issueNumber, 'Ready');
         await this.stateStore.updateTask(dbTaskId, {
           status: 'ready',
           boardColumn: 'Ready',

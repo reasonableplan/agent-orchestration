@@ -11,7 +11,7 @@ import type { TaskStatus } from '../types/index.js';
 const VALID_TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
   backlog: ['ready'],
   ready: ['in-progress', 'backlog'],
-  'in-progress': ['review', 'failed', 'ready'], // ready: Board sync rollback
+  'in-progress': ['review', 'failed', 'ready', 'done'], // ready: Board sync rollback
   review: ['done', 'ready', 'failed'], // ready: review rejection → retry
   failed: ['ready', 'backlog'], // ready: retry, backlog: manual reset
   done: [], // terminal state — no transitions allowed

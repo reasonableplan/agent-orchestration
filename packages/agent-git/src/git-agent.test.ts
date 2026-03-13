@@ -1,82 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GitAgent } from './git-agent.js';
-import type { AgentDependencies, Task, IMessageBus, IStateStore, IGitService } from '@agent/core';
+import {
+  createMockMessageBus,
+  createMockStateStore,
+  createMockGitService,
+  createMockTask,
+} from '@agent/testing';
+import type { AgentDependencies, IStateStore, IGitService, TaskResult, Task } from '@agent/core';
 
-// ===== Mocks =====
-
-function createMockMessageBus(): IMessageBus {
-  return {
-    publish: vi.fn(),
-    subscribe: vi.fn(),
-    subscribeAll: vi.fn(),
-    unsubscribe: vi.fn(),
-  };
-}
-
-function createMockStateStore(): IStateStore {
-  return {
-    registerAgent: vi.fn(),
-    getAgent: vi.fn(),
-    updateAgentStatus: vi.fn(),
-    updateHeartbeat: vi.fn(),
-    createTask: vi.fn(),
-    getTask: vi.fn(),
-    updateTask: vi.fn(),
-    getTasksByColumn: vi.fn(),
-    getTasksByAgent: vi.fn(),
-    getReadyTasksForAgent: vi.fn(),
-    claimTask: vi.fn(),
-    createEpic: vi.fn(),
-    getEpic: vi.fn(),
-    updateEpic: vi.fn(),
-    saveMessage: vi.fn(),
-    saveArtifact: vi.fn(),
-    getAllAgents: vi.fn().mockResolvedValue([]),
-    getAllTasks: vi.fn().mockResolvedValue([]),
-    getAllEpics: vi.fn().mockResolvedValue([]),
-    getRecentMessages: vi.fn().mockResolvedValue([]),
-    transaction: vi.fn().mockImplementation((fn) => fn({})),
-    getAgentStats: vi.fn().mockResolvedValue({ agentId: '', totalTasks: 0, completedTasks: 0, failedTasks: 0, inProgressTasks: 0, completionRate: 0, avgDurationMs: null, totalRetries: 0 }),
-    getTaskHistory: vi.fn().mockResolvedValue([]),
-    getAgentConfig: vi.fn().mockResolvedValue(null),
-    upsertAgentConfig: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-function createMockGitService(): IGitService {
-  return {
-    validateConnection: vi.fn(),
-    createIssue: vi.fn(),
-    updateIssue: vi.fn(),
-    closeIssue: vi.fn(),
-    getIssue: vi.fn(),
-    getIssuesByLabel: vi.fn(),
-    getEpicIssues: vi.fn().mockResolvedValue([]),
-    getAllProjectItems: vi.fn(),
-    moveIssueToColumn: vi.fn(),
-    addComment: vi.fn(),
-    createBranch: vi.fn(),
-    createPR: vi.fn().mockResolvedValue(42),
-  };
-}
-
-function makeTask(overrides: Partial<Task> = {}): Task {
-  return {
-    id: 'task-1',
-    epicId: 'epic-1',
-    title: 'Create branch for epic',
-    description: 'Branch task',
-    assignedAgent: 'git',
-    status: 'in-progress',
-    githubIssueNumber: 10,
-    boardColumn: 'In Progress',
-    dependencies: [],
-    priority: 2,
-    complexity: 'low',
-    retryCount: 0,
-    artifacts: [],
-    ...overrides,
-  };
+// Helper to access private methods for testing
+interface GitAgentPrivate {
+  executeTask(task: Task): Promise<TaskResult>;
+  onTaskComplete(task: Task, result: { success: boolean; artifacts: string[] }): Promise<void>;
+  extractBranchName(task: Task): string;
+  checkAndTriggerPR(epicId: string): Promise<void>;
 }
 
 // ===== Tests =====
@@ -88,7 +25,7 @@ describe('GitAgent', () => {
   let agent: GitAgent;
 
   beforeEach(() => {
-    gitService = createMockGitService();
+    gitService = createMockGitService(undefined, { createPR: vi.fn().mockResolvedValue(42) });
     stateStore = createMockStateStore();
     deps = {
       messageBus: createMockMessageBus(),
@@ -107,12 +44,11 @@ describe('GitAgent', () => {
   // ===== detectTaskType (tested via executeTask) =====
 
   it('handles branch task and calls createBranch', async () => {
-    const task = makeTask({ title: 'Create branch for epic-1' });
-    // Access executeTask via the public-facing method (cast to any for testing private)
-    const result = await (agent as any).executeTask(task);
+    const task = createMockTask({ title: 'Create branch for epic-1', assignedAgent: 'git', status: 'in-progress', githubIssueNumber: 10, boardColumn: 'In Progress', epicId: 'epic-1' });
+    const result = await (agent as unknown as GitAgentPrivate).executeTask(task);
 
     expect(result.success).toBe(true);
-    expect(result.data.branchName).toBe('epic/epic-1');
+    expect(result.data?.branchName).toBe('epic/epic-1');
     expect(gitService.createBranch).toHaveBeenCalledWith('epic/epic-1');
   });
 
@@ -121,24 +57,28 @@ describe('GitAgent', () => {
       new Error('Reference already exists'),
     );
 
-    const task = makeTask({ title: 'Create branch for epic-1' });
-    const result = await (agent as any).executeTask(task);
+    const task = createMockTask({ title: 'Create branch for epic-1', assignedAgent: 'git', status: 'in-progress', githubIssueNumber: 10, boardColumn: 'In Progress', epicId: 'epic-1' });
+    const result = await (agent as unknown as GitAgentPrivate).executeTask(task);
 
     expect(result.success).toBe(true);
-    expect(result.data.alreadyExisted).toBe(true);
+    expect(result.data?.alreadyExisted).toBe(true);
   });
 
   it('handles PR task and calls createPR', async () => {
-    const task = makeTask({
+    const task = createMockTask({
       title: '[GIT] Epic epic-1 PR',
       description: 'PR body',
       epicId: 'epic-1',
+      assignedAgent: 'git',
+      status: 'in-progress',
+      githubIssueNumber: 10,
+      boardColumn: 'In Progress',
     });
     // title contains 'pr' → detected as PR task
-    const result = await (agent as any).executeTask(task);
+    const result = await (agent as unknown as GitAgentPrivate).executeTask(task);
 
     expect(result.success).toBe(true);
-    expect(result.data.prNumber).toBe(42);
+    expect(result.data?.prNumber).toBe(42);
     expect(gitService.createPR).toHaveBeenCalledWith(
       'Epic epic-1 PR',
       'PR body',
@@ -152,16 +92,16 @@ describe('GitAgent', () => {
       new Error('A pull request already exists for this branch'),
     );
 
-    const task = makeTask({ title: '[GIT] PR for epic', epicId: 'epic-2' });
-    const result = await (agent as any).executeTask(task);
+    const task = createMockTask({ title: '[GIT] PR for epic', epicId: 'epic-2', assignedAgent: 'git', status: 'in-progress', githubIssueNumber: 10, boardColumn: 'In Progress' });
+    const result = await (agent as unknown as GitAgentPrivate).executeTask(task);
 
     expect(result.success).toBe(true);
-    expect(result.data.alreadyExisted).toBe(true);
+    expect(result.data?.alreadyExisted).toBe(true);
   });
 
   it('returns error for unknown task type', async () => {
-    const task = makeTask({ title: 'do something random' });
-    const result = await (agent as any).executeTask(task);
+    const task = createMockTask({ title: 'do something random', assignedAgent: 'git', status: 'in-progress', githubIssueNumber: 10, boardColumn: 'In Progress', epicId: 'epic-1' });
+    const result = await (agent as unknown as GitAgentPrivate).executeTask(task);
 
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain('Unknown git task type');
@@ -170,10 +110,10 @@ describe('GitAgent', () => {
   // ===== onTaskComplete (BaseAgent 기본: Review 컬럼 → review.request) =====
 
   it('moves issue to Review on success (Director review 대기)', async () => {
-    const task = makeTask({ githubIssueNumber: 10 });
+    const task = createMockTask({ id: 'task-1', githubIssueNumber: 10, assignedAgent: 'git', status: 'in-progress', boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = { success: true, artifacts: [] };
 
-    await (agent as any).onTaskComplete(task, result);
+    await (agent as unknown as GitAgentPrivate).onTaskComplete(task, result);
 
     expect(gitService.moveIssueToColumn).toHaveBeenCalledWith(10, 'Review');
     expect(stateStore.updateTask).toHaveBeenCalledWith(
@@ -194,10 +134,10 @@ describe('GitAgent', () => {
   });
 
   it('moves issue to Failed on failure', async () => {
-    const task = makeTask({ githubIssueNumber: 10 });
+    const task = createMockTask({ id: 'task-1', githubIssueNumber: 10, assignedAgent: 'git', status: 'in-progress', boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = { success: false, error: { message: 'oops' }, artifacts: [] };
 
-    await (agent as any).onTaskComplete(task, result);
+    await (agent as unknown as GitAgentPrivate).onTaskComplete(task, result);
 
     expect(gitService.moveIssueToColumn).toHaveBeenCalledWith(10, 'Failed');
     expect(stateStore.updateTask).toHaveBeenCalledWith(
@@ -210,10 +150,10 @@ describe('GitAgent', () => {
   });
 
   it('skips board move when no githubIssueNumber', async () => {
-    const task = makeTask({ githubIssueNumber: null });
+    const task = createMockTask({ id: 'task-1', githubIssueNumber: null, assignedAgent: 'git', status: 'in-progress', boardColumn: 'In Progress', epicId: 'epic-1' });
     const result = { success: true, artifacts: [] };
 
-    await (agent as any).onTaskComplete(task, result);
+    await (agent as unknown as GitAgentPrivate).onTaskComplete(task, result);
 
     expect(gitService.moveIssueToColumn).not.toHaveBeenCalled();
     expect(stateStore.updateTask).toHaveBeenCalled();
@@ -222,14 +162,14 @@ describe('GitAgent', () => {
   // ===== extractBranchName =====
 
   it('generates branch name from epicId', () => {
-    const task = makeTask({ epicId: 'auth-system' });
-    const name = (agent as any).extractBranchName(task);
+    const task = createMockTask({ epicId: 'auth-system', assignedAgent: 'git', status: 'in-progress', boardColumn: 'In Progress' });
+    const name = (agent as unknown as GitAgentPrivate).extractBranchName(task);
     expect(name).toBe('epic/auth-system');
   });
 
   it('uses "feature" when epicId is null', () => {
-    const task = makeTask({ epicId: null });
-    const name = (agent as any).extractBranchName(task);
+    const task = createMockTask({ epicId: null, assignedAgent: 'git', status: 'in-progress', boardColumn: 'In Progress' });
+    const name = (agent as unknown as GitAgentPrivate).extractBranchName(task);
     expect(name).toBe('epic/feature');
   });
 
@@ -241,7 +181,7 @@ describe('GitAgent', () => {
       { issueNumber: 2, labels: ['type:commit'], column: 'Done' },
     ]);
 
-    await (agent as any).checkAndTriggerPR('epic-1');
+    await (agent as unknown as GitAgentPrivate).checkAndTriggerPR('epic-1');
 
     expect(gitService.createIssue).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -256,7 +196,7 @@ describe('GitAgent', () => {
       { issueNumber: 2, labels: ['type:commit'], column: 'In Progress' },
     ]);
 
-    await (agent as any).checkAndTriggerPR('epic-1');
+    await (agent as unknown as GitAgentPrivate).checkAndTriggerPR('epic-1');
 
     expect(gitService.createIssue).not.toHaveBeenCalled();
   });
@@ -268,7 +208,7 @@ describe('GitAgent', () => {
       { issueNumber: 3, labels: ['type:pr'], column: 'In Progress' },
     ]);
 
-    await (agent as any).checkAndTriggerPR('epic-1');
+    await (agent as unknown as GitAgentPrivate).checkAndTriggerPR('epic-1');
 
     expect(gitService.createIssue).not.toHaveBeenCalled();
   });

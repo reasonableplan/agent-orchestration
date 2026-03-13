@@ -51,6 +51,7 @@ export class OrphanCleaner {
   private scheduleNext(): void {
     if (!this.running) return;
     this.timer = setTimeout(async () => {
+      this.timer = null;
       try {
         await this.cleanup();
       } catch (e) {

@@ -31,13 +31,18 @@ export class Dispatcher {
       labels: string[];
     };
 
+    if (!payload.toColumn) {
+      log.warn({ msgId: msg.id }, 'board.move missing toColumn');
+      return;
+    }
+
     // Task가 Done으로 이동했을 때, 후속 Task의 의존성을 확인하고 Ready로 승인
     if (payload.toColumn === 'Done') {
       await this.checkAndPromoteDependents(payload.issueNumber);
     }
 
-    // 새 이슈가 Backlog에 도착했을 때 (에이전트가 만든 후속 이슈)
-    if (payload.toColumn === 'Backlog' && payload.fromColumn === '') {
+    // 새 이슈가 Backlog에 도착했을 때 (에이전트가 만든 후속 이슈 또는 Failed에서 복귀)
+    if (payload.toColumn === 'Backlog') {
       await this.reviewBacklogIssue(payload);
     }
   }
@@ -122,8 +127,10 @@ Respond with JSON: {"approved": true|false, "reason": "brief explanation"}`,
     const taskId = `task-gh-${issueNumber}`;
     const task = await this.stateStore.getTask(taskId);
     if (task) {
-      await this.stateStore.updateTask(taskId, { status: 'ready', boardColumn: 'Ready' });
+      // Board FIRST
       await this.gitService.moveIssueToColumn(issueNumber, 'Ready');
+      // Then DB
+      await this.stateStore.updateTask(taskId, { status: 'ready', boardColumn: 'Ready', assignedAgent: task.assignedAgent });
       log.info({ issueNumber, title, reason }, 'Backlog issue approved → Ready');
     } else {
       log.warn({ issueNumber, taskId }, 'Task not found in DB, skipping Board move');

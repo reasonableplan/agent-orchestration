@@ -5,7 +5,6 @@ import CharacterOverlay from './CharacterOverlay';
 import { CANVAS_W, CANVAS_H } from '@/engine/sprite-config';
 
 export default function OfficeScene() {
-  const selectedAgent = useOfficeStore((s) => s.selectedAgent);
   const selectAgent = useOfficeStore((s) => s.selectAgent);
 
   // Track the actual rendered size of the canvas for overlay scaling

@@ -49,7 +49,7 @@ export function loadConfig(opts: { requireAll?: boolean } = {}): AppConfig {
 
   const requireAll = opts.requireAll ?? true;
   const env = (key: string, fallback?: string): string => {
-    if (requireAll && !fallback) return requiredEnv(key);
+    if (requireAll) return requiredEnv(key);
     return process.env[key] ?? fallback ?? '';
   };
 
@@ -73,8 +73,8 @@ export function loadConfig(opts: { requireAll?: boolean } = {}): AppConfig {
     },
     dashboard: {
       port: Number(process.env.DASHBOARD_PORT) || 3001,
-      corsOrigins: process.env.CORS_ALLOWED_ORIGINS
-        ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+      corsOrigins: process.env.CORS_ORIGINS
+        ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
         : ['http://localhost:3000', 'http://localhost:5173'],
     },
     logging: {

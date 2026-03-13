@@ -27,8 +27,7 @@ describe('StateStore', () => {
 
   beforeEach(() => {
     mockDb = createMockDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    store = new StateStore(mockDb as any);
+    store = new StateStore(mockDb as unknown as ConstructorParameters<typeof StateStore>[0]);
   });
 
   describe('Agent operations', () => {
@@ -92,6 +91,8 @@ describe('StateStore', () => {
     });
 
     it('updateTask calls update with partial', async () => {
+      // Seed the select used for status transition validation
+      mockDb._chain.where.mockResolvedValueOnce([{ status: 'in-progress' }]);
       await store.updateTask('task-001', { status: 'done', boardColumn: 'Done' });
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockDb._chain.set).toHaveBeenCalledWith(
@@ -228,7 +229,7 @@ describe('StateStore', () => {
       // getAllHooks doesn't use where, mock the select chain
       mockDb.select.mockReturnValueOnce({
         from: vi.fn().mockResolvedValueOnce(hookData),
-      } as any);
+      } as unknown as ReturnType<typeof mockDb.select>);
       const result = await store.getAllHooks();
       expect(result).toEqual(hookData);
     });

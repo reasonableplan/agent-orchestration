@@ -92,6 +92,7 @@ export class BoardWatcher {
           resolve();
         }, { once: true });
       });
+      if (!this.running) break;
     }
   }
 
@@ -234,8 +235,9 @@ export class BoardWatcher {
       const dbPriority = STATUS_PRIORITY[dbStatus] ?? 0;
       const boardPriority = STATUS_PRIORITY[boardStatus] ?? 0;
 
-      // Board가 DB보다 앞선(더 진행된) 상태일 때만 업데이트 (같으면 스킵 — 불필요한 write 방지)
-      if (boardPriority > dbPriority) {
+      // failed/done은 항상 동기화, 그 외는 Board가 DB보다 앞선 상태일 때만 업데이트
+      const ALWAYS_SYNC = new Set(['failed', 'done']);
+      if (ALWAYS_SYNC.has(boardStatus) || boardPriority > dbPriority) {
         await this.stateStore.updateTask(taskId, {
           boardColumn: issue.column,
           status: boardStatus,

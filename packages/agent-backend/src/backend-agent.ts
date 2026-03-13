@@ -35,6 +35,7 @@ export class BackendAgent extends BaseAgent {
       temperature: 0.2,
       tokenBudget: 100_000,
       taskTimeoutMs: 10 * 60 * 1000, // 10분 (코드 생성은 시간이 걸림)
+      pollIntervalMs: 10_000,
     };
     super(config, deps);
 

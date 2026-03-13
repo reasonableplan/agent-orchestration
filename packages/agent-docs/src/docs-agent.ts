@@ -34,6 +34,7 @@ export class DocsAgent extends BaseAgent {
       temperature: 0.3,
       tokenBudget: 100_000,
       taskTimeoutMs: 10 * 60 * 1000,
+      pollIntervalMs: 10_000,
     };
     super(config, deps);
 

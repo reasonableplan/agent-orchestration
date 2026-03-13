@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOfficeStore } from '@/stores/office-store';
 
@@ -33,9 +33,11 @@ export default function AgentSettingsModal() {
 
   const [form, setForm] = useState<ConfigForm>(DEFAULTS);
   const [saving, setSaving] = useState(false);
+  const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
     if (!agentId) return;
+    initialLoadDoneRef.current = false;
     setForm(DEFAULTS); // Reset immediately to prevent stale form from previous agent
 
     let cancelled = false;
@@ -57,9 +59,11 @@ export default function AgentSettingsModal() {
             pollIntervalMs: data.config.pollIntervalMs ?? DEFAULTS.pollIntervalMs,
           });
         }
+        initialLoadDoneRef.current = true;
       })
       .catch(() => {
-        if (!cancelled) setForm(DEFAULTS);
+        // Only reset to DEFAULTS if user hasn't already received and started editing data
+        if (!cancelled && !initialLoadDoneRef.current) setForm(DEFAULTS);
       });
     return () => { cancelled = true; };
   }, [agentId]);
