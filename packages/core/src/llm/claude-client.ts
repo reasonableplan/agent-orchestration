@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createLogger } from '../logging/logger.js';
 import { TokenBudgetError, RateLimitError, AuthError, NetworkError } from '../errors.js';
+import { extractJSON } from './json-extract.js';
 
 const log = createLogger('ClaudeClient');
 
@@ -101,7 +102,7 @@ export class ClaudeClient implements IClaudeClient {
       userMessage,
     );
 
-    const jsonStr = ClaudeClient.extractJSON(response.content);
+    const jsonStr = extractJSON(response.content);
     let data: T;
     try {
       data = JSON.parse(jsonStr) as T;
@@ -110,58 +111,6 @@ export class ClaudeClient implements IClaudeClient {
       throw new Error(`Failed to parse Claude JSON response: ${(err as Error).message}\nResponse preview: ${preview}`, { cause: err });
     }
     return { data, usage: response.usage };
-  }
-
-  static extractJSON(text: string): string {
-    const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    if (codeBlockMatch) return codeBlockMatch[1]!.trim();
-
-    const firstBrace = text.indexOf('{');
-    const firstBracket = text.indexOf('[');
-
-    const startIdx =
-      firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)
-        ? firstBracket
-        : firstBrace;
-
-    if (startIdx !== -1) {
-      const extracted = ClaudeClient.extractBalancedJSON(text, startIdx);
-      if (extracted) return extracted;
-    }
-
-    return text.trim();
-  }
-
-  private static extractBalancedJSON(text: string, start: number): string | null {
-    const open = text[start];
-    const close = open === '{' ? '}' : ']';
-    let depth = 0;
-    let inString = false;
-    let escape = false;
-
-    for (let i = start; i < text.length; i++) {
-      const ch = text[i];
-      if (escape) {
-        escape = false;
-        continue;
-      }
-      if (ch === '\\' && inString) {
-        escape = true;
-        continue;
-      }
-      if (ch === '"') {
-        inString = !inString;
-        continue;
-      }
-      if (inString) continue;
-      if (ch === open) depth++;
-      else if (ch === close) {
-        depth--;
-        if (depth === 0) return text.slice(start, i + 1);
-      }
-    }
-
-    return null;
   }
 
   private async withRetry<T>(fn: () => Promise<T>): Promise<T> {

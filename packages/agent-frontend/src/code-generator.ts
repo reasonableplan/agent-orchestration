@@ -1,27 +1,7 @@
-import { BaseCodeGenerator } from '@agent/core';
+import { BaseCodeGenerator, getPromptLoader } from '@agent/core';
 import type { FrontendTaskType } from './task-router.js';
 
-/**
- * Claude API를 사용하여 프론트엔드 코드를 생성하는 엔진.
- * 각 task type에 맞는 시스템 프롬프트를 제공한다.
- */
-export class CodeGenerator extends BaseCodeGenerator<FrontendTaskType> {
-  constructor(claude: ConstructorParameters<typeof BaseCodeGenerator>[0], workDir?: string) {
-    super(claude, workDir, 'FrontendCodeGen');
-  }
-
-  protected buildSystemPrompt(taskType: FrontendTaskType): string {
-    const base = `You are a frontend code generator for a React/TypeScript project.
-Generate production-quality code following these conventions:
-- React 18+ with functional components and hooks
-- TypeScript strict mode
-- Tailwind CSS for styling
-- Zustand for state management
-- Named exports (not default exports)
-- Props interface defined above component
-- File naming: PascalCase for components, camelCase for hooks/utils
-- Vitest + Testing Library for tests
-
+const OUTPUT_FORMAT = `
 IMPORTANT: Respond with valid JSON only. No markdown, no explanation.
 {
   "files": [
@@ -34,6 +14,21 @@ IMPORTANT: Respond with valid JSON only. No markdown, no explanation.
   ],
   "summary": "Brief description of what was generated"
 }`;
+
+/**
+ * Claude API를 사용하여 프론트엔드 코드를 생성하는 엔진.
+ * prompts/frontend.md + shared/* 프롬프트를 로드하여 시스템 프롬프트로 사용.
+ */
+export class CodeGenerator extends BaseCodeGenerator<FrontendTaskType> {
+  private agentPrompt: string;
+
+  constructor(claude: ConstructorParameters<typeof BaseCodeGenerator>[0], workDir?: string) {
+    super(claude, workDir, 'FrontendCodeGen');
+    this.agentPrompt = getPromptLoader().loadAgentPrompt('frontend');
+  }
+
+  protected buildSystemPrompt(taskType: FrontendTaskType): string {
+    const base = this.agentPrompt + '\n\n' + OUTPUT_FORMAT;
 
     const typeSpecific: Record<string, string> = {
       'component.create': `\n\nGenerate a React component with:

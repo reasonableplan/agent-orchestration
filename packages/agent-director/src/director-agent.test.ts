@@ -136,8 +136,9 @@ describe('DirectorAgent', () => {
     agent = new DirectorAgent(deps, { claudeClient: mockClaude });
 
     const result = await agent.handleUserInput('뭔가 해줘');
+    // 보안: 내부 에러 메시지가 사용자에게 노출되지 않아야 함
     expect(result).toContain('Error processing request');
-    expect(result).toContain('API rate limit exceeded');
+    expect(result).not.toContain('API rate limit exceeded');
   });
 
   it('handles JSON parse failure gracefully', async () => {
@@ -145,8 +146,9 @@ describe('DirectorAgent', () => {
     agent = new DirectorAgent(deps, { claudeClient: mockClaude });
 
     const result = await agent.handleUserInput('뭔가 해줘');
+    // 보안: 내부 에러 메시지가 사용자에게 노출되지 않아야 함
     expect(result).toContain('Error processing request');
-    expect(result).toContain('Unexpected token');
+    expect(result).not.toContain('Unexpected token');
   });
 
   // ===== Dependency Promotion (Dispatcher) =====
@@ -259,7 +261,7 @@ describe('DirectorAgent', () => {
 
     // Claude review가 호출되었는지 확인
     expect(reviewClaude.chatJSON).toHaveBeenCalledWith(
-      expect.stringContaining('code reviewer'),
+      expect.stringContaining('Director'),
       expect.stringContaining('API endpoint'),
     );
     // 승인 시 Done으로 이동 + reviewNote 클리어 + 의존성 체인 트리거

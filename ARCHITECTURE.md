@@ -34,7 +34,10 @@ graph TB
             BoardWatcher["BoardWatcher"]
         end
         subgraph LLM["llm/"]
-            ClaudeClient["ClaudeClient"]
+            ClaudeClient["ClaudeClient<br/>(Anthropic API)"]
+            CliClient["ClaudeCliClient<br/>(Claude Code CLI)"]
+            LocalClient["LocalModelClient<br/>(OpenAI-compat)"]
+            PromptLoader["PromptLoader"]
             CommitReq["CommitRequester"]
             BaseCodeGen["BaseCodeGenerator"]
         end
@@ -94,6 +97,9 @@ graph TB
     %% External connections
     GitFacade -->|"REST + GraphQL"| GH
     ClaudeClient -->|"API"| Claude
+    CliClient -->|"subprocess"| Claude
+    LocalClient -->|"fetch"| LocalLLM["Local/Cloud LLM<br/>(Ollama, HuggingFace 등)"]
+    PromptLoader -->|"fs.readFile"| Prompts["prompts/<br/>(shared + agent)"]
     DB -->|"pg driver"| PG
     BoardWatcher -->|"GraphQL poll"| GH
 
@@ -308,3 +314,62 @@ sequenceDiagram
 | Agent → DB | 태스크 읽기 | StateStore (`getReadyTasksForAgent`) |
 | Agent ↔ Agent | 브로드캐스트 | MessageBus (`board.move`, `agent.status` 등) |
 | Server → Client | 실시간 UI | WebSocket (DashboardEvent) |
+
+## LLM 백엔드 아키텍처
+
+3가지 LLM 백엔드를 지원하며, `createClaudeClient()` 팩토리가 설정에 따라 적절한 클라이언트를 생성한다.
+
+```mermaid
+graph LR
+    Factory["createClaudeClient()<br/>(agent-factories.ts)"]
+
+    subgraph Backends["IClaudeClient 구현체"]
+        API["ClaudeClient<br/>Anthropic API"]
+        CLI["ClaudeCliClient<br/>Claude Code CLI"]
+        Local["LocalModelClient<br/>OpenAI-compat API"]
+    end
+
+    subgraph Targets["LLM 서비스"]
+        Anthropic["Anthropic API"]
+        ClaudeCLI["Claude Code<br/>(Max 구독)"]
+        Ollama["Ollama / LM Studio"]
+        HF["HuggingFace<br/>Inference API"]
+        OR["OpenRouter"]
+    end
+
+    Factory -->|"localModel.enabled"| Local
+    Factory -->|"claude.useCli"| CLI
+    Factory -->|"기본"| API
+
+    API --> Anthropic
+    CLI --> ClaudeCLI
+    Local --> Ollama & HF & OR
+```
+
+### 우선순위
+
+| 순위 | 조건 | 클라이언트 | 환경변수 |
+|------|------|-----------|----------|
+| 1 | `USE_LOCAL_MODEL=true` | `LocalModelClient` | `LOCAL_MODEL_BASE_URL`, `LOCAL_MODEL_NAME`, `LOCAL_MODEL_API_KEY` |
+| 2 | `USE_CLAUDE_CLI=true` | `ClaudeCliClient` | — (Claude Code 설치 필요) |
+| 3 | 기본 | `ClaudeClient` | `ANTHROPIC_API_KEY` |
+
+### 프롬프트 시스템
+
+```mermaid
+graph TB
+    PL["PromptLoader<br/>(싱글톤)"]
+    Shared["prompts/shared/<br/>code-style.md<br/>review-criteria.md"]
+    Agent["prompts/&lt;agent&gt;/<br/>system.md<br/>task-analysis.md"]
+
+    PL -->|"loadAgentPrompt()"| Combined["shared + agent-specific<br/>프롬프트 결합"]
+    PL --> Shared
+    PL --> Agent
+
+    Combined --> ClaudeClient & ClaudeCliClient & LocalModelClient
+```
+
+- **`prompts/shared/`** — 모든 에이전트가 공유하는 코딩 스타일, 리뷰 기준
+- **`prompts/<agent>/`** — 에이전트별 시스템 프롬프트, 태스크 분석 지침
+- **경로 순회 방어** — `resolve()` + `startsWith()` 검증
+- **캐싱** — 파일당 1회 읽기, `clearCache()`로 초기화

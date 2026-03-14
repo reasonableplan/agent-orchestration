@@ -1,15 +1,7 @@
-import { BaseCodeGenerator } from '@agent/core';
+import { BaseCodeGenerator, getPromptLoader } from '@agent/core';
 import type { DocsTaskType } from './task-router.js';
 
-const BASE_SYSTEM_PROMPT = `You are a technical documentation generator for a TypeScript project.
-Generate production-quality documentation following these conventions:
-- Markdown formatting with proper headers, tables, and code blocks
-- Clear, concise, and scannable content
-- Korean or English as appropriate (match the request language)
-- Practical examples with code snippets
-- Keep a Changelog format for changelogs
-- Tables for structured data (API params, env vars, error codes)
-
+const OUTPUT_FORMAT = `
 IMPORTANT: Respond with valid JSON only. No markdown wrapping, no explanation.
 {
   "files": [
@@ -108,16 +100,20 @@ Use action "update" for modified files.`,
 
 /**
  * Claude API를 사용하여 문서를 생성하는 엔진.
- * 각 task type에 맞는 시스템 프롬프트를 제공한다.
+ * prompts/docs.md + shared/* 프롬프트를 로드하여 시스템 프롬프트로 사용.
  */
 export class DocGenerator extends BaseCodeGenerator<DocsTaskType> {
+  private agentPrompt: string;
+
   constructor(claude: ConstructorParameters<typeof BaseCodeGenerator>[0], workDir?: string) {
     super(claude, workDir, 'DocGenerator', {
       isModifyType: (t) => t.includes('update') || t === 'jsdoc.add',
     });
+    this.agentPrompt = getPromptLoader().loadAgentPrompt('docs');
   }
 
   protected buildSystemPrompt(taskType: DocsTaskType): string {
-    return BASE_SYSTEM_PROMPT + (TYPE_SPECIFIC_PROMPTS[taskType] ?? '');
+    const base = this.agentPrompt + '\n\n' + OUTPUT_FORMAT;
+    return base + (TYPE_SPECIFIC_PROMPTS[taskType] ?? '');
   }
 }

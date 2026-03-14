@@ -1,28 +1,7 @@
-import { BaseCodeGenerator } from '@agent/core';
+import { BaseCodeGenerator, getPromptLoader } from '@agent/core';
 import type { BackendTaskType } from './task-router.js';
 
-/**
- * Claude API를 사용하여 백엔드 코드를 생성하는 엔진.
- * 각 task type에 맞는 시스템 프롬프트를 제공한다.
- */
-export class CodeGenerator extends BaseCodeGenerator<BackendTaskType> {
-  constructor(claude: ConstructorParameters<typeof BaseCodeGenerator>[0], workDir?: string) {
-    super(claude, workDir, 'CodeGenerator', {
-      maxFileReadChars: 8_000,
-      maxTotalReadChars: 30_000,
-      isModifyType: (t) => t === 'api.modify' || t === 'model.modify',
-    });
-  }
-
-  protected buildSystemPrompt(taskType: BackendTaskType): string {
-    const base = `You are a backend code generator for a Node.js/Express/TypeScript project.
-Generate production-quality code following these conventions:
-- Express with TypeScript
-- Zod for request/response validation
-- Drizzle ORM for database access
-- Error handling with typed error classes
-- ESM imports (.js extensions in import paths)
-
+const OUTPUT_FORMAT = `
 IMPORTANT: Respond with valid JSON only. No markdown, no explanation.
 {
   "files": [
@@ -35,6 +14,25 @@ IMPORTANT: Respond with valid JSON only. No markdown, no explanation.
   ],
   "summary": "Brief description of what was generated"
 }`;
+
+/**
+ * Claude API를 사용하여 백엔드 코드를 생성하는 엔진.
+ * prompts/backend.md + shared/* 프롬프트를 로드하여 시스템 프롬프트로 사용.
+ */
+export class CodeGenerator extends BaseCodeGenerator<BackendTaskType> {
+  private agentPrompt: string;
+
+  constructor(claude: ConstructorParameters<typeof BaseCodeGenerator>[0], workDir?: string) {
+    super(claude, workDir, 'CodeGenerator', {
+      maxFileReadChars: 8_000,
+      maxTotalReadChars: 30_000,
+      isModifyType: (t) => t === 'api.modify' || t === 'model.modify',
+    });
+    this.agentPrompt = getPromptLoader().loadAgentPrompt('backend');
+  }
+
+  protected buildSystemPrompt(taskType: BackendTaskType): string {
+    const base = this.agentPrompt + '\n\n' + OUTPUT_FORMAT;
 
     const typeSpecific: Record<string, string> = {
       'api.create': `\n\nGenerate a complete API endpoint with:

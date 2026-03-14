@@ -26,7 +26,8 @@ function createMockConfig() {
   return {
     database: { url: 'postgres://localhost/test' },
     github: { token: 'ghp_test', owner: 'test-owner', repo: 'test-repo' },
-    claude: { apiKey: 'sk-ant-test' },
+    claude: { apiKey: 'sk-ant-test', useCli: false },
+    localModel: { enabled: false, baseUrl: 'http://localhost:11434/v1', model: 'llama3.1' },
     workspace: { workDir: '/tmp/test-workspace' },
     dashboard: { port: 3001, corsOrigins: ['http://localhost:3000'] },
     logging: { level: 'info', isProduction: false },

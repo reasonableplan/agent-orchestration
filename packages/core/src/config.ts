@@ -16,6 +16,18 @@ export interface AppConfig {
   };
   claude: {
     apiKey: string;
+    /** true이면 Claude Code CLI를 LLM 백엔드로 사용 (Max 구독용, API 크레딧 불필요) */
+    useCli: boolean;
+  };
+  localModel: {
+    /** true이면 OpenAI 호환 모델을 LLM 백엔드로 사용 (Ollama, LM Studio, vLLM, HuggingFace, OpenRouter 등) */
+    enabled: boolean;
+    /** OpenAI 호환 API base URL (예: http://localhost:11434/v1) */
+    baseUrl: string;
+    /** 모델 이름 (예: llama3.1, codellama, deepseek-coder) */
+    model: string;
+    /** API 키. 로컬 모델은 불필요, HuggingFace/OpenRouter 등 클라우드 서비스는 필수. */
+    apiKey?: string;
   };
   workspace: {
     workDir: string;
@@ -82,8 +94,24 @@ export function loadConfig(opts: { requireAll?: boolean } = {}): AppConfig {
         ? optionalEnvNumber('GITHUB_PROJECT_NUMBER', 0)
         : undefined,
     },
-    claude: {
-      apiKey: env('ANTHROPIC_API_KEY'),
+    claude: (() => {
+      const localEnabled = process.env.USE_LOCAL_MODEL === 'true';
+      const useCli = !localEnabled && (process.env.USE_CLAUDE_CLI === 'true' || !process.env.ANTHROPIC_API_KEY);
+      const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
+      // API 모드인데 apiKey가 없으면 설정 오류 (CLI/로컬 모델 사용 안 하는 경우)
+      if (!useCli && !localEnabled && !apiKey) {
+        throw new ConfigError(
+          'ANTHROPIC_API_KEY is required when USE_CLAUDE_CLI and USE_LOCAL_MODEL are not enabled.\n'
+          + 'Set ANTHROPIC_API_KEY, USE_CLAUDE_CLI=true, or USE_LOCAL_MODEL=true.',
+        );
+      }
+      return { apiKey, useCli };
+    })(),
+    localModel: {
+      enabled: process.env.USE_LOCAL_MODEL === 'true',
+      baseUrl: process.env.LOCAL_MODEL_BASE_URL ?? 'http://localhost:11434/v1',
+      model: process.env.LOCAL_MODEL_NAME ?? 'llama3.1',
+      apiKey: process.env.LOCAL_MODEL_API_KEY || undefined,
     },
     workspace: {
       workDir: process.env.GIT_WORK_DIR ?? './workspace',
