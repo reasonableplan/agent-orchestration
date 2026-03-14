@@ -196,7 +196,7 @@ describe('FrontendAgent', () => {
 
     // Claude called with frontend-specific system prompt
     expect(mockClaude.chatJSON).toHaveBeenCalledWith(
-      expect.stringContaining('frontend code generator'),
+      expect.stringContaining('Frontend Agent'),
       expect.stringContaining('Create LoginForm component'),
     );
 

@@ -128,7 +128,7 @@ describe('BackendAgent', () => {
 
     // Claude called
     expect(mockClaude.chatJSON).toHaveBeenCalledWith(
-      expect.stringContaining('backend code generator'),
+      expect.stringContaining('Backend Agent'),
       expect.stringContaining('Create user API endpoint'),
     );
 

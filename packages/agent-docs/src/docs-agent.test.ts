@@ -221,7 +221,7 @@ describe('DocsAgent', () => {
 
     // Claude called with docs-specific system prompt
     expect(mockClaude.chatJSON).toHaveBeenCalledWith(
-      expect.stringContaining('documentation generator'),
+      expect.stringContaining('Docs Agent'),
       expect.stringContaining('Generate README.md'),
     );
 

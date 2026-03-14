@@ -119,12 +119,9 @@ export function createMockGitService(
 }
 
 // ===== IClaudeClient Mock =====
-// 실제 인터페이스: core/llm/claude-client.ts의 IClaudeClient를 준수
-
-export interface IClaudeClient {
-  chat(systemPrompt: string, userMessage: string): Promise<{ content: string; usage: { inputTokens: number; outputTokens: number } }>;
-  chatJSON<T = unknown>(systemPrompt: string, userMessage: string): Promise<{ data: T; usage: { inputTokens: number; outputTokens: number } }>;
-}
+// 실제 인터페이스: core/llm/claude-client.ts의 IClaudeClient를 import
+import type { IClaudeClient } from '../llm/claude-client.js';
+export type { IClaudeClient };
 
 export function createMockClaude(
   response: unknown,
