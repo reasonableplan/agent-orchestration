@@ -10,4 +10,8 @@ docs/
 CLAUDE.md
 .claude/
 .omc/
-*.zip
+*.zip__pycache__/
+*.pyc
+*.pyo
+.venv/
+backend/.venv/
