@@ -15,3 +15,5 @@ CLAUDE.md
 *.pyo
 .venv/
 backend/.venv/
+*.zip
+*.png
