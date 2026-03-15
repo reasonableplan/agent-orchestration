@@ -16,7 +16,7 @@ from starlette.responses import Response
 
 from src.dashboard.auth import make_auth_checker
 from src.dashboard.event_mapper import EventMapper
-from src.dashboard.routes import agents, hooks, stats, tasks
+from src.dashboard.routes import agents, command, hooks, stats, tasks
 from src.dashboard.websocket_manager import WebSocketManager
 
 _ws_manager: WebSocketManager | None = None
@@ -72,6 +72,7 @@ def create_app(
     app.include_router(tasks.router, dependencies=[Depends(auth_check)])
     app.include_router(hooks.router, dependencies=[Depends(auth_check)])
     app.include_router(stats.router, dependencies=[Depends(auth_check)])
+    app.include_router(command.router, dependencies=[Depends(auth_check)])
 
     # WebSocket
     global _ws_manager

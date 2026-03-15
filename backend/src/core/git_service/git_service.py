@@ -33,6 +33,7 @@ class GitService:
         self._status_field_id: str = ""
         self._status_options: dict[str, str] = {}  # column_name → option_id
         self._item_id_cache: dict[int, str] = {}   # issue_number → project item ID
+        self._owner_gql_type: str = "user"         # "user" or "organization" — detected at startup
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -77,9 +78,20 @@ class GitService:
         except Exception as e:
             raise GitServiceError("GraphQL", cause=e) from e
 
+    def _project_owner_field(self) -> str:
+        """GraphQL 쿼리에서 owner 타입 필드명을 반환한다 (user 또는 organization)."""
+        return self._owner_gql_type
+
+    def _extract_project(self, data: dict) -> dict:
+        """GraphQL 응답에서 projectV2 데이터를 추출한다."""
+        owner_data = data.get("data", {}).get(self._owner_gql_type, {})
+        return owner_data.get("projectV2", {}) if owner_data else {}
+
     async def validate_connection(self) -> None:
+        user_data = await self._rest("GET", f"/users/{self._owner}")
+        self._owner_gql_type = "organization" if user_data.get("type") == "Organization" else "user"
         await self._rest("GET", f"/repos/{self._owner}/{self._repo}")
-        log.info("GitHub connection validated", owner=self._owner, repo=self._repo)
+        log.info("GitHub connection validated", owner=self._owner, repo=self._repo, owner_type=self._owner_gql_type)
 
     # ===== Issues =====
 
@@ -134,33 +146,34 @@ class GitService:
     async def get_all_project_items(self) -> list[BoardIssue]:
         if not self._project_number:
             return []
-        query = """
-        query($owner: String!, $number: Int!, $cursor: String) {
-          organization(login: $owner) {
-            projectV2(number: $number) {
-              items(first: 100, after: $cursor) {
-                nodes {
+        owner_type = self._project_owner_field()
+        query = f"""
+        query($owner: String!, $number: Int!, $cursor: String) {{
+          {owner_type}(login: $owner) {{
+            projectV2(number: $number) {{
+              items(first: 100, after: $cursor) {{
+                nodes {{
                   id
-                  fieldValues(first: 10) {
-                    nodes {
-                      ... on ProjectV2ItemFieldSingleSelectValue {
+                  fieldValues(first: 10) {{
+                    nodes {{
+                      ... on ProjectV2ItemFieldSingleSelectValue {{
                         name
-                        field { ... on ProjectV2FieldCommon { name } }
-                      }
-                    }
-                  }
-                  content {
-                    ... on Issue {
-                      number title body labels(first: 10) { nodes { name } }
-                      assignees(first: 1) { nodes { login } }
-                    }
-                  }
-                }
-                pageInfo { hasNextPage endCursor }
-              }
-            }
-          }
-        }
+                        field {{ ... on ProjectV2FieldCommon {{ name }} }}
+                      }}
+                    }}
+                  }}
+                  content {{
+                    ... on Issue {{
+                      number title body labels(first: 10) {{ nodes {{ name }} }}
+                      assignees(first: 1) {{ nodes {{ login }} }}
+                    }}
+                  }}
+                }}
+                pageInfo {{ hasNextPage endCursor }}
+              }}
+            }}
+          }}
+        }}
         """
         items: list[BoardIssue] = []
         cursor = None
@@ -168,11 +181,7 @@ class GitService:
             data = await self._graphql(query, {
                 "owner": self._owner, "number": self._project_number, "cursor": cursor
             })
-            project = (
-                data.get("data", {})
-                .get("organization", {})
-                .get("projectV2", {})
-            )
+            project = self._extract_project(data)
             if not project:
                 break
             page = project["items"]
@@ -243,32 +252,29 @@ class GitService:
         if self._status_field_id:
             return
 
+        owner_type = self._project_owner_field()
         data = await self._graphql(
-            """
-            query($owner: String!, $number: Int!) {
-              organization(login: $owner) {
-                projectV2(number: $number) {
+            f"""
+            query($owner: String!, $number: Int!) {{
+              {owner_type}(login: $owner) {{
+                projectV2(number: $number) {{
                   id
-                  fields(first: 20) {
-                    nodes {
-                      ... on ProjectV2SingleSelectField {
+                  fields(first: 20) {{
+                    nodes {{
+                      ... on ProjectV2SingleSelectField {{
                         id
                         name
-                        options { id name }
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                        options {{ id name }}
+                      }}
+                    }}
+                  }}
+                }}
+              }}
+            }}
             """,
             {"owner": self._owner, "number": self._project_number},
         )
-        project = (
-            data.get("data", {})
-            .get("organization", {})
-            .get("projectV2", {})
-        )
+        project = self._extract_project(data)
         self._project_id = project.get("id", "")
         for field in project.get("fields", {}).get("nodes", []):
             if field.get("name", "").lower() == "status":

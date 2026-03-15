@@ -1,6 +1,7 @@
 """Director Agent (Level 0) — 사용자 입력을 에픽/태스크로 변환하고 리뷰를 처리."""
 from __future__ import annotations
 
+import re
 import uuid
 import xml.sax.saxutils as saxutils
 from datetime import datetime, timezone
@@ -22,6 +23,32 @@ from src.core.types import (
 )
 
 log = get_logger("DirectorAgent")
+
+_VALID_AGENTS = {"director", "agent-git", "agent-backend", "agent-frontend", "agent-docs"}
+_AGENT_KEYWORDS: dict[str, str] = {
+    "git": "agent-git",
+    "backend": "agent-backend",
+    "frontend": "agent-frontend",
+    "docs": "agent-docs",
+    "documentation": "agent-docs",
+    "api": "agent-backend",
+    "database": "agent-backend",
+    "ui": "agent-frontend",
+    "ux": "agent-frontend",
+}
+
+
+def _resolve_agent_id(raw: str) -> str | None:
+    """LLM이 반환한 에이전트 이름을 실제 에이전트 ID로 변환한다."""
+    if not raw:
+        return None
+    normalized = raw.strip().lower()
+    if normalized in _VALID_AGENTS:
+        return normalized
+    for keyword, agent_id in _AGENT_KEYWORDS.items():
+        if keyword in normalized:
+            return agent_id
+    return None  # unassigned
 
 
 class DirectorAgent(BaseAgent):
@@ -68,10 +95,14 @@ class DirectorAgent(BaseAgent):
             max_tokens=10,
             temperature=0.0,
         )
-        result = text.strip().lower()
-        if result not in {"create_epic", "status_query", "clarify"}:
-            return "clarify"
-        return result
+        # 응답이 길거나 마크다운을 포함해도 키워드 추출
+        lower = text.strip().lower()
+        log.info("Classification raw response", text=repr(text[:100]))
+        if "create_epic" in lower:
+            return "create_epic"
+        if "status_query" in lower:
+            return "status_query"
+        return "clarify"
 
     async def _create_epic(self, content: str) -> None:
         prompt = (
@@ -103,16 +134,25 @@ class DirectorAgent(BaseAgent):
                     labels=["agent-task"],
                 )
             )
+            _PRIORITY_MAP = {"critical": 0, "high": 1, "medium": 3, "low": 5}
+            raw_priority = task_spec.get("priority", 3)
+            priority = (
+                _PRIORITY_MAP.get(str(raw_priority).lower(), 3)
+                if isinstance(raw_priority, str)
+                else int(raw_priority)
+            )
+            raw_agent = task_spec.get("agent") or ""
+            assigned = _resolve_agent_id(raw_agent)
             await self._state_store.create_task({
                 "id": task_id,
                 "epic_id": epic_id,
                 "title": task_spec.get("title", ""),
                 "description": task_spec.get("description", ""),
-                "assigned_agent": task_spec.get("agent"),
+                "assigned_agent": assigned,
                 "status": "backlog",
                 "board_column": "Backlog",
                 "github_issue_number": issue_number,
-                "priority": task_spec.get("priority", 3),
+                "priority": priority,
             })
 
         log.info("Epic created", epic_id=epic_id, task_count=len(data.get("tasks", [])))

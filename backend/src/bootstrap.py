@@ -100,7 +100,12 @@ def _create_llm_client(config: AppConfig) -> Any:
             model=config.local_model_name,
             api_key=config.local_model_api_key,
         )
+    if config.use_cli:
+        from src.core.llm.claude_cli_client import ClaudeCliClient
+        log.info("LLM backend: claude CLI subprocess")
+        return ClaudeCliClient()
     from src.core.llm.claude_client import ClaudeClient
+    log.info("LLM backend: Anthropic API")
     return ClaudeClient(api_key=config.anthropic_api_key)
 
 

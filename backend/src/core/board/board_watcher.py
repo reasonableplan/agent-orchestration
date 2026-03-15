@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.core.git_service.git_service import GitService
 from src.core.logging.logger import get_logger
@@ -104,7 +104,7 @@ class BoardWatcher:
                         "taskId": task.id,
                     },
                     trace_id=str(uuid.uuid4()),
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                 )
             )
             log.info("Board column changed", issue=issue_number, from_col=old_column, to_col=new_column)
