@@ -132,8 +132,21 @@ export function createTilesetBackgroundBuffer(cache: TilesetCache): HTMLCanvasEl
   // 2. Walls
   renderWalls(ctx, cache.roomBuilder);
 
-  // Furniture is rendered by the procedural renderer (draw-*.ts) for accuracy.
-  // Tileset furniture coordinates are unreliable — procedural code is detailed and correct.
+  // Tileset 가구 렌더링 — 타일셋 이미지가 로드된 경우에만 활성화.
+  // 타일셋이 없는 가구는 프로시저럴 렌더러(render.ts)가 오버레이로 그림.
+  const hasModernInteriors = !!cache.modernInteriors;
+  const hasKitchen = !!cache.kitchen;
+
+  if (hasModernInteriors || hasKitchen) {
+    // 3. Rugs (behind everything)
+    renderFurnitureGroup(ctx, cache, new Set(['rug']));
+
+    // 4. Wall-mounted items
+    renderFurnitureGroup(ctx, cache, WALL_MOUNTED);
+
+    // 5. Furniture behind characters
+    renderFurnitureGroup(ctx, cache, BEHIND_CHARS);
+  }
 
   return buffer;
 }
