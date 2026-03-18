@@ -22,6 +22,8 @@ log = get_logger("MemoryStore")
 
 COLLECTION_NAME = "agent_memory"
 EMBEDDING_DIM = 384  # fastembed BAAI/bge-small-en-v1.5
+MAX_MEMORY_COUNT = 10_000
+MAX_CONTENT_LENGTH = 2000
 
 
 @dataclass
@@ -65,6 +67,9 @@ class MemoryStore:
     ) -> str:
         """기억을 저장한다. 반환: memory_id."""
         await self.ensure_collection()
+
+        # 콘텐츠 크기 제한
+        content = content[:MAX_CONTENT_LENGTH]
 
         memory_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()

@@ -18,6 +18,29 @@ _IGNORE_DIRS = {
     "dist", "build", ".next", ".cache", "coverage",
 }
 
+# 민감 파일 — 인덱싱 차단
+_SENSITIVE_FILENAMES = {
+    ".env", ".env.local", ".env.production", ".env.staging",
+    "credentials.json", "serviceAccountKey.json",
+    "id_rsa", "id_ed25519", ".npmrc", ".pypirc",
+}
+
+_SENSITIVE_PATTERNS = frozenset({
+    "secret", "credential", "password", "private_key", "token",
+})
+
+_SENSITIVE_EXTENSIONS = {".pem", ".key", ".p12", ".pfx", ".jks", ".keystore"}
+
+
+def _is_sensitive(file_path: Path) -> bool:
+    """민감 파일 여부를 판단한다."""
+    name_lower = file_path.name.lower()
+    if name_lower in _SENSITIVE_FILENAMES:
+        return True
+    if file_path.suffix.lower() in _SENSITIVE_EXTENSIONS:
+        return True
+    return any(pat in name_lower for pat in _SENSITIVE_PATTERNS)
+
 # 청크 최대 크기 (토큰 근사: 1토큰 ≈ 4자)
 _MAX_CHUNK_CHARS = 2000
 _OVERLAP_CHARS = 200
@@ -67,6 +90,8 @@ def scan_workspace(work_dir: Path) -> list[CodeChunk]:
         if file_path.suffix not in _CODE_EXTENSIONS:
             continue
         if any(d in file_path.parts for d in _IGNORE_DIRS):
+            continue
+        if _is_sensitive(file_path):
             continue
 
         all_chunks.extend(chunk_file(file_path, work_dir))

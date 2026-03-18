@@ -234,14 +234,31 @@ def create_app(
 
                 elif msg_type == "task-retry":
                     payload = msg.get("payload", {})
-                    task_id = payload.get("taskId", "")
-                    if task_id:
-                        from src.dashboard.routes.deps import get_state_store
-                        store = get_state_store()
-                        await store.update_task(
-                            task_id, {"status": "ready", "board_column": "Ready"}
-                        )
-                        _log.info("Task retry requested", task_id=task_id)
+                    task_id = str(payload.get("taskId", "")).strip()
+                    if not task_id:
+                        continue
+                    from src.dashboard.routes.deps import get_state_store
+                    store = get_state_store()
+                    task_row = await store.get_task(task_id)
+                    if task_row is None:
+                        await ws.send_text('{"type":"error","message":"Task not found"}')
+                        continue
+                    if task_row.status not in ("failed", "error"):
+                        await ws.send_text('{"type":"error","message":"Only failed tasks can be retried"}')
+                        continue
+                    # Board-first: 외부(Board) 먼저 → 내부(DB) 나중
+                    if task_row.github_issue_number:
+                        try:
+                            director = get_director()
+                            await director._git_service.move_issue_to_column(
+                                task_row.github_issue_number, "Ready"
+                            )
+                        except Exception as e:
+                            _log.error("Task retry: Board move failed", task_id=task_id, err=str(e))
+                    await store.update_task(
+                        task_id, {"status": "ready", "board_column": "Ready"}
+                    )
+                    _log.info("Task retry requested", task_id=task_id)
 
                 elif msg_type == "user-input":
                     payload = msg.get("payload", {})

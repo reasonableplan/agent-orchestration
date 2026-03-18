@@ -1,6 +1,7 @@
 """대화에서 핵심 결정/사실을 추출한다."""
 from __future__ import annotations
 
+import xml.sax.saxutils as saxutils
 from typing import Any
 
 from src.core.logging.logger import get_logger
@@ -35,11 +36,11 @@ async def extract_memories(
     if not conversation:
         return {"summary": "", "decisions": [], "tech_stack": [], "user_preferences": []}
 
-    # 대화를 텍스트로 변환
+    # 대화를 텍스트로 변환 (XML escape 적용)
     lines = []
     for turn in conversation:
         role = "User" if turn["role"] == "user" else "Director"
-        lines.append(f"{role}: {turn['content']}")
+        lines.append(f"{role}: {saxutils.escape(turn['content'])}")
     conv_text = "\n".join(lines)
 
     prompt = _EXTRACT_PROMPT.format(conversation=conv_text)

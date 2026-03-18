@@ -36,7 +36,7 @@ class CodeSearchService:
         query: str,
         top_k: int = 5,
         language: str | None = None,
-        file_path_prefix: str | None = None,
+        file_path: str | None = None,
     ) -> list[SearchResult]:
         """쿼리 텍스트로 관련 코드 청크를 검색한다."""
         embeddings = list(self._embed([query]))
@@ -53,9 +53,9 @@ class CodeSearchService:
             conditions.append(
                 FieldCondition(key="language", match=MatchValue(value=language))
             )
-        if file_path_prefix:
+        if file_path:
             conditions.append(
-                FieldCondition(key="file_path", match=MatchValue(value=file_path_prefix))
+                FieldCondition(key="file_path", match=MatchValue(value=file_path))
             )
 
         search_filter = Filter(must=conditions) if conditions else None

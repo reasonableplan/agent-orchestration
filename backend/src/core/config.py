@@ -42,9 +42,6 @@ class AppConfig(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
     dashboard_auth_token: str | None = None
 
-    # Backpressure
-    max_concurrent_tasks: int = 5
-
     # Logging
     log_level: str = "info"
     app_env: str = "development"

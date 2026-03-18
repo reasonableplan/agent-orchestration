@@ -10,6 +10,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    FilterSelector,
     MatchValue,
     PointStruct,
     VectorParams,
@@ -83,15 +84,20 @@ class CodebaseIndexer:
         work_dir = work_dir.resolve()
 
         for rel_path in file_paths:
-            abs_path = work_dir / rel_path
+            abs_path = (work_dir / rel_path).resolve()
+            if not abs_path.is_relative_to(work_dir):
+                log.warning("Path traversal blocked in reindex", path=rel_path)
+                continue
             if not abs_path.exists():
                 continue
 
             # 해당 파일의 기존 청크 삭제
             self._qdrant.delete(
                 collection_name=COLLECTION_NAME,
-                points_selector=Filter(
-                    must=[FieldCondition(key="file_path", match=MatchValue(value=rel_path))]
+                points_selector=FilterSelector(
+                    filter=Filter(
+                        must=[FieldCondition(key="file_path", match=MatchValue(value=rel_path))]
+                    )
                 ),
             )
             # 기존 해시 제거

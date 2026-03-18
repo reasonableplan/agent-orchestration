@@ -64,9 +64,7 @@ class BaseCodeGeneratorAgent(BaseAgent):
                     continue
                 abs_path = self._safe_resolve(path)
                 abs_path.parent.mkdir(parents=True, exist_ok=True)
-                await asyncio.get_event_loop().run_in_executor(
-                    None, abs_path.write_text, content, "utf-8",
-                )
+                await asyncio.to_thread(abs_path.write_text, content, "utf-8")
 
                 await self._state_store.save_artifact({
                     "id": str(uuid.uuid4()),

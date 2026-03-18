@@ -48,6 +48,7 @@ class CircuitBreaker:
         return self._state
 
     async def execute(self, fn: Callable[[], Union[Awaitable[T], T]]) -> T:
+        # 상태 체크 (Lock 내부 — 빠르게 완료)
         async with self._lock:
             if self._state == CircuitState.OPEN:
                 elapsed_ms = (time.monotonic() - self._last_failure_time) * 1000
@@ -59,15 +60,19 @@ class CircuitBreaker:
                 else:
                     raise CircuitBreakerError(self.name)
 
-            try:
-                result = fn()
-                if asyncio.iscoroutine(result):
-                    result = await result
-                self._on_success()
-                return result
-            except Exception:
+        # I/O 실행 (Lock 밖 — 병렬 허용)
+        try:
+            result = fn()
+            if asyncio.iscoroutine(result):
+                result = await result
+        except Exception:
+            async with self._lock:
                 self._on_failure()
-                raise
+            raise
+
+        async with self._lock:
+            self._on_success()
+        return result
 
     def _on_success(self) -> None:
         if self._state == CircuitState.HALF_OPEN:
