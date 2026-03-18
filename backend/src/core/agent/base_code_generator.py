@@ -32,15 +32,19 @@ class BaseCodeGeneratorAgent(BaseAgent):
         llm_client: Any,
         work_dir: str = "./workspace",
         temperature: float = 0.2,
+        code_search: Any = None,
     ) -> None:
         super().__init__(config, message_bus, state_store, git_service)
         self._llm = llm_client
         self._work_dir = Path(work_dir).resolve()
         self._temperature = temperature
+        self._code_search = code_search
 
     async def execute_task(self, task: Task) -> TaskResult:
         try:
-            prompt = self._build_prompt(task)
+            # RAG: 기존 코드베이스에서 관련 코드 검색
+            context = await self._search_codebase(task)
+            prompt = self._build_prompt(task, context=context)
             data, input_tokens, output_tokens = await self._llm.chat_json(
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=MAX_TOKENS,
@@ -81,9 +85,20 @@ class BaseCodeGeneratorAgent(BaseAgent):
             self._log.error("Code generation failed", task_id=task.id, err=str(e))
             return TaskResult(success=False, error={"message": "Code generation failed"}, artifacts=[])
 
+    async def _search_codebase(self, task: Task) -> str:
+        """RAG: 태스크와 관련된 기존 코드를 검색한다."""
+        if not self._code_search:
+            return ""
+        try:
+            query = f"{task.title} {task.description or ''}"
+            return await self._code_search.search_formatted(query, top_k=5, min_score=0.3)
+        except Exception as e:
+            self._log.warning("Code search failed, proceeding without context", err=str(e))
+            return ""
+
     @abstractmethod
-    def _build_prompt(self, task: Task) -> str:
-        """에이전트별 시스템 프롬프트 생성."""
+    def _build_prompt(self, task: Task, context: str = "") -> str:
+        """에이전트별 시스템 프롬프트 생성. context는 RAG 검색 결과."""
         ...
 
     def _safe_resolve(self, rel_path: str) -> Path:

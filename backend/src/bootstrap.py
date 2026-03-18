@@ -64,8 +64,11 @@ async def bootstrap(config: AppConfig) -> SystemContext:
     # 7. OrphanCleaner
     orphan_cleaner = OrphanCleaner(state_store, git_service)
 
-    # 8. 에이전트 생성
-    agents = _create_agents(config, message_bus, state_store, git_service, llm_client)
+    # 8. RAG — 코드베이스 인덱싱
+    code_search = await _init_rag(config)
+
+    # 9. 에이전트 생성
+    agents = _create_agents(config, message_bus, state_store, git_service, llm_client, code_search)
 
     # 9. 에이전트 DB 등록
     for agent in agents:
@@ -109,12 +112,45 @@ def _create_llm_client(config: AppConfig) -> Any:
     return ClaudeClient(api_key=config.anthropic_api_key)
 
 
+async def _init_rag(config: AppConfig) -> Any:
+    """RAG 코드베이스 인덱싱을 초기화한다. 실패해도 시스템은 계속 동작한다."""
+    try:
+        from pathlib import Path
+
+        from qdrant_client import QdrantClient
+
+        from src.core.rag.indexer import CodebaseIndexer
+        from src.core.rag.search import CodeSearchService
+
+        # Qdrant in-memory (프로덕션에서는 외부 Qdrant 서버로 교체)
+        qdrant = QdrantClient(":memory:")
+
+        # fastembed 임베딩 함수
+        from fastembed import TextEmbedding
+        embed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+        embedding_fn = embed_model.embed
+
+        # 인덱싱
+        indexer = CodebaseIndexer(qdrant, embedding_fn)
+        work_dir = Path(config.git_work_dir).resolve()
+        if work_dir.exists():
+            count = await indexer.index_workspace(work_dir)
+            log.info("RAG codebase indexed", chunks=count, work_dir=str(work_dir))
+
+        # 검색 서비스 반환
+        return CodeSearchService(qdrant, embedding_fn)
+    except Exception as e:
+        log.warning("RAG initialization failed, proceeding without code search", err=str(e))
+        return None
+
+
 def _create_agents(
     config: AppConfig,
     message_bus: MessageBus,
     state_store: StateStore,
     git_service: GitService,
     llm_client: Any,
+    code_search: Any = None,
 ) -> list[Any]:
     from src.agents.backend_agent.backend_agent import BackendAgent
     from src.agents.director.director_agent import DirectorAgent
@@ -148,6 +184,7 @@ def _create_agents(
         git_service=git_service,
         llm_client=llm_client,
         work_dir=work_dir,
+        code_search=code_search,
     )
     frontend = FrontendAgent(
         config=make_config("agent-frontend", "frontend", AgentLevel.WORKER, temperature=0.2),
@@ -156,6 +193,7 @@ def _create_agents(
         git_service=git_service,
         llm_client=llm_client,
         work_dir=work_dir,
+        code_search=code_search,
     )
     docs = DocsAgent(
         config=make_config("agent-docs", "docs", AgentLevel.WORKER, temperature=0.3),
@@ -164,6 +202,7 @@ def _create_agents(
         git_service=git_service,
         llm_client=llm_client,
         work_dir=work_dir,
+        code_search=code_search,
     )
     return [director, git_agent, backend, frontend, docs]
 

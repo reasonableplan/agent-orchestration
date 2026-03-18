@@ -6,11 +6,11 @@ workspace/
 *.log
 drizzle/
 !packages/core/drizzle/
-docs/
+/docs/
 CLAUDE.md
 .claude/
 .omc/
-*.zip__pycache__/
+__pycache__/
 *.pyc
 *.pyo
 .venv/

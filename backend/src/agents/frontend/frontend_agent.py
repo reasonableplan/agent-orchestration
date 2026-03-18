@@ -6,9 +6,16 @@ from src.core.types import Task
 
 
 class FrontendAgent(BaseCodeGeneratorAgent):
-    def _build_prompt(self, task: Task) -> str:
+    def _build_prompt(self, task: Task, context: str = "") -> str:
+        ctx_section = ""
+        if context:
+            ctx_section = (
+                "\n## Existing codebase (follow these patterns and conventions)\n"
+                f"<existing_code>\n{context}\n</existing_code>\n\n"
+            )
         return (
             "You are an expert React/TypeScript frontend engineer. Generate production-quality code.\n"
             "Respond with JSON: {\"files\": [{\"path\": str, \"content\": str, \"action\": str}], \"summary\": str}\n\n"
+            f"{ctx_section}"
             f"<task>\nTitle: {task.title}\nDescription: {task.description}\n</task>"
         )
