@@ -64,11 +64,13 @@ async def bootstrap(config: AppConfig) -> SystemContext:
     # 7. OrphanCleaner
     orphan_cleaner = OrphanCleaner(state_store, git_service)
 
-    # 8. RAG — 코드베이스 인덱싱
-    code_search = await _init_rag(config)
+    # 8. RAG — 코드베이스 인덱싱 + 메모리
+    code_search, memory_store = await _init_rag(config)
 
     # 9. 에이전트 생성
-    agents = _create_agents(config, message_bus, state_store, git_service, llm_client, code_search)
+    agents = _create_agents(
+        config, message_bus, state_store, git_service, llm_client, code_search, memory_store,
+    )
 
     # 9. 에이전트 DB 등록
     for agent in agents:
@@ -112,13 +114,14 @@ def _create_llm_client(config: AppConfig) -> Any:
     return ClaudeClient(api_key=config.anthropic_api_key)
 
 
-async def _init_rag(config: AppConfig) -> Any:
-    """RAG 코드베이스 인덱싱을 초기화한다. 실패해도 시스템은 계속 동작한다."""
+async def _init_rag(config: AppConfig) -> tuple[Any, Any]:
+    """RAG + 메모리를 초기화한다. 실패해도 시스템은 계속 동작한다."""
     try:
         from pathlib import Path
 
         from qdrant_client import QdrantClient
 
+        from src.core.memory.memory_store import MemoryStore
         from src.core.rag.indexer import CodebaseIndexer
         from src.core.rag.search import CodeSearchService
 
@@ -130,18 +133,22 @@ async def _init_rag(config: AppConfig) -> Any:
         embed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
         embedding_fn = embed_model.embed
 
-        # 인덱싱
+        # 코드베이스 인덱싱
         indexer = CodebaseIndexer(qdrant, embedding_fn)
         work_dir = Path(config.git_work_dir).resolve()
         if work_dir.exists():
             count = await indexer.index_workspace(work_dir)
             log.info("RAG codebase indexed", chunks=count, work_dir=str(work_dir))
 
-        # 검색 서비스 반환
-        return CodeSearchService(qdrant, embedding_fn)
+        # 메모리 스토어 초기화
+        memory_store = MemoryStore(qdrant, embedding_fn)
+        await memory_store.ensure_collection()
+        log.info("Memory store initialized")
+
+        return CodeSearchService(qdrant, embedding_fn), memory_store
     except Exception as e:
         log.warning("RAG initialization failed, proceeding without code search", err=str(e))
-        return None
+        return None, None
 
 
 def _create_agents(
@@ -151,6 +158,7 @@ def _create_agents(
     git_service: GitService,
     llm_client: Any,
     code_search: Any = None,
+    memory_store: Any = None,
 ) -> list[Any]:
     from src.agents.backend_agent.backend_agent import BackendAgent
     from src.agents.director.director_agent import DirectorAgent
@@ -170,6 +178,7 @@ def _create_agents(
         state_store=state_store,
         git_service=git_service,
         llm_client=llm_client,
+        memory_store=memory_store,
     )
     git_agent = GitAgent(
         config=make_config("agent-git", "git", AgentLevel.WORKER),

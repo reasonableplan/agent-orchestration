@@ -70,12 +70,14 @@ class DirectorAgent(BaseAgent):
         state_store: StateStore,
         git_service: Any,
         llm_client: Any,
+        memory_store: Any = None,
     ) -> None:
         super().__init__(config, message_bus, state_store, git_service)
         self._llm = llm_client
         self._active_plan: EpicPlan | None = None
         self._conversation: list[dict[str, str]] = []
         self._plan_lock = asyncio.Lock()
+        self._memory = memory_store
 
         async def _on_review(msg: Message) -> None:
             await self._handle_review(msg)
@@ -203,8 +205,12 @@ class DirectorAgent(BaseAgent):
             include={"goal", "project", "decisions"},
         )
 
+        # 장기 기억 검색
+        memory_section = await self._recall_memories(content)
+
         messages = [
             {"role": "user", "content": (
+                f"{memory_section}"
                 f"<plan_context>\n{plan_context}\n</plan_context>\n\n"
                 f"<conversation>\n{self._format_conversation()}\n</conversation>\n\n"
                 f"<user_message>{content}</user_message>"
@@ -463,6 +469,9 @@ class DirectorAgent(BaseAgent):
         plan.stage = PlanStage.COMMITTED
         plan.updated_at = datetime.now(timezone.utc)
 
+        # 대화 내용을 장기 기억에 저장
+        await self._save_memories()
+
         log.info(
             "Epic committed",
             epic_id=epic_id,
@@ -635,6 +644,48 @@ class DirectorAgent(BaseAgent):
             prefix = "User" if turn["role"] == "user" else "Director"
             lines.append(f"{prefix}: {saxutils.escape(turn['content'])}")
         return "\n".join(lines)
+
+    async def _recall_memories(self, query: str) -> str:
+        """장기 기억에서 관련 정보를 검색하여 프롬프트 섹션으로 반환한다."""
+        if not self._memory:
+            return ""
+        try:
+            memories = await self._memory.search_formatted(query, top_k=5)
+            if not memories:
+                return ""
+            return (
+                "<previous_decisions>\n"
+                f"{memories}\n"
+                "</previous_decisions>\n\n"
+            )
+        except Exception as e:
+            log.warning("Memory recall failed", err=str(e))
+            return ""
+
+    async def _save_memories(self) -> None:
+        """현재 대화의 핵심 결정/사실을 장기 기억에 저장한다."""
+        if not self._memory or not self._conversation or not self._active_plan:
+            return
+        try:
+            from src.core.memory.extractor import extract_memories
+
+            extracted = await extract_memories(self._conversation, self._llm)
+            summary = extracted.get("summary", "")
+            decisions = extracted.get("decisions", [])
+            tech_stack = extracted.get("tech_stack", [])
+            preferences = extracted.get("user_preferences", [])
+
+            all_decisions = decisions + [f"기술 스택: {t}" for t in tech_stack]
+            all_decisions += [f"사용자 요구: {p}" for p in preferences]
+
+            if summary or all_decisions:
+                await self._memory.save_conversation_summary(
+                    summary=summary,
+                    decisions=all_decisions,
+                    session_id=self._active_plan.session_id,
+                )
+        except Exception as e:
+            log.warning("Memory save failed", err=str(e))
 
     async def _broadcast_director_message(self, content: str) -> None:
         """사용자에게 Director 메시지를 WS로 전송한다."""
