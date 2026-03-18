@@ -231,6 +231,32 @@ def create_app(
                         task.add_done_callback(_on_bg_task_done)
                     _log.info("System resume requested")
 
+                elif msg_type == "task-retry":
+                    payload = msg.get("payload", {})
+                    task_id = payload.get("taskId", "")
+                    if task_id:
+                        from src.dashboard.routes.deps import get_state_store
+                        store = get_state_store()
+                        await store.update_task(
+                            task_id, {"status": "ready", "board_column": "Ready"}
+                        )
+                        _log.info("Task retry requested", task_id=task_id)
+
+                elif msg_type == "user-input":
+                    payload = msg.get("payload", {})
+                    text = str(payload.get("text", "")).strip()[:4096]
+                    if not text:
+                        continue
+                    try:
+                        director = get_director()
+                    except RuntimeError:
+                        _log.error("DirectorAgent not available for user-input")
+                        continue
+                    user_input = UserInput(source="dashboard", content=text)
+                    task = asyncio.create_task(director.handle_user_input(user_input))
+                    _ws_bg_tasks.add(task)
+                    task.add_done_callback(_on_bg_task_done)
+
         except WebSocketDisconnect:
             pass
         except Exception as e:

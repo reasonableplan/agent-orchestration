@@ -412,40 +412,53 @@ class DirectorAgent(BaseAgent):
 
         # ---- Phase 2: DB — Epic + Tasks 생성 (Board 성공 후) ----
         epic_id = str(uuid.uuid4())
-        await self._state_store.create_epic({
-            "id": epic_id,
-            "title": plan.epic_title or plan.project.topic or "Untitled Epic",
-            "description": plan.epic_description or plan.project.purpose or "",
-            "status": "active",
-        })
-
-        created_issues: list[dict[str, Any]] = []
-        for item in issue_results:
-            task_id = temp_to_real[item["temp_id"]]
-            assigned = _resolve_agent_id(item["agent"] or "")
-
-            await self._state_store.create_task({
-                "id": task_id,
-                "epic_id": epic_id,
-                "title": item["title"],
-                "description": item["description"],
-                "assigned_agent": assigned,
-                "status": "backlog",
-                "board_column": "Backlog",
-                "github_issue_number": item["issue_number"],
-                "priority": item["priority"],
-                "complexity": item["complexity"],
-                "dependencies": [
-                    temp_to_real[d] for d in item["dependencies"] if d in temp_to_real
-                ],
+        try:
+            await self._state_store.create_epic({
+                "id": epic_id,
+                "title": plan.epic_title or plan.project.topic or "Untitled Epic",
+                "description": plan.epic_description or plan.project.purpose or "",
+                "status": "active",
             })
 
-            created_issues.append({
-                "task_id": task_id,
-                "title": item["title"],
-                "agent": assigned,
-                "issue_number": item["issue_number"],
-            })
+            created_issues: list[dict[str, Any]] = []
+            for item in issue_results:
+                task_id = temp_to_real[item["temp_id"]]
+                assigned = _resolve_agent_id(item["agent"] or "")
+
+                await self._state_store.create_task({
+                    "id": task_id,
+                    "epic_id": epic_id,
+                    "title": item["title"],
+                    "description": item["description"],
+                    "assigned_agent": assigned,
+                    "status": "backlog",
+                    "board_column": "Backlog",
+                    "github_issue_number": item["issue_number"],
+                    "priority": item["priority"],
+                    "complexity": item["complexity"],
+                    "dependencies": [
+                        temp_to_real[d] for d in item["dependencies"] if d in temp_to_real
+                    ],
+                })
+
+                created_issues.append({
+                    "task_id": task_id,
+                    "title": item["title"],
+                    "agent": assigned,
+                    "issue_number": item["issue_number"],
+                })
+        except Exception as e:
+            log.error("DB commit failed, rolling back Board issues", err=str(e))
+            for created in issue_results:
+                try:
+                    await self._git_service.close_issue(created["issue_number"])
+                except Exception as rollback_err:
+                    log.warning("Rollback: failed to close issue",
+                                issue=created["issue_number"], err=str(rollback_err))
+            await self._broadcast_director_message(
+                "DB 저장 실패로 생성된 GitHub Issues를 정리했습니다. 다시 시도해주세요."
+            )
+            return
 
         plan.stage = PlanStage.COMMITTED
         plan.updated_at = datetime.now(timezone.utc)
