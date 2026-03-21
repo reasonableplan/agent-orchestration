@@ -1,0 +1,20 @@
+{
+  "name": "code-j",
+  "version": "1.0.0",
+  "description": "Senior-level coding assistant — learn by doing, never repeat mistakes",
+  "author": {
+    "name": "juwon"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "code-quality",
+    "learning",
+    "senior-engineer"
+  ],
+  "agents": "./agents/",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}
