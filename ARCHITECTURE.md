@@ -231,7 +231,8 @@ IDLE → BUSY (태스크 실행 중) → IDLE (완료)
 ### GitService (`git_service.py`)
 
 GitHub API 래퍼. 모든 에이전트가 공유.
-Git 토큰은 `http.extraHeader` 방식으로 전달 (프로세스 목록 노출 방지).
+Git 인증은 `gh auth setup-git`으로 등록된 credential helper가 처리 (토큰이 프로세스 목록에 노출되지 않음).
+`GITHUB_TOKEN`은 REST/GraphQL API 호출(이슈 생성, 보드 조작 등)에만 사용.
 
 | 메서드 | 역할 |
 |--------|------|

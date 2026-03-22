@@ -467,10 +467,9 @@ class GitService:
     # ===== Git Operations =====
 
     async def _run_git(self, *args: str, timeout_s: float = 60.0) -> str:
-        """workspace에서 git 명령을 실행한다. 토큰은 extraHeader로 전달."""
+        """workspace에서 git 명령을 실행한다. 인증은 gh credential helper가 처리."""
         proc = await asyncio.create_subprocess_exec(
             "git", "-C", self._work_dir,
-            "-c", f"http.extraHeader=Authorization: bearer {self._token}",
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -515,12 +514,11 @@ class GitService:
         log.info("Workspace initialized", path=self._work_dir, repo=f"{self._owner}/{self._repo}")
 
     async def _clone_repo(self) -> None:
-        """repo를 workspace 경로로 클론한다. 토큰은 extraHeader로 전달."""
+        """repo를 workspace 경로로 클론한다. 인증은 gh credential helper가 처리."""
         repo_url = f"https://github.com/{self._owner}/{self._repo}.git"
         os.makedirs(self._work_dir, exist_ok=True)
         proc = await asyncio.create_subprocess_exec(
             "git",
-            "-c", f"http.extraHeader=Authorization: bearer {self._token}",
             "clone", repo_url, self._work_dir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

@@ -117,6 +117,7 @@ Director가 Worker 에이전트와 상담하는 과정은 실시간으로 확인
 - **DB**: PostgreSQL 16 + SQLAlchemy ORM + Alembic 마이그레이션
 - **Frontend**: TypeScript + React + Vite + Canvas (Stardew Valley 스타일 오피스)
 - **Server**: FastAPI + WebSocket
+- **Git 인증**: gh credential helper (`gh auth setup-git`)
 - **Test**: pytest (244 tests)
 
 ### LLM 백엔드 (3종 지원 + 에이전트별 모델 분리)
@@ -136,12 +137,15 @@ GPT, Gemini, Ollama 등 OpenAI 호환 API를 개별 지정할 수 있습니다.
 
 ## Quick Start
 
+> **처음 설치하는 분은 [SETUP.md](SETUP.md)를 참고하세요.** 아래는 요약입니다.
+
 ### 1. 사전 요구사항
 
 - **Python** 3.12 이상
 - **uv** (Python 패키지 매니저, https://docs.astral.sh/uv/getting-started/)
 - **Docker** (PostgreSQL용)
 - **Node.js** 20 이상 (대시보드 프론트엔드용)
+- **gh** (GitHub CLI, https://cli.github.com/)
 - **GitHub 계정** + Personal Access Token (repo, project 권한)
 - **LLM 백엔드** — 아래 3가지 중 하나:
   - Anthropic API Key (`sk-ant-...`)
@@ -164,7 +168,16 @@ pnpm install
 cd ../..
 ```
 
-### 3. 환경 변수 설정
+### 3. Git 인증 설정
+
+에이전트의 git clone/push 인증을 위해 gh CLI를 credential helper로 등록합니다:
+
+```bash
+gh auth login          # GitHub 로그인 (처음 한 번)
+gh auth setup-git      # git credential helper 등록
+```
+
+### 4. 환경 변수 설정
 
 ```bash
 cp backend/.env.example backend/.env
@@ -204,7 +217,7 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 DASHBOARD_AUTH_TOKEN=
 ```
 
-### 4. PostgreSQL 시작
+### 5. PostgreSQL 시작
 
 Docker Compose로 PostgreSQL을 실행합니다:
 
@@ -216,7 +229,7 @@ PostgreSQL이 `localhost:5433`에서 실행됩니다 (user/password/db: `agent`)
 
 > 이미 로컬에 PostgreSQL이 있다면 `DATABASE_URL`을 해당 연결 문자열로 변경하세요.
 
-### 5. DB 마이그레이션
+### 6. DB 마이그레이션
 
 ```bash
 cd backend
@@ -224,7 +237,7 @@ uv run alembic upgrade head
 cd ..
 ```
 
-### 6. GitHub Project Board 준비
+### 7. GitHub Project Board 준비
 
 에이전트가 사용할 GitHub 저장소에 **Project (V2)** 를 생성합니다:
 
@@ -245,7 +258,7 @@ gh label create "agent:docs"     --color F7DF1E --repo OWNER/REPO
 gh label create "agent:git"      --color F05032 --repo OWNER/REPO
 ```
 
-### 7. 시스템 시작
+### 8. 시스템 시작
 
 ```bash
 # 백엔드 (FastAPI + WebSocket)
@@ -561,6 +574,7 @@ pnpm dev
 
 | 문서 | 설명 |
 |------|------|
+| [SETUP.md](SETUP.md) | 처음부터 끝까지 설치/실행 가이드 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 시스템 아키텍처, 컴포넌트 관계, 통신 경로 |
 | [docs/llm-backends.md](docs/llm-backends.md) | LLM 백엔드 3종 설정 가이드 |
 | [docs/prompt-system.md](docs/prompt-system.md) | 프롬프트 시스템 구조와 커스터마이징 |
