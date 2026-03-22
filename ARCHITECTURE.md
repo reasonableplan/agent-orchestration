@@ -18,6 +18,22 @@ Director (L0) ──── 계획·상담·리뷰
 
 ---
 
+## 에이전트별 LLM 모델 분리
+
+각 에이전트가 독립적인 LLM 클라이언트를 사용합니다 (토큰 최적화):
+
+| Agent | 기본 모델 | 이유 |
+|-------|-----------|------|
+| Director | `claude-opus-4-6` | 복잡한 아키텍처 설계, 리뷰 판단 |
+| Backend | `claude-sonnet-4-6` | 코드 생성 품질/비용 균형 |
+| Frontend | `claude-sonnet-4-6` | 코드 생성 품질/비용 균형 |
+| Git | `claude-haiku-4-5` | 단순 스캐폴딩, 저비용 |
+| Docs | `claude-haiku-4-5` | 문서 생성, 저비용 |
+
+`AgentConfig.llm_provider`로 에이전트별 GPT/Gemini/Ollama 등 OpenAI 호환 API 지정 가능.
+
+---
+
 ## 1. Director Agent (`director_agent.py`)
 
 ### 역할
@@ -215,6 +231,7 @@ IDLE → BUSY (태스크 실행 중) → IDLE (완료)
 ### GitService (`git_service.py`)
 
 GitHub API 래퍼. 모든 에이전트가 공유.
+Git 토큰은 `http.extraHeader` 방식으로 전달 (프로세스 목록 노출 방지).
 
 | 메서드 | 역할 |
 |--------|------|
