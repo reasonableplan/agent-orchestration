@@ -10,6 +10,7 @@ drizzle/
 CLAUDE.md
 .claude/
 .omc/
+MagicMock/
 __pycache__/
 *.pyc
 *.pyo
