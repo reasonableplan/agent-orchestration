@@ -959,7 +959,15 @@ class DirectorAgent(BaseAgent):
         success = result.get("success", False) if isinstance(result, dict) else False
 
         if not success:
-            # Worker가 실패 보고 → 바로 재작업
+            # Worker가 실패 보고 → 재작업 (최대 3회)
+            retry = task.retry_count or 0
+            if retry >= 3:
+                log.warning("Task exceeded max retries, marking as failed permanently",
+                            task_id=task_id, retries=retry)
+                await self._finalize_review(task, approved=False, reason=f"최대 재시도 횟수({retry}회) 초과 — 수동 확인 필요")
+                # failed 상태로 고정 (ready로 안 돌림)
+                await self._state_store.update_task(task_id, {"status": "failed", "board_column": "Failed"})
+                return
             await self._finalize_review(task, approved=False, reason="Worker reported failure")
             return
 
@@ -996,17 +1004,45 @@ class DirectorAgent(BaseAgent):
             # 파일이 없으면 summary만으로 판단
             return True, "파일 없음 — summary 기반 자동 승인"
 
+        # workspace의 기존 파일 구조 참조 (아키텍처 일관성 검증용)
+        existing_structure = ""
+        try:
+            from pathlib import Path
+            ws = Path(artifacts[0]).parent if artifacts else None
+            if ws:
+                # workspace root 찾기
+                while ws.parent != ws and ws.name != "workspace":
+                    ws = ws.parent
+                if ws.name == "workspace":
+                    all_files = sorted(str(p.relative_to(ws)) for p in ws.rglob("*") if p.is_file())
+                    existing_structure = "\n".join(all_files[:50])
+        except Exception:
+            pass
+
+        arch_section = ""
+        if existing_structure:
+            arch_section = f"## Existing Project Structure\n```\n{existing_structure}\n```\n\n"
+
         prompt = (
-            "You are a senior code reviewer. Review the following generated code.\n\n"
+            "You are the Director — PM, Tech Lead, and Architect of this project.\n"
+            "Review the following code with STRICT criteria.\n\n"
             f"## Task\nTitle: {task.title}\nDescription: {task.description or 'N/A'}\n\n"
             f"## Summary\n{summary}\n\n"
+            f"{arch_section}"
             f"## Generated Files\n" + "\n\n".join(file_contents) + "\n\n"
-            "## Review Criteria\n"
-            "1. Does the code match the task description?\n"
-            "2. Are there obvious bugs or security issues?\n"
-            "3. Is the code structure reasonable?\n"
-            "4. MVP quality is acceptable — don't be too strict.\n\n"
-            'Respond with JSON: {"approved": true/false, "note": "1-2 sentence review"}\n'
+            "## Review Criteria (ALL must pass)\n"
+            "1. **TDD**: Are test files included? Tests must come BEFORE implementation. REJECT if no tests.\n"
+            "2. **Task match**: Does the code fulfill the task description?\n"
+            "3. **Architecture consistency**: Does it follow the existing project structure and patterns?\n"
+            "4. **Future impact**: Will this code cause problems for downstream tasks? "
+            "Will it make other parts more complex or require rework?\n"
+            "5. **Pattern unity**: Is the code style consistent with other agents' output?\n"
+            "6. **Security**: No hardcoded secrets, no SQL injection, proper input validation.\n"
+            "7. **Type safety**: Full type annotations?\n\n"
+            "## Decision\n"
+            "- REJECT if: no tests, architecture conflict, will cause downstream rework, security issue\n"
+            "- APPROVE if: all criteria pass at MVP quality level\n\n"
+            'Respond with JSON: {"approved": true/false, "note": "specific feedback with reject reason if any"}\n'
             "Respond in Korean."
         )
 
@@ -1048,6 +1084,25 @@ class DirectorAgent(BaseAgent):
         await self._state_store.update_task(task.id, updates)
 
         log.info("Task review finalized", task_id=task.id, approved=approved)
+
+        # 리뷰 결과를 MessageBus에 발행 (Docs Agent 기록용)
+        await self._message_bus.publish(
+            Message(
+                id=str(uuid.uuid4()),
+                type=MessageType.DIRECTOR_MESSAGE,
+                from_agent=self.id,
+                payload={
+                    "content": (
+                        f"**Director Review: {'Approved' if approved else 'Changes Requested'}**\n"
+                        f"- Task: {task.title} (#{task.github_issue_number or '?'})\n"
+                        f"- Agent: {task.assigned_agent or '?'}\n"
+                        f"- Feedback: {reason}"
+                    ),
+                },
+                trace_id=str(uuid.uuid4()),
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
 
         # 승인 시 → 이 태스크에 의존하는 태스크들을 Ready로 전환
         if approved:

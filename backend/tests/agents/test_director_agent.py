@@ -82,6 +82,7 @@ class TestHandleReview:
         """거절 시 Board를 Ready로 이동한다."""
         task = MagicMock()
         task.github_issue_number = 42
+        task.retry_count = 0
         state_store.get_task = AsyncMock(return_value=task)
 
         msg = make_review_message("t1", success=False)
@@ -125,7 +126,7 @@ class TestHandleReview:
         assert "retry_count_increment" not in call_args
 
     async def test_rejected_increments_retry_count(self, director, state_store, git_service):
-        state_store.get_task = AsyncMock(return_value=MagicMock(github_issue_number=None))
+        state_store.get_task = AsyncMock(return_value=MagicMock(github_issue_number=None, retry_count=0))
 
         await director._handle_review(make_review_message("t1", success=False))
 

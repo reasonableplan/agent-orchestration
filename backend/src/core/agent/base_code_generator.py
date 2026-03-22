@@ -83,9 +83,30 @@ class BaseCodeGeneratorAgent(BaseAgent):
                 "IMPORTANT: Follow the existing file structure and naming conventions. "
                 "Generate files that are consistent with the codebase above.\n\n"
             )
+        # Director의 이전 리뷰 피드백 (reject 사유)
+        feedback_section = ""
+        review_note = getattr(task, "review_note", None)
+        retry_count = getattr(task, "retry_count", 0)
+        if review_note and retry_count and retry_count > 0:
+            feedback_section = (
+                f"\n## Previous Review Feedback (MUST address these issues)\n"
+                f"This task was REJECTED {retry_count} time(s). Director's feedback:\n"
+                f"<review_feedback>\n{saxutils.escape(review_note)}\n</review_feedback>\n"
+                f"Fix ALL issues mentioned above before resubmitting.\n\n"
+            )
+
         return (
-            f"{self._role_description}\n"
-            'Respond with JSON: {"files": [{"path": str, "content": str, "action": str}], "summary": str}\n\n'
+            f"{self._role_description}\n\n"
+            "## Rules (STRICT)\n"
+            "1. **TDD**: Write tests FIRST, then implementation. Every file must have a corresponding test.\n"
+            "2. **Architecture consistency**: Follow the existing codebase patterns exactly.\n"
+            "3. **No magic values**: Use constants, config, or environment variables.\n"
+            "4. **Type safety**: Full type annotations (Python: type hints, TypeScript: strict mode).\n"
+            "5. **Error handling**: Never empty catch. Log errors, provide meaningful messages.\n"
+            "6. **File naming**: Follow the existing naming conventions in the codebase.\n\n"
+            f"{feedback_section}"
+            'Respond with JSON: {"files": [{"path": str, "content": str, "action": str}], "summary": str}\n'
+            "Include test files BEFORE implementation files in the array.\n\n"
             f"{ctx_section}"
             f"<task>\nTitle: {saxutils.escape(task.title)}\n"
             f"Description: {saxutils.escape(task.description)}\n</task>"

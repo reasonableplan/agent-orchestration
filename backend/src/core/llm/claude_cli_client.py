@@ -80,6 +80,9 @@ class ClaudeCliClient:
         Returns: (response_text, input_tokens=0, output_tokens=0)
         """
         prompt = _build_prompt(messages, system)
+        # CLI가 대화형 응답 대신 JSON만 반환하도록 접미사 추가
+        if "JSON" in prompt or "json" in prompt:
+            prompt += "\n\nIMPORTANT: Respond ONLY with the requested JSON. No questions, no conversation. Just JSON."
         log.debug("ClaudeCliClient calling claude CLI", prompt_len=len(prompt))
 
         async def _call() -> str:
