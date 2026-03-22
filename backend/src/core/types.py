@@ -91,6 +91,7 @@ class MessageType:
 class PlanStage(str, Enum):
     GATHERING = "gathering"
     STRUCTURING = "structuring"
+    CONSULTING = "consulting"    # 에이전트 간 상의 진행 중
     CONFIRMING = "confirming"
     COMMITTED = "committed"      # 이슈 생성 완료 — 업무 시작 대기
     EXECUTING = "executing"      # 사용자 허가 후 에이전트 업무 진행 중
@@ -232,7 +233,10 @@ class AgentConfig(BaseModel):
     id: str
     domain: str
     level: AgentLevel = AgentLevel.WORKER
-    claude_model: str = "claude-sonnet-4-20250514"
+    claude_model: str = "claude-sonnet-4-6"
+    llm_provider: str = ""  # "" = global default, "anthropic", "claude-cli", "openai-compat"
+    llm_base_url: str = ""  # openai-compat provider용 (GPT, Gemini 등)
+    llm_api_key: str = ""   # openai-compat provider용
     max_tokens: int = 4096
     temperature: float = 0.7
     token_budget: int = 10_000_000
@@ -264,7 +268,7 @@ class TaskHistoryEntry(BaseModel):
 
 class AgentConfigRow(BaseModel):
     agent_id: str
-    claude_model: str = "claude-sonnet-4-20250514"
+    claude_model: str = "claude-sonnet-4-6"
     max_tokens: int = 4096
     temperature: float = 0.7
     token_budget: int = 10_000_000

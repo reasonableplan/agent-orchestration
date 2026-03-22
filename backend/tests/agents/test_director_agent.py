@@ -71,6 +71,7 @@ class TestHandleReview:
         """승인 시 Board를 Done으로 이동한다."""
         task = MagicMock()
         task.github_issue_number = 42
+        task.retry_count = 0
         state_store.get_task = AsyncMock(return_value=task)
 
         msg = make_review_message("t1", success=True)
@@ -98,6 +99,7 @@ class TestHandleReview:
 
         task = MagicMock()
         task.github_issue_number = 1
+        task.retry_count = 0
         state_store.get_task = AsyncMock(return_value=task)
 
         await director._handle_review(make_review_message("t1", success=True))
@@ -109,6 +111,7 @@ class TestHandleReview:
         git_service.move_issue_to_column = AsyncMock(side_effect=RuntimeError("GitHub down"))
         task = MagicMock()
         task.github_issue_number = 1
+        task.retry_count = 0
         state_store.get_task = AsyncMock(return_value=task)
 
         await director._handle_review(make_review_message("t1", success=True))
@@ -116,7 +119,7 @@ class TestHandleReview:
         state_store.update_task.assert_not_called()
 
     async def test_approved_sets_done_status(self, director, state_store, git_service):
-        state_store.get_task = AsyncMock(return_value=MagicMock(github_issue_number=None))
+        state_store.get_task = AsyncMock(return_value=MagicMock(github_issue_number=None, retry_count=0))
 
         await director._handle_review(make_review_message("t1", success=True))
 

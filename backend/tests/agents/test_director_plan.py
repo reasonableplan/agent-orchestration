@@ -259,14 +259,30 @@ class TestStructuringStage:
 
 
 class TestPlanAction:
-    async def test_approve_transitions_to_confirming(self, state_store, git_service):
-        """plan.approve → STRUCTURING에서 CONFIRMING으로 전환."""
+    async def test_approve_transitions_to_consulting(self, state_store, git_service):
+        """plan.approve → STRUCTURING에서 CONSULTING으로 전환 (에이전트 상의)."""
         llm = _make_llm()
         director = _make_director(state_store, git_service, llm)
 
         director._active_plan = EpicPlan(
             session_id="test",
             stage=PlanStage.STRUCTURING,
+            epic_title="인증",
+            tasks=[TaskDraft(temp_id="draft-1", title="JWT", agent="agent-backend", priority=1)],
+        )
+
+        await director.handle_plan_action("approve")
+
+        assert director.active_plan.stage == PlanStage.CONSULTING
+
+    async def test_approve_consulting_transitions_to_confirming(self, state_store, git_service):
+        """plan.approve → CONSULTING에서 CONFIRMING으로 전환."""
+        llm = _make_llm()
+        director = _make_director(state_store, git_service, llm)
+
+        director._active_plan = EpicPlan(
+            session_id="test",
+            stage=PlanStage.CONSULTING,
             epic_title="인증",
             tasks=[TaskDraft(temp_id="draft-1", title="JWT", agent="agent-backend", priority=1)],
         )

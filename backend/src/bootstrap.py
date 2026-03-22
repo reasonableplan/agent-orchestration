@@ -31,7 +31,7 @@ class SystemContext:
     hook_registry: HookRegistry
     orphan_cleaner: OrphanCleaner
     agents: list[Any] = field(default_factory=list)
-    llm_client: Any = None
+    llm_clients: list[Any] = field(default_factory=list)
 
 
 async def bootstrap(config: AppConfig) -> SystemContext:
@@ -49,39 +49,37 @@ async def bootstrap(config: AppConfig) -> SystemContext:
     # 2. MessageBus
     message_bus = MessageBus(state_store)
 
-    # 3. LLM Client
-    llm_client = _create_llm_client(config)
-
-    # 4. GitService
+    # 3. GitService + Workspace 초기화
     git_service = GitService(config)
     await git_service.validate_connection()
+    await git_service.init_workspace()
 
-    # 5. BoardWatcher
+    # 4. BoardWatcher
     board_watcher = BoardWatcher(git_service, state_store, message_bus)
 
-    # 6. HookRegistry + 내장 훅 등록
+    # 5. HookRegistry + 내장 훅 등록
     hook_registry = HookRegistry(state_store)
     await register_builtin_hooks(hook_registry, state_store)
 
-    # 7. OrphanCleaner
+    # 6. OrphanCleaner
     orphan_cleaner = OrphanCleaner(state_store, git_service)
 
-    # 8. RAG — 코드베이스 인덱싱 + 메모리
+    # 7. RAG — 코드베이스 인덱싱 + 메모리
     code_search, memory_store = await _init_rag(config)
 
-    # 9. 에이전트 생성
-    agents = _create_agents(
-        config, message_bus, state_store, git_service, llm_client, code_search, memory_store,
+    # 8. 에이전트 생성 (에이전트별 LLM 클라이언트 포함)
+    agents, agent_llm_clients = _create_agents(
+        config, message_bus, state_store, git_service, code_search, memory_store,
     )
 
-    # 9.5. Director 플랜 복원 (서버 재시작 시 이전 세션 이어가기)
+    # 8.5. Director 플랜 복원 (서버 재시작 시 이전 세션 이어가기)
     from src.agents.director.director_agent import DirectorAgent
     for agent in agents:
         if isinstance(agent, DirectorAgent):
             await agent.restore_plan_from_db()
             break
 
-    # 10. 에이전트 DB 등록 (병렬, 개별 실패 허용)
+    # 9. 에이전트 DB 등록 (병렬, 개별 실패 허용)
     results = await asyncio.gather(*(
         state_store.register_agent({
             "id": agent.id,
@@ -108,7 +106,7 @@ async def bootstrap(config: AppConfig) -> SystemContext:
         hook_registry=hook_registry,
         orphan_cleaner=orphan_cleaner,
         agents=agents,
-        llm_client=llm_client,
+        llm_clients=agent_llm_clients,
     )
     _system_context = ctx
     log.info("Bootstrap complete", agent_count=len(agents))
@@ -116,6 +114,7 @@ async def bootstrap(config: AppConfig) -> SystemContext:
 
 
 def _create_llm_client(config: AppConfig) -> Any:
+    """글로벌 LLM 클라이언트 (에이전트별 설정이 없을 때 폴백용)."""
     if config.use_local_model:
         from src.core.llm.local_model_client import LocalModelClient
         return LocalModelClient(
@@ -130,6 +129,64 @@ def _create_llm_client(config: AppConfig) -> Any:
     from src.core.llm.claude_client import ClaudeClient
     log.info("LLM backend: Anthropic API")
     return ClaudeClient(api_key=config.anthropic_api_key)
+
+
+# 에이전트별 기본 모델 매핑 (Director=Opus, B/F=Sonnet, 나머지=Haiku)
+_DEFAULT_AGENT_MODELS: dict[str, str] = {
+    "director": "claude-opus-4-6",
+    "agent-backend": "claude-sonnet-4-6",
+    "agent-frontend": "claude-sonnet-4-6",
+    "agent-git": "claude-haiku-4-5-20251001",
+    "agent-docs": "claude-haiku-4-5-20251001",
+}
+
+
+def _create_agent_llm_client(agent_config: "AgentConfig", app_config: AppConfig) -> Any:
+    """에이전트별 LLM 클라이언트를 생성한다.
+
+    agent_config.llm_provider가 설정되면 해당 provider를 사용하고,
+    비어있으면 글로벌 설정(AppConfig)에 따라 backend를 선택한다.
+    어느 경우든 agent_config.claude_model이 기본 모델로 사용된다.
+    """
+    provider = agent_config.llm_provider
+
+    # 명시적 provider: openai-compat (GPT, Gemini, Ollama 등)
+    if provider == "openai-compat":
+        from src.core.llm.local_model_client import LocalModelClient
+        log.info("LLM backend: openai-compat", agent=agent_config.id, model=agent_config.claude_model)
+        return LocalModelClient(
+            base_url=agent_config.llm_base_url,
+            model=agent_config.claude_model,
+            api_key=agent_config.llm_api_key or None,
+        )
+
+    # 명시적 provider: claude-cli
+    if provider == "claude-cli":
+        from src.core.llm.claude_cli_client import ClaudeCliClient
+        log.info("LLM backend: claude CLI", agent=agent_config.id)
+        return ClaudeCliClient()
+
+    # 명시적 provider: anthropic API
+    if provider == "anthropic":
+        from src.core.llm.claude_client import ClaudeClient
+        log.info("LLM backend: Anthropic API", agent=agent_config.id, model=agent_config.claude_model)
+        return ClaudeClient(api_key=app_config.anthropic_api_key, default_model=agent_config.claude_model)
+
+    # provider 미지정 → 글로벌 설정으로 backend 선택, 모델은 에이전트별
+    if app_config.use_local_model:
+        from src.core.llm.local_model_client import LocalModelClient
+        return LocalModelClient(
+            base_url=app_config.local_model_base_url,
+            model=agent_config.claude_model,
+            api_key=app_config.local_model_api_key,
+        )
+    if app_config.use_cli:
+        from src.core.llm.claude_cli_client import ClaudeCliClient
+        return ClaudeCliClient()
+
+    from src.core.llm.claude_client import ClaudeClient
+    log.info("LLM backend: Anthropic API", agent=agent_config.id, model=agent_config.claude_model)
+    return ClaudeClient(api_key=app_config.anthropic_api_key, default_model=agent_config.claude_model)
 
 
 async def _init_rag(config: AppConfig) -> tuple[Any, Any]:
@@ -174,10 +231,13 @@ def _create_agents(
     message_bus: MessageBus,
     state_store: StateStore,
     git_service: GitService,
-    llm_client: Any,
     code_search: Any = None,
     memory_store: Any = None,
-) -> list[Any]:
+) -> tuple[list[Any], list[Any]]:
+    """에이전트와 에이전트별 LLM 클라이언트를 생성한다.
+
+    Returns: (agents, llm_clients) — llm_clients는 shutdown 시 close용.
+    """
     from src.agents.backend_agent.backend_agent import BackendAgent
     from src.agents.director.director_agent import DirectorAgent
     from src.agents.docs.docs_agent import DocsAgent
@@ -186,56 +246,77 @@ def _create_agents(
     from src.core.types import AgentConfig, AgentLevel
 
     work_dir = config.git_work_dir
+    llm_clients: list[Any] = []
 
     def make_config(agent_id: str, domain: str, level: AgentLevel, **kwargs) -> AgentConfig:
-        return AgentConfig(id=agent_id, domain=domain, level=level, **kwargs)
+        model = _DEFAULT_AGENT_MODELS.get(agent_id, "claude-sonnet-4-6")
+        return AgentConfig(id=agent_id, domain=domain, level=level, claude_model=model, **kwargs)
 
+    def make_llm(agent_cfg: AgentConfig) -> Any:
+        client = _create_agent_llm_client(agent_cfg, config)
+        llm_clients.append(client)
+        return client
+
+    director_cfg = make_config("director", "director", AgentLevel.DIRECTOR)
     director = DirectorAgent(
-        config=make_config("director", "director", AgentLevel.DIRECTOR),
+        config=director_cfg,
         message_bus=message_bus,
         state_store=state_store,
         git_service=git_service,
-        llm_client=llm_client,
+        llm_client=make_llm(director_cfg),
         memory_store=memory_store,
     )
 
+    git_cfg = make_config("agent-git", "git", AgentLevel.WORKER)
     git_agent = GitAgent(
-        config=make_config("agent-git", "git", AgentLevel.WORKER),
+        config=git_cfg,
         message_bus=message_bus,
         state_store=state_store,
         git_service=git_service,
-        llm_client=llm_client,
+        llm_client=make_llm(git_cfg),
         work_dir=work_dir,
         code_search=code_search,
     )
+
+    backend_cfg = make_config("agent-backend", "backend", AgentLevel.WORKER, temperature=0.2)
     backend = BackendAgent(
-        config=make_config("agent-backend", "backend", AgentLevel.WORKER, temperature=0.2),
+        config=backend_cfg,
         message_bus=message_bus,
         state_store=state_store,
         git_service=git_service,
-        llm_client=llm_client,
+        llm_client=make_llm(backend_cfg),
         work_dir=work_dir,
         code_search=code_search,
     )
+
+    frontend_cfg = make_config("agent-frontend", "frontend", AgentLevel.WORKER, temperature=0.2)
     frontend = FrontendAgent(
-        config=make_config("agent-frontend", "frontend", AgentLevel.WORKER, temperature=0.2),
+        config=frontend_cfg,
         message_bus=message_bus,
         state_store=state_store,
         git_service=git_service,
-        llm_client=llm_client,
+        llm_client=make_llm(frontend_cfg),
         work_dir=work_dir,
         code_search=code_search,
     )
+
+    docs_cfg = make_config("agent-docs", "docs", AgentLevel.WORKER, temperature=0.3)
     docs = DocsAgent(
-        config=make_config("agent-docs", "docs", AgentLevel.WORKER, temperature=0.3),
+        config=docs_cfg,
         message_bus=message_bus,
         state_store=state_store,
         git_service=git_service,
-        llm_client=llm_client,
+        llm_client=make_llm(docs_cfg),
         work_dir=work_dir,
         code_search=code_search,
     )
-    return [director, git_agent, backend, frontend, docs]
+
+    log.info(
+        "Agent LLM models configured",
+        models={aid: _DEFAULT_AGENT_MODELS.get(aid, "sonnet") for aid in
+                ["director", "agent-backend", "agent-frontend", "agent-git", "agent-docs"]},
+    )
+    return [director, git_agent, backend, frontend, docs], llm_clients
 
 
 _shutting_down = False
@@ -263,11 +344,12 @@ async def shutdown(ctx: SystemContext) -> None:
     await ctx.board_watcher.stop()
 
     # LLM 클라이언트 / GitService HTTP 연결 종료
-    if hasattr(ctx.llm_client, "close"):
-        try:
-            await ctx.llm_client.close()
-        except Exception as e:
-            log.error("LLM client close error", err=str(e))
+    for client in ctx.llm_clients:
+        if hasattr(client, "close"):
+            try:
+                await client.close()
+            except Exception as e:
+                log.error("LLM client close error", err=str(e))
     try:
         await ctx.git_service.close()
     except Exception as e:

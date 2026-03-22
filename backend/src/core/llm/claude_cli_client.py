@@ -13,7 +13,7 @@ from src.core.resilience.api_retry import with_retry
 
 log = get_logger("ClaudeCliClient")
 
-_CLI_TIMEOUT_S = 180.0  # 3분 — 복잡한 코드 생성 태스크 고려
+_CLI_TIMEOUT_S = 300.0  # 5분 — 복잡한 코드 생성 태스크 고려
 
 
 def _resolve_cli_args() -> list[str]:
@@ -109,6 +109,7 @@ class ClaudeCliClient:
                 )
             except asyncio.TimeoutError as e:
                 proc.kill()
+                await proc.wait()
                 raise RuntimeError(f"claude CLI timed out after {_CLI_TIMEOUT_S}s") from e
 
             if proc.returncode != 0:

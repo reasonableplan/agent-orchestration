@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
+import shutil
 from typing import Any
 
 import httpx
@@ -459,27 +461,117 @@ class GitService:
                 f"/repos/{self._owner}/{self._repo}/labels",
                 json={"name": label, "color": color},
             )
-        except Exception:
-            pass  # 422 already_exists는 _rest에서 처리됨
+        except Exception as e:
+            log.warning("ensure_label failed", label=label, err=str(e))
 
     # ===== Git Operations =====
+
+    async def _run_git(self, *args: str, timeout_s: float = 60.0) -> str:
+        """workspace에서 git 명령을 실행한다. 토큰은 extraHeader로 전달."""
+        proc = await asyncio.create_subprocess_exec(
+            "git", "-C", self._work_dir,
+            "-c", f"http.extraHeader=Authorization: bearer {self._token}",
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise GitServiceError(f"git {args[0] if args else ''} timed out after {timeout_s}s")
+        if proc.returncode != 0:
+            err_msg = stderr.decode().strip()
+            err_msg = err_msg.replace(self._token, "***")
+            raise GitServiceError(f"git {' '.join(args)}: {err_msg}")
+        return stdout.decode().strip()
+
+    async def init_workspace(self) -> None:
+        """workspace를 target repo의 클론으로 초기화한다. 이미 올바른 클론이면 pull만."""
+        repo_url = f"https://github.com/{self._owner}/{self._repo}.git"
+        git_dir = os.path.join(self._work_dir, ".git")
+
+        if os.path.isdir(git_dir):
+            # 이미 git repo — remote 확인 후 pull
+            try:
+                remote = await self._run_git("remote", "get-url", "origin")
+                if self._repo not in remote:
+                    # 다른 repo를 가리키고 있으면 remote 교체 (토큰 미포함 URL)
+                    await self._run_git("remote", "set-url", "origin", repo_url)
+                    log.info("Workspace remote updated", repo=f"{self._owner}/{self._repo}")
+                # 최신 상태로 pull (빈 repo면 실패할 수 있음)
+                try:
+                    await self._run_git("pull", "--rebase", "origin", "main")
+                except GitServiceError:
+                    log.debug("Pull failed (empty repo or no main branch yet)")
+            except GitServiceError as e:
+                log.warning("Workspace git check failed, re-cloning", err=str(e))
+                shutil.rmtree(self._work_dir, ignore_errors=True)
+                await self._clone_repo()
+        else:
+            await self._clone_repo()
+
+        log.info("Workspace initialized", path=self._work_dir, repo=f"{self._owner}/{self._repo}")
+
+    async def _clone_repo(self) -> None:
+        """repo를 workspace 경로로 클론한다. 토큰은 extraHeader로 전달."""
+        repo_url = f"https://github.com/{self._owner}/{self._repo}.git"
+        os.makedirs(self._work_dir, exist_ok=True)
+        proc = await asyncio.create_subprocess_exec(
+            "git",
+            "-c", f"http.extraHeader=Authorization: bearer {self._token}",
+            "clone", repo_url, self._work_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            err_msg = stderr.decode().strip()
+            err_msg = err_msg.replace(self._token, "***")
+            # 빈 repo 경고는 정상
+            if "empty repository" not in err_msg.lower():
+                raise GitServiceError(f"git clone failed: {err_msg}")
+            # 빈 repo: clone이 부분 생성했을 수 있으므로 상태 확인 후 init
+            git_dir = os.path.join(self._work_dir, ".git")
+            if not os.path.isdir(git_dir):
+                await self._run_git("init")
+            try:
+                await self._run_git("remote", "set-url", "origin", repo_url)
+            except GitServiceError:
+                await self._run_git("remote", "add", "origin", repo_url)
+
+    async def commit_all(self, message: str) -> bool:
+        """workspace의 모든 변경사항을 commit한다. 변경이 없으면 False 반환."""
+        await self._run_git("add", "-A")
+        # 변경사항 확인
+        try:
+            status = await self._run_git("diff", "--cached", "--quiet")
+            return False  # 변경 없음
+        except GitServiceError:
+            pass  # diff --quiet는 변경이 있으면 exit 1
+        await self._run_git("commit", "-m", message)
+        log.info("Committed changes", message=message[:80])
+        return True
+
+    async def push(self, branch: str = "main") -> None:
+        """workspace의 변경사항을 remote에 push한다."""
+        await self._run_git("push", "-u", "origin", branch, timeout_s=120.0)
+        log.info("Pushed to remote", branch=branch)
+
+    async def commit_and_push(self, message: str, branch: str = "main") -> bool:
+        """commit + push를 한 번에. 변경이 없으면 False."""
+        committed = await self.commit_all(message)
+        if committed:
+            await self.push(branch)
+        return committed
 
     async def create_branch(self, branch_name: str, base_branch: str = "main") -> None:
         # 안전한 브랜치 이름 검증 (.. 차단으로 path traversal 방지)
         for name in (branch_name, base_branch):
             if not re.match(r'^[\w\-./]+$', name) or '..' in name:
                 raise GitServiceError(f"Invalid branch name: {name!r}")
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "git", "-C", self._work_dir, "checkout", "-b", branch_name, f"origin/{base_branch}",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            _, stderr = await proc.communicate()
-            if proc.returncode != 0:
-                raise RuntimeError(stderr.decode().strip())
-        except RuntimeError as e:
-            raise GitServiceError(f"create_branch {branch_name}", cause=e) from e
+        await self._run_git("checkout", "-b", branch_name, f"origin/{base_branch}")
 
     async def create_pr(
         self,

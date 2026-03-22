@@ -14,7 +14,7 @@ from src.core.messaging.message_bus import MessageBus
 from src.core.state.state_store import StateStore
 from src.core.types import AgentConfig, Task, TaskResult
 
-MAX_TOKENS = 16_000
+MAX_TOKENS = 32_000
 TOKEN_BUDGET = 100_000_000
 _MAX_CONTEXT_CHARS = 12_000  # 워크스페이스 컨텍스트 최대 길이
 _MAX_FILE_CHARS = 2_000      # 개별 파일 최대 읽기 길이
@@ -106,7 +106,9 @@ class BaseCodeGeneratorAgent(BaseAgent):
             "6. **File naming**: Follow the existing naming conventions in the codebase.\n\n"
             f"{feedback_section}"
             'Respond with JSON: {"files": [{"path": str, "content": str, "action": str}], "summary": str}\n'
-            "Include test files BEFORE implementation files in the array.\n\n"
+            "Include test files BEFORE implementation files in the array.\n"
+            "CRITICAL: Every file MUST be COMPLETE. Never truncate code mid-function or mid-file. "
+            "If output would be too long, generate FEWER files but ensure each one is 100% complete and runnable.\n\n"
             f"{ctx_section}"
             f"<task>\nTitle: {saxutils.escape(task.title)}\n"
             f"Description: {saxutils.escape(task.description)}\n</task>"
@@ -130,6 +132,24 @@ class BaseCodeGeneratorAgent(BaseAgent):
 
             files = data.get("files", []) if isinstance(data, dict) else []
             artifact_paths: list[str] = []
+
+            # 잘린 파일 감지 — 괄호/중괄호가 맞지 않으면 불완전한 파일
+            truncated_files = []
+            for f in files:
+                content = f.get("content", "")
+                if content and self._is_likely_truncated(content, f.get("path", "")):
+                    truncated_files.append(f.get("path", "unknown"))
+            if truncated_files:
+                self._log.warning(
+                    "Truncated files detected — skipping generation",
+                    truncated=truncated_files,
+                    task_id=task.id,
+                )
+                return TaskResult(
+                    success=False,
+                    error={"message": f"LLM output truncated: {', '.join(truncated_files)}. Retry with fewer files."},
+                    artifacts=[],
+                )
 
             for f in files:
                 path = f.get("path", "")
@@ -239,6 +259,34 @@ class BaseCodeGeneratorAgent(BaseAgent):
         self._log.info("Workspace context loaded",
                        files=len(collected_files), chars=total_chars)
         return "\n\n".join(parts)
+
+    @staticmethod
+    def _is_likely_truncated(content: str, path: str) -> bool:
+        """파일 내용이 잘렸을 가능성이 높은지 휴리스틱으로 판단한다."""
+        stripped = content.rstrip()
+        if not stripped:
+            return False
+
+        # Python 파일: 열린 괄호/중괄호가 닫히지 않은 경우
+        if path.endswith(".py"):
+            opens = stripped.count("(") + stripped.count("{") + stripped.count("[")
+            closes = stripped.count(")") + stripped.count("}") + stripped.count("]")
+            if opens - closes >= 3:
+                return True
+
+        # TypeScript/JS: 중괄호 불균형
+        if path.endswith((".ts", ".tsx", ".js", ".jsx")):
+            opens = stripped.count("{") + stripped.count("(")
+            closes = stripped.count("}") + stripped.count(")")
+            if opens - closes >= 3:
+                return True
+
+        # 일반: 코드가 키워드 중간에서 끊긴 경우
+        last_line = stripped.split("\n")[-1].rstrip()
+        if last_line.endswith((",", ":", "->", "=>", "=")):
+            return True
+
+        return False
 
     def _safe_resolve(self, rel_path: str) -> Path:
         """Sandbox escape 방지: work_dir 밖 경로 차단."""

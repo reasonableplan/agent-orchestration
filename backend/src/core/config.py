@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.core.errors import ConfigError
 
-DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-6"
 
 
 class AppConfig(BaseSettings):

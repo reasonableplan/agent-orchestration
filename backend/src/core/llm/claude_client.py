@@ -13,6 +13,8 @@ log = get_logger("ClaudeClient")
 
 # Claude 모델 화이트리스트 (injection 방지)
 ALLOWED_MODELS = {
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
     "claude-opus-4-20250514",
     "claude-sonnet-4-20250514",
     "claude-sonnet-4-5-20251001",

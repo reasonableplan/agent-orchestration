@@ -17,14 +17,6 @@ from src.agents.director.prompts import (
     _WORKER_DOMAINS,
 )
 from src.core.agent.base_agent import BaseAgent
-
-
-def _safe_int(val: Any, default: int = 3) -> int:
-    """LLM 출력의 priority 등 정수 변환. 실패 시 기본값 반환."""
-    try:
-        return max(1, min(5, int(val)))
-    except (ValueError, TypeError):
-        return default
 from src.core.logging.logger import get_logger
 from src.core.messaging.message_bus import MessageBus
 from src.core.state.state_store import StateStore
@@ -62,6 +54,14 @@ _AGENT_KEYWORDS: dict[str, str] = {
     "ui": "agent-frontend",
     "ux": "agent-frontend",
 }
+
+
+def _safe_int(val: Any, default: int = 3) -> int:
+    """LLM 출력의 priority 등 정수 변환. 실패 시 기본값 반환."""
+    try:
+        return max(1, min(5, int(val)))
+    except (ValueError, TypeError):
+        return default
 
 
 def _resolve_agent_id(raw: str) -> str | None:
@@ -219,6 +219,10 @@ class DirectorAgent(BaseAgent):
             await self._handle_gathering(safe_content)
         elif plan.stage == PlanStage.STRUCTURING:
             await self._handle_structuring(safe_content)
+        elif plan.stage == PlanStage.CONSULTING:
+            await self._broadcast_director_message(
+                "에이전트 상의가 진행 중입니다. 완료되면 검토 요청드리겠습니다."
+            )
         elif plan.stage == PlanStage.CONFIRMING:
             await self._handle_confirming(safe_content)
 
@@ -232,6 +236,16 @@ class DirectorAgent(BaseAgent):
 
         if action == "approve":
             if plan.stage == PlanStage.STRUCTURING:
+                # STRUCTURING → CONSULTING (에이전트 상의 시작)
+                plan.stage = PlanStage.CONSULTING
+                plan.updated_at = datetime.now(timezone.utc)
+                await self._broadcast_plan()
+                await self._broadcast_director_message(
+                    "태스크 구조가 승인되었습니다. 각 파트 에이전트와 상의를 시작합니다..."
+                )
+                await self._run_consulting()
+            elif plan.stage == PlanStage.CONSULTING:
+                # CONSULTING 완료 후 사용자가 approve → CONFIRMING
                 plan.stage = PlanStage.CONFIRMING
                 plan.updated_at = datetime.now(timezone.utc)
                 await self._broadcast_plan()
@@ -246,13 +260,13 @@ class DirectorAgent(BaseAgent):
         elif action == "revise":
             if content:
                 self._append_conversation("user", saxutils.escape(content))
-            if plan.stage in (PlanStage.STRUCTURING, PlanStage.CONFIRMING):
+            if plan.stage in (PlanStage.STRUCTURING, PlanStage.CONSULTING, PlanStage.CONFIRMING):
                 plan.stage = PlanStage.STRUCTURING
                 plan.updated_at = datetime.now(timezone.utc)
                 await self._handle_structuring(content or "수정해주세요")
 
         elif action == "commit":
-            if plan.stage == PlanStage.CONFIRMING:
+            if plan.stage in (PlanStage.CONFIRMING, PlanStage.CONSULTING):
                 await self._commit_plan()
             else:
                 await self._broadcast_director_message(
@@ -401,21 +415,29 @@ class DirectorAgent(BaseAgent):
         self._apply_task_update(plan, data)
         plan.updated_at = datetime.now(timezone.utc)
 
-        initial_response = data.get("response", "태스크 분해가 완료되었습니다.")
+        response = data.get("response", "태스크 분해가 완료되었습니다.")
+        self._append_conversation("assistant", response)
         await self._broadcast_director_message(
-            f"{initial_response}\n\n각 파트 에이전트와 상의 중..."
+            f"{response}\n\n검토 후 승인하시면 에이전트 상의를 시작합니다."
         )
         await self._broadcast_plan()
 
-        # Worker 에이전트들과 상담하여 태스크 보강
+    async def _run_consulting(self) -> None:
+        """CONSULTING 단계 — Worker 상의 실행 후 사용자 검토 요청."""
         await self._consult_workers()
 
-        final_response = (
-            "에이전트 상담 완료. 각 파트의 피드백을 반영한 최종 태스크입니다. "
-            "수정할 부분 있나요? 괜찮으면 승인해주세요."
+        plan = self._active_plan
+        if plan is None:
+            return
+
+        # 상의 완료 — 사용자에게 검토 요청
+        response = (
+            "에이전트 상의가 완료되었습니다. 각 파트의 피드백을 반영한 최종 태스크입니다.\n\n"
+            "검토 후 승인하시면 GitHub Issues를 생성합니다. "
+            "수정이 필요하면 말씀해주세요."
         )
-        self._append_conversation("assistant", final_response)
-        await self._broadcast_director_message(final_response)
+        self._append_conversation("assistant", response)
+        await self._broadcast_director_message(response)
         await self._broadcast_plan()
 
     async def _consult_workers(self) -> None:
@@ -458,8 +480,8 @@ class DirectorAgent(BaseAgent):
                     raw = expectations_path.read_text(encoding="utf-8").strip()
                     if raw:
                         user_expectations = f"\n\n## User Expectations (사용자 기대사항)\n{raw}"
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.debug("Failed to read expectations file", path=str(expectations_path), err=str(e))
 
             system = WORKER_CONSULTATION_PROMPT.format(
                 agent_role=role_name,
@@ -756,7 +778,7 @@ class DirectorAgent(BaseAgent):
             except Exception as e:
                 log.warning("Failed to add to project (non-fatal)", issue=issue_num, err=str(e))
 
-        # ---- Phase 5: DB — Epic + Tasks 저장 ----
+        # ---- Phase 6: DB — Epic + Tasks 저장 ----
         epic_id = str(uuid.uuid4())
         try:
             await self._state_store.create_epic({
@@ -803,7 +825,10 @@ class DirectorAgent(BaseAgent):
             )
             return
 
-        # ---- Phase 7: COMMITTED — 업무 시작 대기 ----
+        # ---- Phase 7: 프로젝트 컨텍스트를 workspace에 저장 ----
+        await self._write_project_context(plan)
+
+        # ---- Phase 8: COMMITTED — 업무 시작 대기 ----
         plan.stage = PlanStage.COMMITTED
         plan.updated_at = datetime.now(timezone.utc)
         await self._persist_plan()
@@ -964,14 +989,34 @@ class DirectorAgent(BaseAgent):
             if retry >= 3:
                 log.warning("Task exceeded max retries, marking as failed permanently",
                             task_id=task_id, retries=retry)
-                await self._finalize_review(task, approved=False, reason=f"최대 재시도 횟수({retry}회) 초과 — 수동 확인 필요")
-                # failed 상태로 고정 (ready로 안 돌림)
+                # Board-first: Board → "Failed" 먼저, DB 나중
+                if task.github_issue_number:
+                    try:
+                        await self._git_service.move_issue_to_column(task.github_issue_number, "Failed")
+                    except Exception as e:
+                        log.error("Board move to Failed failed", task_id=task_id, err=str(e))
+                        return
                 await self._state_store.update_task(task_id, {"status": "failed", "board_column": "Failed"})
                 return
             await self._finalize_review(task, approved=False, reason="Worker reported failure")
             return
 
         # Worker 성공 → Director가 LLM으로 코드 리뷰
+        # reject 시에도 max retry 제한 적용
+        retry = task.retry_count or 0
+        if retry >= 3:
+            log.warning("Task exceeded max retries (Director reject loop), marking as failed",
+                        task_id=task_id, retries=retry)
+            # Board-first: Board → "Failed" 먼저, DB 나중
+            if task.github_issue_number:
+                try:
+                    await self._git_service.move_issue_to_column(task.github_issue_number, "Failed")
+                except Exception as e:
+                    log.error("Board move to Failed failed", task_id=task_id, err=str(e))
+                    return
+            await self._state_store.update_task(task_id, {"status": "failed", "board_column": "Failed"})
+            return
+
         artifacts = result.get("artifacts", []) if isinstance(result, dict) else []
         summary = result.get("data", {}).get("summary", "") if isinstance(result, dict) else ""
 
@@ -1002,20 +1047,15 @@ class DirectorAgent(BaseAgent):
 
         if not file_contents:
             # 파일이 없으면 summary만으로 판단
-            return True, "파일 없음 — summary 기반 자동 승인"
+            return False, "리뷰할 파일이 없음 — 코드 생성 결과를 확인할 수 없어 reject"
 
         # workspace의 기존 파일 구조 참조 (아키텍처 일관성 검증용)
         existing_structure = ""
         try:
-            from pathlib import Path
-            ws = Path(artifacts[0]).parent if artifacts else None
-            if ws:
-                # workspace root 찾기
-                while ws.parent != ws and ws.name != "workspace":
-                    ws = ws.parent
-                if ws.name == "workspace":
-                    all_files = sorted(str(p.relative_to(ws)) for p in ws.rglob("*") if p.is_file())
-                    existing_structure = "\n".join(all_files[:50])
+            ws = Path(self._git_service.work_dir)
+            if ws.is_dir():
+                all_files = sorted(str(p.relative_to(ws)) for p in ws.rglob("*") if p.is_file())
+                existing_structure = "\n".join(all_files[:50])
         except Exception:
             pass
 
@@ -1057,8 +1097,8 @@ class DirectorAgent(BaseAgent):
             log.info("LLM review complete", task_id=task.id, approved=approved, note=note[:100])
             return approved, note
         except Exception as e:
-            log.warning("LLM review failed, auto-approving", task_id=task.id, err=str(e))
-            return True, "리뷰 실패 — 자동 승인"
+            log.error("LLM review failed, rejecting", task_id=task.id, err=str(e))
+            return False, f"Director 리뷰 LLM 호출 실패 — reject (error: {e})"
 
     async def _finalize_review(self, task: Any, approved: bool, reason: str) -> None:
         """리뷰 결과를 Board + DB에 반영하고, 승인 시 의존 태스크를 Ready로 전환."""
@@ -1084,6 +1124,17 @@ class DirectorAgent(BaseAgent):
         await self._state_store.update_task(task.id, updates)
 
         log.info("Task review finalized", task_id=task.id, approved=approved)
+
+        # 승인 시 → workspace 변경사항을 commit + push
+        if approved:
+            try:
+                pushed = await self._git_service.commit_and_push(
+                    f"feat: {task.title} (#{task.github_issue_number or '?'})"
+                )
+                if pushed:
+                    log.info("Code pushed to remote", task_id=task.id)
+            except Exception as e:
+                log.warning("Failed to push approved code", task_id=task.id, err=str(e))
 
         # 리뷰 결과를 MessageBus에 발행 (Docs Agent 기록용)
         await self._message_bus.publish(
@@ -1134,10 +1185,101 @@ class DirectorAgent(BaseAgent):
                     except Exception as e:
                         log.warning("Failed to unlock task on Board", task_id=t.id, err=str(e))
                         continue
+
+                    # 연계 작업 코멘트: 선행 태스크 완료 알림
+                    dep_summaries = []
+                    for dep_id in deps:
+                        dep_task = await self._state_store.get_task(dep_id)
+                        if dep_task:
+                            dep_summaries.append(
+                                f"- **#{dep_task.github_issue_number or '?'}** {dep_task.title}"
+                            )
+                    if dep_summaries:
+                        comment = (
+                            "**선행 태스크 완료 — 작업 시작 가능**\n\n"
+                            "완료된 선행 태스크:\n"
+                            + "\n".join(dep_summaries)
+                            + "\n\n선행 태스크의 코드를 workspace에서 참조하세요."
+                        )
+                        await self._git_service.add_comment(t.github_issue_number, comment)
+
                 await self._state_store.update_task(t.id, {"status": "ready", "board_column": "Ready"})
                 log.info("Dependent task unlocked", task_id=t.id, title=t.title)
 
     # ===== Helpers =====
+
+    async def _write_project_context(self, plan: EpicPlan) -> None:
+        """프로젝트 컨텍스트를 workspace/docs/PROJECT.md에 저장한다.
+
+        에이전트가 코드 생성 시 이 파일을 참조하여 전체 프로젝트 목적/기능/설계를 이해한다.
+        """
+        try:
+            work_dir = Path(self._git_service.work_dir)
+            docs_dir = work_dir / "docs"
+            docs_dir.mkdir(parents=True, exist_ok=True)
+
+            ctx = plan.project
+            tech = ctx.tech_stack
+            tech_lines = []
+            for category in ("frontend", "backend", "database", "infra", "etc"):
+                items = getattr(tech, category, [])
+                if items:
+                    tech_lines.append(f"- **{category}**: {', '.join(items)}")
+
+            stories_section = ""
+            if plan.stories:
+                story_lines = []
+                for s in plan.stories:
+                    task_count = len(s.tasks)
+                    story_lines.append(f"### {s.title}\n{s.description}\n- Sub-tasks: {task_count}개\n")
+                stories_section = "## Stories\n\n" + "\n".join(story_lines)
+
+            decisions_section = ""
+            if plan.decisions:
+                decisions_section = "## 설계 결정사항\n\n" + "\n".join(f"- {d}" for d in plan.decisions)
+
+            constraints_section = ""
+            if ctx.constraints:
+                constraints_section = "## 제약사항\n\n" + "\n".join(f"- {c}" for c in ctx.constraints)
+
+            non_goals_section = ""
+            if ctx.non_goals:
+                non_goals_section = "## Non-Goals\n\n" + "\n".join(f"- {ng}" for ng in ctx.non_goals)
+
+            content = f"""# {plan.epic_title}
+
+## 프로젝트 개요
+{plan.epic_description}
+
+## 목적
+{ctx.purpose}
+
+## 대상 사용자
+{ctx.target_users}
+
+## 범위
+{ctx.scope}
+
+## 기술 스택
+{chr(10).join(tech_lines)}
+
+{decisions_section}
+
+{constraints_section}
+
+{non_goals_section}
+
+{stories_section}
+
+---
+> 이 파일은 Director Agent가 자동 생성합니다. 에이전트가 코드 생성 시 참조합니다.
+"""
+            await asyncio.to_thread(
+                (docs_dir / "PROJECT.md").write_text, content, "utf-8"
+            )
+            log.info("Project context written to workspace", path="docs/PROJECT.md")
+        except Exception as e:
+            log.warning("Failed to write project context", err=str(e))
 
     def _apply_project_update(self, plan: EpicPlan, update: dict[str, Any]) -> None:
         """LLM 응답의 project_update를 EpicPlan.project에 반영한다."""
