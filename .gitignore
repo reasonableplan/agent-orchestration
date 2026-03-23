@@ -3,6 +3,7 @@ dist/
 *.tsbuildinfo
 .env
 workspace/
+.worktrees/
 *.log
 drizzle/
 !packages/core/drizzle/

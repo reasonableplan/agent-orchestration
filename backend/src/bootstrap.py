@@ -13,6 +13,7 @@ from src.core.hooks.builtin_hooks import register_builtin_hooks
 from src.core.hooks.hook_registry import HookRegistry
 from src.core.logging.logger import get_logger
 from src.core.messaging.message_bus import MessageBus
+from src.core.git_service.merge_queue import MergeQueue
 from src.core.resilience.orphan_cleaner import OrphanCleaner
 from src.core.state.state_store import StateStore
 
@@ -32,6 +33,7 @@ class SystemContext:
     orphan_cleaner: OrphanCleaner
     agents: list[Any] = field(default_factory=list)
     llm_clients: list[Any] = field(default_factory=list)
+    merge_queue: MergeQueue | None = None
 
 
 async def bootstrap(config: AppConfig) -> SystemContext:
@@ -67,15 +69,28 @@ async def bootstrap(config: AppConfig) -> SystemContext:
     # 7. RAG — 코드베이스 인덱싱 + 메모리
     code_search, memory_store = await _init_rag(config)
 
+    # 7.5. 머지 큐 생성 (Director가 사용) — test_runner는 Director 생성 후 설정
+    merge_queue_instance: MergeQueue | None = None
+
+    # 7.6. orphan worktree 정리 (이전 세션 잔여물)
+    await git_service.cleanup_orphan_worktrees()
+
     # 8. 에이전트 생성 (에이전트별 LLM 클라이언트 포함)
     agents, agent_llm_clients = _create_agents(
         config, message_bus, state_store, git_service, code_search, memory_store,
     )
 
-    # 8.5. Director 플랜 복원 (서버 재시작 시 이전 세션 이어가기)
+    # 8.5. 머지 큐 초기화 (Director를 test_runner로 사용)
     from src.agents.director.director_agent import DirectorAgent
     for agent in agents:
         if isinstance(agent, DirectorAgent):
+            merge_queue_instance = MergeQueue(
+                git_ops=git_service,
+                test_runner=agent,
+            )
+            merge_queue_instance.start()
+            agent._merge_queue = merge_queue_instance
+            # 플랜 복원 (서버 재시작 시 이전 세션 이어가기)
             await agent.restore_plan_from_db()
             break
 
@@ -107,6 +122,7 @@ async def bootstrap(config: AppConfig) -> SystemContext:
         orphan_cleaner=orphan_cleaner,
         agents=agents,
         llm_clients=agent_llm_clients,
+        merge_queue=merge_queue_instance,
     )
     _system_context = ctx
     log.info("Bootstrap complete", agent_count=len(agents))
@@ -241,6 +257,7 @@ def _create_agents(
     git_service: GitService,
     code_search: Any = None,
     memory_store: Any = None,
+    merge_queue: MergeQueue | None = None,
 ) -> tuple[list[Any], list[Any]]:
     """에이전트와 에이전트별 LLM 클라이언트를 생성한다.
 
@@ -273,6 +290,7 @@ def _create_agents(
         git_service=git_service,
         llm_client=make_llm(director_cfg),
         memory_store=memory_store,
+        merge_queue=merge_queue,
     )
 
     git_cfg = make_config("agent-git", "git", AgentLevel.WORKER)
@@ -337,6 +355,13 @@ async def shutdown(ctx: SystemContext) -> None:
         return
     _shutting_down = True
     log.info("Shutting down...")
+
+    # 머지 큐 drain (진행 중 머지 완료 대기)
+    if ctx.merge_queue:
+        try:
+            await ctx.merge_queue.drain()
+        except Exception as e:
+            log.error("MergeQueue drain error", err=str(e))
 
     # 에이전트 중지
     for agent in ctx.agents:

@@ -236,6 +236,32 @@ class StateStore:
             )
             return list(result.scalars().all())
 
+    async def update_artifact_path(self, artifact_id: str, new_path: str) -> None:
+        """artifact의 file_path를 갱신한다."""
+        async with self._session_factory() as session:
+            await session.execute(
+                update(ArtifactModel)
+                .where(ArtifactModel.id == artifact_id)
+                .values(file_path=new_path)
+            )
+            await session.commit()
+
+    async def get_completed_artifacts_for_epic(self, epic_id: str) -> list[ArtifactModel]:
+        """에픽 내 완료(done) 태스크들의 산출물을 조회한다."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(ArtifactModel)
+                .join(TaskModel, ArtifactModel.task_id == TaskModel.id)
+                .where(
+                    and_(
+                        TaskModel.epic_id == epic_id,
+                        TaskModel.status == "done",
+                    )
+                )
+                .order_by(ArtifactModel.created_at)
+            )
+            return list(result.scalars().all())
+
     # ===== Plan Persistence =====
 
     async def save_plan(self, plan_data: dict[str, Any]) -> None:

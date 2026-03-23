@@ -19,6 +19,7 @@ from src.agents.director.prompts import (
     _WORKER_DOMAINS,
 )
 from src.core.agent.base_agent import BaseAgent
+from src.core.git_service.merge_queue import MergeQueue, MergeRequest, MergeResult
 from src.core.logging.logger import get_logger
 from src.core.messaging.message_bus import MessageBus
 from src.core.state.state_store import StateStore
@@ -88,6 +89,7 @@ class DirectorAgent(BaseAgent):
         git_service: Any,
         llm_client: Any,
         memory_store: Any = None,
+        merge_queue: MergeQueue | None = None,
     ) -> None:
         super().__init__(config, message_bus, state_store, git_service)
         self._llm = llm_client
@@ -95,6 +97,7 @@ class DirectorAgent(BaseAgent):
         self._conversation: list[dict[str, str]] = []
         self._plan_lock = asyncio.Lock()
         self._memory = memory_store
+        self._merge_queue = merge_queue
 
         async def _on_review(msg: Message) -> None:
             await self._handle_review(msg)
@@ -1006,8 +1009,9 @@ class DirectorAgent(BaseAgent):
                         )
                     except Exception as e:
                         log.error("Board move to Backlog failed", task_id=task_id, err=str(e))
+                # Board=Backlog에 맞춰 DB도 ready(재시작 대기) + retry 리셋
                 await self._state_store.update_task(task_id, {
-                    "status": "ready", "board_column": "Ready", "retry_count": 0,
+                    "status": "ready", "board_column": "Backlog", "retry_count": 0,
                 })
                 return
             await self._finalize_review(task, approved=False, reason="Worker reported failure")
@@ -1030,7 +1034,7 @@ class DirectorAgent(BaseAgent):
                 except Exception as e:
                     log.error("Board move to Backlog failed", task_id=task_id, err=str(e))
             await self._state_store.update_task(task_id, {
-                "status": "ready", "board_column": "Ready", "retry_count": 0,
+                "status": "ready", "board_column": "Backlog", "retry_count": 0,
             })
             return
 
@@ -1054,7 +1058,7 @@ class DirectorAgent(BaseAgent):
             return
 
         # ---- 테스트 게이트: pytest 실행 → 실패하면 LLM 리뷰 없이 reject ----
-        test_passed, test_output = await self._run_test_gate()
+        test_passed, test_output = await self._run_test_gate(artifacts=artifacts)
         if not test_passed:
             reject_reason = f"테스트 실패로 reject합니다.\n\n```\n{test_output[-1500:]}\n```"
             await self._finalize_review(task, approved=False, reason=reject_reason)
@@ -1137,37 +1141,134 @@ class DirectorAgent(BaseAgent):
 
         return errors
 
-    async def _run_test_gate(self) -> tuple[bool, str]:
-        """workspace에서 린트 + 테스트를 실행한다. (passed, output) 반환."""
-        work_dir = self._git_service.work_dir
+    async def _run_test_gate(
+        self,
+        work_dir: str | None = None,
+        artifacts: list[str] | None = None,
+    ) -> tuple[bool, str]:
+        """workspace에서 린트 + 전체 테스트를 실행한다. (passed, output) 반환.
+
+        Args:
+            work_dir: 테스트 실행 디렉토리. None이면 공유 workspace.
+            artifacts: 이번 태스크에서 생성된 파일 경로 목록 (린트 범위 제한용).
+        """
+        work_dir = work_dir or self._git_service.work_dir
         if not os.path.isdir(work_dir):
             return True, "no workspace"
 
         outputs: list[str] = []
 
-        # ---- Step 1: 린트 (ruff) ----
-        lint_passed, lint_out = await self._run_subprocess(
-            ["uv", "run", "ruff", "check", ".", "--select=E,F", "--no-fix", "-q"],
-            work_dir, "Lint", timeout=30,
-        )
-        if lint_out:
-            outputs.append(f"=== LINT ===\n{lint_out}")
-        if not lint_passed:
-            return False, "\n\n".join(outputs)
+        # ---- Step 1: 린트 — 새로 생성된 파일만 (기존 코드 false positive 방지) ----
+        lint_targets = self._collect_lint_targets(work_dir, artifacts)
+        if lint_targets:
+            lint_passed, lint_out = await self._run_subprocess(
+                ["uv", "run", "ruff", "check", *lint_targets, "--no-fix", "-q"],
+                work_dir, "Lint", timeout=30,
+            )
+            if lint_out:
+                outputs.append(f"=== LINT ===\n{lint_out}")
+            if not lint_passed:
+                return False, "\n\n".join(outputs)
 
-        # ---- Step 2: 테스트 (pytest) ----
+        # ---- Step 2: 전체 테스트 (pytest) — main 기준 통합 검증 ----
         test_dir = os.path.join(work_dir, "tests")
         if os.path.isdir(test_dir):
             test_passed, test_out = await self._run_subprocess(
                 ["uv", "run", "pytest", "tests/", "-x", "-q", "--tb=short"],
-                work_dir, "Test", timeout=120,
+                work_dir, "Test", timeout=180,
             )
             if test_out:
-                outputs.append(f"=== TEST ===\n{test_out}")
+                structured = self._structure_test_output(test_out, work_dir, artifacts)
+                outputs.append(f"=== TEST ===\n{structured}")
             if not test_passed:
                 return False, "\n\n".join(outputs)
 
         return True, "\n\n".join(outputs) if outputs else "all checks passed"
+
+    def _collect_lint_targets(
+        self, work_dir: str, artifacts: list[str] | None,
+    ) -> list[str]:
+        """린트 대상 파일을 수집한다. artifacts가 있으면 해당 파일만, 없으면 전체."""
+        if not artifacts:
+            return ["."]  # fallback: 전체
+
+        targets: list[str] = []
+        for fpath in artifacts:
+            if not fpath.endswith((".py", ".pyi")):
+                continue
+            # 절대 경로 → 상대 경로 변환
+            try:
+                if os.path.isabs(fpath):
+                    rel = os.path.relpath(fpath, work_dir)
+                else:
+                    rel = fpath
+                if os.path.isfile(os.path.join(work_dir, rel)):
+                    targets.append(rel)
+            except ValueError:
+                continue
+        return targets if targets else ["."]
+
+    def _structure_test_output(
+        self, raw_output: str, work_dir: str, artifacts: list[str] | None,
+    ) -> str:
+        """테스트 실패 출력을 구조화한다.
+
+        기존 테스트 vs 새 테스트를 구분하여 워커에게 명확한 피드백 제공.
+        """
+        if not artifacts:
+            return raw_output[-2000:]
+
+        # artifacts에서 테스트 파일 경로 추출 (상대 경로로 통일)
+        new_test_files: set[str] = set()
+        for fpath in artifacts:
+            basename = os.path.basename(fpath)
+            if basename.startswith("test_") and basename.endswith(".py"):
+                try:
+                    if os.path.isabs(fpath):
+                        rel = os.path.relpath(fpath, work_dir)
+                    else:
+                        rel = fpath
+                    new_test_files.add(rel.replace("\\", "/"))
+                except ValueError:
+                    pass
+
+        # pytest 출력에서 FAILED 라인 파싱
+        lines = raw_output.split("\n")
+        existing_failures: list[str] = []
+        new_failures: list[str] = []
+
+        for line in lines:
+            if "FAILED" not in line:
+                continue
+            # 형식: FAILED tests/path/test_foo.py::test_bar - ...
+            is_new = False
+            for nf in new_test_files:
+                if nf in line.replace("\\", "/"):
+                    is_new = True
+                    break
+            if is_new:
+                new_failures.append(line.strip())
+            else:
+                existing_failures.append(line.strip())
+
+        parts: list[str] = []
+        if existing_failures:
+            parts.append(
+                "🔴 기존 테스트가 깨졌습니다 — 새 코드가 기존 기능을 망가뜨림:\n"
+                + "\n".join(f"  - {f}" for f in existing_failures[:10])
+            )
+        if new_failures:
+            parts.append(
+                "🟡 새 테스트 실패 — 구현이 스펙과 불일치:\n"
+                + "\n".join(f"  - {f}" for f in new_failures[:10])
+            )
+
+        if parts:
+            summary = "\n\n".join(parts)
+            # 원본 출력의 마지막 부분도 포함 (traceback 참조용)
+            return f"{summary}\n\n--- 상세 출력 ---\n{raw_output[-1500:]}"
+
+        return raw_output[-2000:]
 
     async def _run_subprocess(
         self, cmd: list[str], cwd: str, label: str, timeout: int = 60,
@@ -1195,6 +1296,10 @@ class DirectorAgent(BaseAgent):
         except Exception as e:
             log.warning(f"{label} gate error", err=str(e))
             return True, ""  # 실행 자체 실패하면 게이트 통과 (환경 문제)
+
+    async def run_full_test(self, work_dir: str) -> tuple[bool, str]:
+        """MergeQueue.TestRunner 프로토콜 구현 — 전체 테스트를 실행한다."""
+        return await self._run_test_gate(work_dir=work_dir)
 
     async def _llm_review(
         self, task: Any, artifacts: list[str], summary: str,
@@ -1264,53 +1369,103 @@ class DirectorAgent(BaseAgent):
             return False, f"Director 리뷰 LLM 호출 실패 — reject (error: {e})"
 
     async def _finalize_review(self, task: Any, approved: bool, reason: str) -> None:
-        """리뷰 결과를 Board + DB에 반영하고, 승인 시 의존 태스크를 Ready로 전환."""
-        target_column = "Done" if approved else "Ready"
-        target_status = "done" if approved else "ready"
+        """리뷰 결과를 Board + DB에 반영하고, 승인 시 의존 태스크를 Ready로 전환.
 
+        승인 시 플로우: merge 먼저 → 성공 시에만 done 전이 (review→done).
+        merge 실패 시: review → ready 롤백 (유효한 상태 전이).
+        """
+        if not approved:
+            # reject: review → ready (유효한 전이)
+            if task.github_issue_number:
+                try:
+                    await self._git_service.move_issue_to_column(
+                        task.github_issue_number, "Ready"
+                    )
+                except Exception as e:
+                    log.error("Review: Board move failed", task_id=task.id, err=str(e))
+                    return
+            await self._state_store.update_task(task.id, {
+                "status": "ready",
+                "board_column": "Ready",
+                "review_note": reason[:500],
+                "retry_count_increment": 1,
+            })
+            log.info("Task review: rejected", task_id=task.id)
+            await self._broadcast_review_message(task, approved, reason)
+            return
+
+        # approved: merge 먼저 시도 → 성공 시에만 done 전이
+        merge_result = await self._enqueue_merge(task)
+        if not merge_result.success:
+            log.warning("Merge failed, reverting to ready",
+                        task_id=task.id, err=merge_result.error)
+            # merge 실패 → review → ready (유효한 전이)
+            if task.github_issue_number:
+                try:
+                    await self._git_service.move_issue_to_column(
+                        task.github_issue_number, "Ready"
+                    )
+                except Exception:
+                    pass
+            rollback_reason = merge_result.error
+            if merge_result.test_output:
+                rollback_reason += f"\n\n{merge_result.test_output[-1500:]}"
+            await self._state_store.update_task(task.id, {
+                "status": "ready", "board_column": "Ready",
+                "retry_count_increment": 1,
+                "review_note": rollback_reason[:500],
+            })
+            if task.github_issue_number:
+                await self._git_service.add_comment(
+                    task.github_issue_number,
+                    f"**Merge Queue: FAILED**\n\n{rollback_reason[:1500]}",
+                )
+            return  # 의존 태스크 unlock 하지 않음
+
+        # merge 성공 → review → done 전이 (Board-first)
         if task.github_issue_number:
             try:
                 await self._git_service.move_issue_to_column(
-                    task.github_issue_number, target_column
+                    task.github_issue_number, "Done"
                 )
             except Exception as e:
-                log.error("Review: Board move failed (Board-first)", task_id=task.id, err=str(e))
+                log.error("Review: Board move to Done failed", task_id=task.id, err=str(e))
                 return
-
-        updates: dict[str, Any] = {
-            "status": target_status,
-            "board_column": target_column,
+        await self._state_store.update_task(task.id, {
+            "status": "done",
+            "board_column": "Done",
             "review_note": reason[:500],
-        }
-        if not approved:
-            updates["retry_count_increment"] = 1
-        await self._state_store.update_task(task.id, updates)
+        })
+        log.info("Task review: approved + merged", task_id=task.id)
 
-        log.info("Task review finalized", task_id=task.id, approved=approved)
+        await self._broadcast_review_message(task, approved, reason)
 
-        # 승인 시 → branch + commit + PR + merge
-        if approved:
-            try:
-                pr_num = await self._git_service.commit_and_pr(
-                    f"feat: {task.title} (#{task.github_issue_number or '?'})",
-                    issue_number=task.github_issue_number,
+        # 승인 + 머지 완료 → 산출물 브로드캐스트 + 의존 태스크 Ready 전환
+        db_artifacts = await self._state_store.get_artifacts_for_task(task.id)
+        if db_artifacts:
+            file_paths = [a.file_path for a in db_artifacts if hasattr(a, "file_path")]
+            await self._message_bus.publish(
+                Message(
+                    id=str(uuid.uuid4()),
+                    type=MessageType.TASK_ARTIFACTS,
+                    from_agent=task.assigned_agent or self.id,
+                    payload={
+                        "task_id": task.id,
+                        "task_title": task.title,
+                        "issue_number": task.github_issue_number,
+                        "files": file_paths[:20],
+                    },
+                    trace_id=str(uuid.uuid4()),
+                    timestamp=datetime.now(timezone.utc),
                 )
-                if pr_num:
-                    log.info("PR created and merged", task_id=task.id, pr=pr_num)
-            except Exception as e:
-                log.warning("PR failed, rolling back to ready", task_id=task.id, err=str(e))
-                # PR 실패 → Done 롤백 (코드가 main에 없으므로)
-                if task.github_issue_number:
-                    try:
-                        await self._git_service.move_issue_to_column(task.github_issue_number, "Ready")
-                    except Exception:
-                        pass
-                await self._state_store.update_task(task.id, {
-                    "status": "ready", "board_column": "Ready", "retry_count_increment": 1,
-                })
-                return  # 의존 태스크 unlock 하지 않음
+            )
+        await self._unlock_dependent_tasks(task.id)
 
-        # 리뷰 결과를 MessageBus에 발행 (Docs Agent 기록용)
+    async def _broadcast_review_message(
+        self, task: Any, approved: bool, reason: str,
+    ) -> None:
+        """리뷰 결과를 MessageBus에 발행한다 (Docs Agent 기록용)."""
+        status = "Approved" if approved else "Changes Requested"
         await self._message_bus.publish(
             Message(
                 id=str(uuid.uuid4()),
@@ -1318,8 +1473,9 @@ class DirectorAgent(BaseAgent):
                 from_agent=self.id,
                 payload={
                     "content": (
-                        f"**Director Review: {'Approved' if approved else 'Changes Requested'}**\n"
-                        f"- Task: {task.title} (#{task.github_issue_number or '?'})\n"
+                        f"**Director Review: {status}**\n"
+                        f"- Task: {task.title}"
+                        f" (#{task.github_issue_number or '?'})\n"
                         f"- Agent: {task.assigned_agent or '?'}\n"
                         f"- Feedback: {reason}"
                     ),
@@ -1329,27 +1485,28 @@ class DirectorAgent(BaseAgent):
             )
         )
 
-        # 승인 시 → 산출물 브로드캐스트 + 의존 태스크 Ready 전환
-        if approved:
-            db_artifacts = await self._state_store.get_artifacts_for_task(task.id)
-            if db_artifacts:
-                file_paths = [a.file_path for a in db_artifacts if hasattr(a, "file_path")]
-                await self._message_bus.publish(
-                    Message(
-                        id=str(uuid.uuid4()),
-                        type=MessageType.TASK_ARTIFACTS,
-                        from_agent=task.assigned_agent or self.id,
-                        payload={
-                            "task_id": task.id,
-                            "task_title": task.title,
-                            "issue_number": task.github_issue_number,
-                            "files": file_paths[:20],
-                        },
-                        trace_id=str(uuid.uuid4()),
-                        timestamp=datetime.now(timezone.utc),
-                    )
-                )
-            await self._unlock_dependent_tasks(task.id)
+    async def _enqueue_merge(self, task: Any) -> MergeResult:
+        """태스크를 머지 큐에 넣어 순차 처리한다. 큐가 없으면 직접 commit_and_pr."""
+        if self._merge_queue:
+            request = MergeRequest(
+                task_id=task.id,
+                task_title=task.title,
+                issue_number=task.github_issue_number,
+                worktree_path=None,  # 워커의 worktree는 이미 정리됨, 공유 workspace 사용
+            )
+            return await self._merge_queue.enqueue(request)
+
+        # fallback: 머지 큐 없이 직접 처리 (하위 호환)
+        try:
+            pr_num = await self._git_service.commit_and_pr(
+                f"feat: {task.title} (#{task.github_issue_number or '?'})",
+                issue_number=task.github_issue_number,
+            )
+            if pr_num:
+                log.info("PR created and merged (direct)", task_id=task.id, pr=pr_num)
+            return MergeResult(success=True, pr_number=pr_num)
+        except Exception as e:
+            return MergeResult(success=False, error=str(e))
 
     async def _unlock_dependent_tasks(self, completed_task_id: str) -> None:
         """완료된 태스크에 의존하는 backlog 태스크들의 의존성을 확인하고 Ready 전환."""

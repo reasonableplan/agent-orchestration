@@ -467,6 +467,155 @@ class GitService:
     # add_comment의 alias (호환성 유지)
     add_issue_comment = add_comment
 
+    # ===== Worktree Management =====
+
+    async def create_worktree(self, task_id: str, branch_name: str) -> str:
+        """태스크용 독립 worktree를 생성한다.
+
+        main 최신 상태에서 브랜치를 만들어 격리된 작업 공간을 제공한다.
+        동시에 여러 에이전트가 작업해도 파일 간섭이 없다.
+
+        Returns: worktree 절대 경로
+        """
+        # task_id를 짧은 해시로 변환 (Windows 경로 길이 제한 대응)
+        short_id = task_id[:8]
+        safe_branch = re.sub(r'[^a-zA-Z0-9\-]', '-', branch_name)[:40].strip('-')
+        worktree_name = f"{safe_branch}-{short_id}"
+        worktree_path = os.path.join(self._work_dir, ".worktrees", worktree_name)
+
+        # .worktrees 디렉토리 생성
+        os.makedirs(os.path.join(self._work_dir, ".worktrees"), exist_ok=True)
+
+        # main 최신화
+        try:
+            await self._run_git("fetch", "origin", "main")
+        except GitServiceError:
+            pass  # offline이면 현재 main 기준
+
+        # 기존 worktree가 있으면 정리
+        if os.path.isdir(worktree_path):
+            await self.remove_worktree(task_id, worktree_name)
+
+        # worktree 생성: origin/main 기반 새 브랜치
+        full_branch = f"wt/{worktree_name}"
+        try:
+            await self._run_git(
+                "worktree", "add", worktree_path,
+                "-b", full_branch, "origin/main",
+            )
+        except GitServiceError:
+            # origin/main이 없는 경우 (빈 repo) → HEAD 기반
+            await self._run_git(
+                "worktree", "add", worktree_path,
+                "-b", full_branch,
+            )
+
+        log.info("Worktree created",
+                 task_id=task_id, path=worktree_path, branch=full_branch)
+        return worktree_path
+
+    async def remove_worktree(
+        self, task_id: str, worktree_name: str | None = None,
+    ) -> None:
+        """태스크 worktree를 정리한다 (디렉토리 + 브랜치)."""
+        if worktree_name is None:
+            short_id = task_id[:8]
+            # 정확한 이름을 모르면 패턴으로 찾기 (suffix 매칭으로 오삭제 방지)
+            worktrees_dir = os.path.join(self._work_dir, ".worktrees")
+            if os.path.isdir(worktrees_dir):
+                for name in os.listdir(worktrees_dir):
+                    if name.endswith(f"-{short_id}"):
+                        worktree_name = name
+                        break
+            if worktree_name is None:
+                return
+
+        worktree_path = os.path.join(self._work_dir, ".worktrees", worktree_name)
+        branch_name = f"wt/{worktree_name}"
+
+        # worktree 제거
+        try:
+            await self._run_git("worktree", "remove", worktree_path, "--force")
+        except GitServiceError:
+            # git worktree remove 실패 시 디렉토리 직접 삭제
+            if os.path.isdir(worktree_path):
+                shutil.rmtree(worktree_path, ignore_errors=True)
+            try:
+                await self._run_git("worktree", "prune")
+            except GitServiceError:
+                pass
+
+        # 브랜치 정리
+        try:
+            await self._run_git("branch", "-D", branch_name)
+        except GitServiceError:
+            pass  # 이미 삭제됨
+
+        log.info("Worktree removed", task_id=task_id, path=worktree_path)
+
+    async def cleanup_orphan_worktrees(self) -> None:
+        """시스템 시작 시 이전 세션에서 남은 orphan worktree를 정리한다."""
+        worktrees_dir = os.path.join(self._work_dir, ".worktrees")
+        if not os.path.isdir(worktrees_dir):
+            return
+
+        try:
+            await self._run_git("worktree", "prune")
+        except GitServiceError:
+            pass
+
+        # git이 인식하는 활성 worktree 경로 수집
+        active_paths: set[str] = set()
+        try:
+            wt_list = await self._run_git("worktree", "list", "--porcelain")
+            for line in wt_list.split("\n"):
+                if line.startswith("worktree "):
+                    active_paths.add(os.path.normpath(line[9:].strip()))
+        except GitServiceError:
+            pass
+
+        # git이 인식하지 못하는 orphan 디렉토리만 삭제
+        for name in os.listdir(worktrees_dir):
+            full_path = os.path.join(worktrees_dir, name)
+            if os.path.isdir(full_path) and os.path.normpath(full_path) not in active_paths:
+                shutil.rmtree(full_path, ignore_errors=True)
+                log.info("Cleaned orphan worktree", path=full_path)
+
+        # 고아 브랜치 정리 (wt/ 접두사)
+        try:
+            branches_output = await self._run_git("branch", "--list", "wt/*")
+            for line in branches_output.strip().split("\n"):
+                branch = line.strip().lstrip("* ")
+                if branch.startswith("wt/"):
+                    try:
+                        await self._run_git("branch", "-D", branch)
+                    except GitServiceError:
+                        pass
+        except GitServiceError:
+            pass
+
+    async def run_git_in_worktree(
+        self, worktree_path: str, *args: str, timeout_s: float = 60.0,
+    ) -> str:
+        """특정 worktree에서 git 명령을 실행한다."""
+        proc = await asyncio.create_subprocess_exec(
+            "git", "-C", worktree_path,
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise GitServiceError(f"git {args[0] if args else ''} timed out in worktree")
+        if proc.returncode != 0:
+            err_msg = stderr.decode().strip()
+            err_msg = err_msg.replace(self._token, "***")
+            raise GitServiceError(f"git {' '.join(args)} in worktree: {err_msg}")
+        return stdout.decode().strip()
+
     # ===== Git Operations =====
 
     async def _run_git(self, *args: str, timeout_s: float = 60.0) -> str:

@@ -18,6 +18,7 @@ MAX_TOKENS = 64_000
 TOKEN_BUDGET = 100_000_000
 _MAX_CONTEXT_CHARS = 40_000  # 워크스페이스 컨텍스트 최대 길이
 _MAX_FILE_CHARS = 6_000      # 개별 파일 최대 읽기 길이
+_MAX_ARTIFACT_CONTEXT_CHARS = 12_000  # 선행 산출물 컨텍스트 최대 길이
 
 # 에이전트 도메인별 관심 파일 패턴
 _DOMAIN_FILE_PATTERNS: dict[str, list[str]] = {
@@ -80,7 +81,9 @@ class BaseCodeGeneratorAgent(BaseAgent):
     # 서브클래스에서 오버라이드할 role description
     _role_description: str = "You are a code generation assistant."
 
-    def _build_prompt(self, task: Task, context: str = "") -> str:
+    def _build_prompt(
+        self, task: Task, context: str = "", artifact_context: str = "",
+    ) -> str:
         """공통 프롬프트 템플릿. 서브클래스는 _role_description만 설정하면 된다."""
         ctx_section = ""
         if context:
@@ -96,6 +99,19 @@ class BaseCodeGeneratorAgent(BaseAgent):
                 "- New files MUST be importable by existing tests and code without modification.\n"
                 "- Follow the existing file structure and naming conventions exactly.\n\n"
             )
+
+        # 선행 태스크 산출물 컨텍스트
+        artifact_section = ""
+        if artifact_context:
+            artifact_section = (
+                "\n## Previously Completed Tasks (MUST use these files — do NOT recreate them)\n"
+                "<completed_artifacts>\n"
+                f"{saxutils.escape(artifact_context)}\n"
+                "</completed_artifacts>\n\n"
+                "CRITICAL: These files ALREADY exist in the codebase. "
+                "Import and use them directly. Do NOT redefine or duplicate their contents.\n\n"
+            )
+
         # Director의 이전 리뷰 피드백 (reject 사유)
         feedback_section = ""
         review_note = getattr(task, "review_note", None)
@@ -122,6 +138,7 @@ class BaseCodeGeneratorAgent(BaseAgent):
             "Generate FEWER files with LESS code. Quality over quantity. "
             "Empty marker files (py.typed, __init__.py, .gitkeep) MUST be included with empty content.\n\n"
             f"{feedback_section}"
+            f"{artifact_section}"
             'Respond with JSON: {"files": [{"path": str, "content": str, "action": str}], "summary": str}\n'
             "Include test files BEFORE implementation files in the array.\n"
             "CRITICAL: Every file MUST be COMPLETE. Never truncate code mid-function or mid-file. "
@@ -131,14 +148,28 @@ class BaseCodeGeneratorAgent(BaseAgent):
             f"Description: {saxutils.escape(task.description)}\n</task>"
         )
 
+    @property
+    def _effective_work_dir(self) -> Path:
+        """현재 활성 작업 디렉토리 — worktree가 있으면 worktree, 없으면 공유 workspace."""
+        if self._active_worktree:
+            return Path(self._active_worktree).resolve()
+        return self._work_dir
+
     async def execute_task(self, task: Task) -> TaskResult:
         try:
+            # 워크트리가 활성화되어 있으면 해당 경로 사용
+            effective_dir = self._effective_work_dir
+
             # 1. RAG 검색 시도
             context = await self._search_codebase(task)
             # 2. RAG 실패 시 workspace 직접 스캔
             if not context:
                 context = await self._scan_workspace_context(task)
-            prompt = self._build_prompt(task, context=context)
+            # 3. 선행 태스크 산출물 컨텍스트 수집
+            artifact_context = await self._collect_artifact_context(task)
+            prompt = self._build_prompt(
+                task, context=context, artifact_context=artifact_context,
+            )
             data, input_tokens, output_tokens = await self._llm.chat_json(
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=MAX_TOKENS,
@@ -173,7 +204,7 @@ class BaseCodeGeneratorAgent(BaseAgent):
                 content = f.get("content", "")
                 if not path or not content:
                     continue
-                abs_path = self._safe_resolve(path)
+                abs_path = self._safe_resolve(path, effective_dir)
                 abs_path.parent.mkdir(parents=True, exist_ok=True)
                 await asyncio.to_thread(abs_path.write_text, content, "utf-8")
 
@@ -230,21 +261,22 @@ class BaseCodeGeneratorAgent(BaseAgent):
         2. 통합 핵심 파일 (import 경로, DB, 앱 구조 — 반드시 포함)
         3. 도메인별 + 공유 패턴 파일 (남은 예산으로)
         """
-        if not self._work_dir.exists():
+        scan_dir = self._effective_work_dir
+        if not scan_dir.exists():
             return ""
 
         # ---- Phase 1: 전체 파일 트리 ----
         all_files: list[str] = []
-        skip_dirs = {".git", ".venv", "node_modules", "__pycache__", ".pytest_cache"}
+        skip_dirs = {".git", ".venv", "node_modules", "__pycache__", ".pytest_cache", ".worktrees"}
         skip_exts = {".pyc", ".pyo", ".png", ".jpg", ".ico", ".woff", ".lock", ".egg-info"}
-        for file_path in sorted(self._work_dir.rglob("*")):
+        for file_path in sorted(scan_dir.rglob("*")):
             if not file_path.is_file():
                 continue
             if any(d in file_path.parts for d in skip_dirs):
                 continue
             if file_path.suffix in skip_exts:
                 continue
-            all_files.append(str(file_path.relative_to(self._work_dir)))
+            all_files.append(str(file_path.relative_to(scan_dir)))
 
         tree_section = "## Project File Tree\n```\n" + "\n".join(all_files) + "\n```\n"
         total_chars = len(tree_section)
@@ -253,10 +285,10 @@ class BaseCodeGeneratorAgent(BaseAgent):
         collected_files: dict[str, str] = {}
 
         for pattern in _INTEGRATION_FILES:
-            for file_path in sorted(self._work_dir.glob(pattern)):
+            for file_path in sorted(scan_dir.glob(pattern)):
                 if not file_path.is_file() or file_path.stat().st_size > 50_000:
                     continue
-                rel = str(file_path.relative_to(self._work_dir))
+                rel = str(file_path.relative_to(scan_dir))
                 if rel in collected_files:
                     continue
                 if any(d in file_path.parts for d in skip_dirs):
@@ -277,10 +309,10 @@ class BaseCodeGeneratorAgent(BaseAgent):
         for pattern in patterns:
             if total_chars >= _MAX_CONTEXT_CHARS:
                 break
-            for file_path in sorted(self._work_dir.glob(pattern)):
+            for file_path in sorted(scan_dir.glob(pattern)):
                 if not file_path.is_file():
                     continue
-                rel = str(file_path.relative_to(self._work_dir))
+                rel = str(file_path.relative_to(scan_dir))
                 if rel in collected_files:
                     continue
                 if file_path.suffix in skip_exts:
@@ -338,9 +370,71 @@ class BaseCodeGeneratorAgent(BaseAgent):
 
         return False
 
-    def _safe_resolve(self, rel_path: str) -> Path:
+    async def _collect_artifact_context(self, task: Task) -> str:
+        """에픽 내 완료된 선행 태스크의 산출물을 읽어 컨텍스트 문자열로 반환한다.
+
+        - 에픽이 없는 독립 태스크는 빈 문자열 반환
+        - 파일 내용 직접 포함 (12,000자 제한)
+        - 핵심 파일 우선 (models, config, schemas 등)
+        """
+        epic_id = getattr(task, "epic_id", None)
+        if not epic_id:
+            return ""
+
+        try:
+            artifacts = await self._state_store.get_completed_artifacts_for_epic(epic_id)
+        except Exception as e:
+            self._log.warning("Failed to load artifact context", err=str(e))
+            return ""
+
+        if not artifacts:
+            return ""
+
+        # 핵심 파일 우선 정렬 (models, config, schemas, base → 기타)
+        priority_keywords = ("model", "schema", "config", "base", "type", "database", "db")
+
+        def sort_key(art: Any) -> tuple[int, str]:
+            fpath = art.file_path if hasattr(art, "file_path") else str(art)
+            basename = fpath.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].lower()
+            is_priority = any(kw in basename for kw in priority_keywords)
+            return (0 if is_priority else 1, fpath)
+
+        sorted_artifacts = sorted(artifacts, key=sort_key)
+
+        parts: list[str] = []
+        total_chars = 0
+
+        for art in sorted_artifacts:
+            if total_chars >= _MAX_ARTIFACT_CONTEXT_CHARS:
+                break
+
+            fpath = art.file_path if hasattr(art, "file_path") else str(art)
+            try:
+                content = await asyncio.to_thread(
+                    Path(fpath).read_text, "utf-8", "replace",
+                )
+            except Exception:
+                # 파일 삭제/이동된 경우 graceful 처리
+                parts.append(f"### {fpath}\n(파일 읽기 실패 — 삭제/이동됨)")
+                continue
+
+            remaining = _MAX_ARTIFACT_CONTEXT_CHARS - total_chars
+            truncated = content[:min(len(content), remaining, _MAX_FILE_CHARS)]
+            suffix = " (truncated)" if len(truncated) < len(content) else ""
+            parts.append(f"### {fpath}{suffix}\n```\n{truncated}\n```")
+            total_chars += len(truncated)
+
+        if not parts:
+            return ""
+
+        self._log.info("Artifact context collected",
+                       epic_id=epic_id, files=len(parts), chars=total_chars)
+        return "\n\n".join(parts)
+
+    def _safe_resolve(self, rel_path: str, base_dir: Path | None = None) -> Path:
         """Sandbox escape 방지: work_dir 밖 경로 차단."""
-        resolved = (self._work_dir / rel_path).resolve()
-        if not resolved.is_relative_to(self._work_dir):
-            raise SandboxEscapeError(rel_path, str(self._work_dir))
+        target = base_dir or self._work_dir
+        resolved = (target / rel_path).resolve()
+        if not resolved.is_relative_to(target):
+            raise SandboxEscapeError(rel_path, str(target))
         return resolved
