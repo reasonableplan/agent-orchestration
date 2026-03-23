@@ -464,16 +464,8 @@ class GitService:
         except Exception as e:
             log.warning("ensure_label failed", label=label, err=str(e))
 
-    async def add_issue_comment(self, issue_number: int, body: str) -> None:
-        """이슈에 코멘트를 추가한다."""
-        try:
-            await self._rest(
-                "POST",
-                f"/repos/{self._owner}/{self._repo}/issues/{issue_number}/comments",
-                json={"body": body},
-            )
-        except Exception as e:
-            log.warning("add_issue_comment failed", issue=issue_number, err=str(e))
+    # add_comment의 alias (호환성 유지)
+    add_issue_comment = add_comment
 
     # ===== Git Operations =====
 
@@ -574,6 +566,95 @@ class GitService:
         if committed:
             await self.push(branch)
         return committed
+
+    async def commit_and_pr(
+        self, message: str, issue_number: int | None = None,
+    ) -> int | None:
+        """branch 생성 → commit → push → PR 생성 → merge. PR 번호 반환.
+
+        변경이 없으면 None. 머지 충돌 시 rebase 재시도 (최대 2회).
+        """
+        safe_title = re.sub(r'[^a-zA-Z0-9]', '-', message)[:40].strip('-')
+        branch_name = f"feat/{safe_title}-{issue_number or 'task'}"
+
+        # 변경사항을 먼저 stash (checkout 시 유실 방지)
+        await self._run_git("add", "-A")
+        try:
+            await self._run_git("stash", "--include-untracked")
+            stashed = True
+        except GitServiceError:
+            stashed = False
+
+        # main 최신 상태로
+        try:
+            await self._run_git("checkout", "main")
+            await self._run_git("pull", "--rebase", "origin", "main")
+        except GitServiceError:
+            pass
+
+        # 브랜치 생성 + stash 복원 + commit
+        await self._run_git("checkout", "-b", branch_name)
+        if stashed:
+            try:
+                await self._run_git("stash", "pop")
+            except GitServiceError:
+                pass
+        committed = await self.commit_all(message)
+        if not committed:
+            await self._run_git("checkout", "main")
+            return None
+
+        # main과 rebase (충돌 감지 + 해결 시도)
+        try:
+            await self._run_git("fetch", "origin", "main")
+            await self._run_git("rebase", "origin/main")
+        except GitServiceError as e:
+            if "conflict" in str(e).lower() or "CONFLICT" in str(e):
+                log.warning("Merge conflict detected, aborting rebase", branch=branch_name)
+                try:
+                    await self._run_git("rebase", "--abort")
+                except GitServiceError:
+                    pass
+                # 충돌 시 main으로 복귀, 브랜치 삭제
+                await self._run_git("checkout", "main")
+                try:
+                    await self._run_git("branch", "-D", branch_name)
+                except GitServiceError:
+                    pass
+                raise GitServiceError(f"Merge conflict on branch {branch_name}. Task needs retry.")
+            # 충돌이 아닌 다른 에러는 무시하고 진행
+
+        # push + PR 생성
+        await self.push(branch_name)
+        linked = [issue_number] if issue_number else None
+        pr_number = await self.create_pr(
+            title=message,
+            body=f"자동 생성된 PR\n\n이슈: #{issue_number or 'N/A'}",
+            head=branch_name,
+            base="main",
+            linked_issues=linked,
+        )
+        log.info("PR created", pr=pr_number, branch=branch_name)
+
+        # 자동 머지
+        try:
+            await self._rest(
+                "PUT",
+                f"/repos/{self._owner}/{self._repo}/pulls/{pr_number}/merge",
+                json={"merge_method": "squash"},
+            )
+            log.info("PR merged", pr=pr_number)
+        except Exception as e:
+            log.warning("PR auto-merge failed", pr=pr_number, err=str(e))
+
+        # main으로 복귀 + 최신화
+        await self._run_git("checkout", "main")
+        try:
+            await self._run_git("pull", "--rebase", "origin", "main")
+        except GitServiceError:
+            pass
+
+        return pr_number
 
     async def create_branch(self, branch_name: str, base_branch: str = "main") -> None:
         # 안전한 브랜치 이름 검증 (.. 차단으로 path traversal 방지)

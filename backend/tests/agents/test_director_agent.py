@@ -46,6 +46,7 @@ def state_store():
     store.get_all_tasks = AsyncMock(return_value=[])
     store.save_message = AsyncMock()
     store.get_agent_config = AsyncMock(return_value=None)
+    store.get_artifacts_for_task = AsyncMock(return_value=[])
     return store
 
 
@@ -54,6 +55,9 @@ def git_service():
     svc = MagicMock()
     svc.move_issue_to_column = AsyncMock()
     svc.add_comment = AsyncMock()
+    svc.add_issue_comment = AsyncMock()
+    svc.commit_and_pr = AsyncMock(return_value=1)
+    svc.work_dir = ""
     return svc
 
 

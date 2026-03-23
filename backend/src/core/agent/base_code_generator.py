@@ -16,8 +16,8 @@ from src.core.types import AgentConfig, Task, TaskResult
 
 MAX_TOKENS = 64_000
 TOKEN_BUDGET = 100_000_000
-_MAX_CONTEXT_CHARS = 12_000  # 워크스페이스 컨텍스트 최대 길이
-_MAX_FILE_CHARS = 2_000      # 개별 파일 최대 읽기 길이
+_MAX_CONTEXT_CHARS = 40_000  # 워크스페이스 컨텍스트 최대 길이
+_MAX_FILE_CHARS = 6_000      # 개별 파일 최대 읽기 길이
 
 # 에이전트 도메인별 관심 파일 패턴
 _DOMAIN_FILE_PATTERNS: dict[str, list[str]] = {
@@ -42,6 +42,15 @@ _DOMAIN_FILE_PATTERNS: dict[str, list[str]] = {
 _SHARED_PATTERNS = [
     "**/types/**", "**/models/**", "**/schemas/**",
     "**/domain.ts", "**/base.py", "**/config.py",
+]
+
+# 통합 핵심 파일 — 반드시 먼저 읽어야 하는 파일 (import 경로, DB 설정, 앱 구조)
+_INTEGRATION_FILES = [
+    "pyproject.toml", "package.json",
+    "**/conftest.py", "**/database.py", "**/db.py",
+    "**/app.py", "**/main.py", "**/config.py", "**/settings.py",
+    "**/base.py", "**/models.py",
+    "**/router.py", "**/routes.py", "**/urls.py",
 ]
 
 
@@ -80,8 +89,12 @@ class BaseCodeGeneratorAgent(BaseAgent):
                 "<existing_code>\n"
                 f"{saxutils.escape(context)}\n"
                 "</existing_code>\n\n"
-                "IMPORTANT: Follow the existing file structure and naming conventions. "
-                "Generate files that are consistent with the codebase above.\n\n"
+                "CRITICAL RULES for integration:\n"
+                "- Use EXACTLY the same import paths as existing files. Do NOT guess import paths.\n"
+                "- Check the file tree to know what files exist before importing.\n"
+                "- Match existing patterns: if conftest.py uses sync, use sync. If async, use async.\n"
+                "- New files MUST be importable by existing tests and code without modification.\n"
+                "- Follow the existing file structure and naming conventions exactly.\n\n"
             )
         # Director의 이전 리뷰 피드백 (reject 사유)
         feedback_section = ""
@@ -212,37 +225,72 @@ class BaseCodeGeneratorAgent(BaseAgent):
     async def _scan_workspace_context(self, task: Task) -> str:
         """workspace 디렉토리의 기존 파일을 스캔하여 컨텍스트로 반환한다.
 
-        에이전트 도메인에 맞는 파일 + 공유 타입/스키마 파일을 읽어서
-        다른 에이전트가 생성한 코드를 참조할 수 있게 한다.
+        3단계로 컨텍스트를 구성:
+        1. 전체 파일 트리 (구조 파악)
+        2. 통합 핵심 파일 (import 경로, DB, 앱 구조 — 반드시 포함)
+        3. 도메인별 + 공유 패턴 파일 (남은 예산으로)
         """
         if not self._work_dir.exists():
             return ""
 
-        # 도메인별 패턴 + 공유 패턴
+        # ---- Phase 1: 전체 파일 트리 ----
+        all_files: list[str] = []
+        skip_dirs = {".git", ".venv", "node_modules", "__pycache__", ".pytest_cache"}
+        skip_exts = {".pyc", ".pyo", ".png", ".jpg", ".ico", ".woff", ".lock", ".egg-info"}
+        for file_path in sorted(self._work_dir.rglob("*")):
+            if not file_path.is_file():
+                continue
+            if any(d in file_path.parts for d in skip_dirs):
+                continue
+            if file_path.suffix in skip_exts:
+                continue
+            all_files.append(str(file_path.relative_to(self._work_dir)))
+
+        tree_section = "## Project File Tree\n```\n" + "\n".join(all_files) + "\n```\n"
+        total_chars = len(tree_section)
+
+        # ---- Phase 2: 통합 핵심 파일 (반드시 포함) ----
+        collected_files: dict[str, str] = {}
+
+        for pattern in _INTEGRATION_FILES:
+            for file_path in sorted(self._work_dir.glob(pattern)):
+                if not file_path.is_file() or file_path.stat().st_size > 50_000:
+                    continue
+                rel = str(file_path.relative_to(self._work_dir))
+                if rel in collected_files:
+                    continue
+                if any(d in file_path.parts for d in skip_dirs):
+                    continue
+                try:
+                    content = await asyncio.to_thread(file_path.read_text, "utf-8", "replace")
+                    truncated = content[:_MAX_FILE_CHARS]
+                    collected_files[rel] = truncated
+                    total_chars += len(truncated)
+                except Exception:
+                    continue
+
+        # ---- Phase 3: 도메인별 + 공유 파일 (남은 예산으로) ----
         patterns = list(_SHARED_PATTERNS)
         domain_patterns = _DOMAIN_FILE_PATTERNS.get(self.domain, [])
         patterns.extend(domain_patterns)
 
-        # 파일 수집 (중복 제거)
-        collected_files: dict[str, str] = {}  # rel_path → content
-        total_chars = 0
-
         for pattern in patterns:
+            if total_chars >= _MAX_CONTEXT_CHARS:
+                break
             for file_path in sorted(self._work_dir.glob(pattern)):
                 if not file_path.is_file():
                     continue
                 rel = str(file_path.relative_to(self._work_dir))
                 if rel in collected_files:
                     continue
-                # 바이너리/큰 파일 스킵
-                if file_path.suffix in (".png", ".jpg", ".ico", ".woff", ".lock"):
+                if file_path.suffix in skip_exts:
+                    continue
+                if any(d in file_path.parts for d in skip_dirs):
                     continue
                 if file_path.stat().st_size > 50_000:
                     continue
                 try:
-                    content = await asyncio.to_thread(
-                        file_path.read_text, "utf-8", "replace"
-                    )
+                    content = await asyncio.to_thread(file_path.read_text, "utf-8", "replace")
                     truncated = content[:_MAX_FILE_CHARS]
                     if total_chars + len(truncated) > _MAX_CONTEXT_CHARS:
                         break
@@ -250,15 +298,13 @@ class BaseCodeGeneratorAgent(BaseAgent):
                     total_chars += len(truncated)
                 except Exception:
                     continue
-            if total_chars >= _MAX_CONTEXT_CHARS:
-                break
 
-        if not collected_files:
-            return ""
-
-        parts = []
-        for rel_path, content in collected_files.items():
-            parts.append(f"### {rel_path}\n```\n{content}\n```")
+        # ---- 조합 ----
+        parts = [tree_section]
+        if collected_files:
+            parts.append("## Key Files (MUST follow these patterns for imports and structure)")
+            for rel_path, content in collected_files.items():
+                parts.append(f"### {rel_path}\n```\n{content}\n```")
 
         self._log.info("Workspace context loaded",
                        files=len(collected_files), chars=total_chars)

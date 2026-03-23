@@ -80,6 +80,7 @@ class MessageType:
     USER_INPUT = "user.input"
     SYSTEM_COMMAND = "system.command"
     AGENT_CONFIG_UPDATED = "agent.config.updated"
+    TASK_ARTIFACTS = "task.artifacts"  # 태스크 완료 시 산출물 브로드캐스트
     # Director 대화형 워크플로우
     DIRECTOR_MESSAGE = "director.message"
     DIRECTOR_PLAN = "director.plan"

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import re
 import uuid
 import xml.sax.saxutils as saxutils
 from datetime import datetime, timezone
@@ -1035,6 +1037,34 @@ class DirectorAgent(BaseAgent):
         artifacts = result.get("artifacts", []) if isinstance(result, dict) else []
         summary = result.get("data", {}).get("summary", "") if isinstance(result, dict) else ""
 
+        # ---- Import 검증 게이트: 생성 파일의 import가 실제 존재하는지 ----
+        import_errors = await self._run_import_gate(artifacts)
+        if import_errors:
+            reject_reason = (
+                "Import 검증 실패 — 존재하지 않는 모듈을 import합니다:\n\n"
+                + "\n".join(f"- {e}" for e in import_errors[:10])
+                + "\n\nworkspace의 실제 파일 구조를 확인하고 import 경로를 수정하세요."
+            )
+            await self._finalize_review(task, approved=False, reason=reject_reason)
+            if task.github_issue_number:
+                await self._git_service.add_issue_comment(
+                    task.github_issue_number,
+                    f"**Director Review: Import Gate FAILED**\n\n{reject_reason}",
+                )
+            return
+
+        # ---- 테스트 게이트: pytest 실행 → 실패하면 LLM 리뷰 없이 reject ----
+        test_passed, test_output = await self._run_test_gate()
+        if not test_passed:
+            reject_reason = f"테스트 실패로 reject합니다.\n\n```\n{test_output[-1500:]}\n```"
+            await self._finalize_review(task, approved=False, reason=reject_reason)
+            if task.github_issue_number:
+                await self._git_service.add_issue_comment(
+                    task.github_issue_number,
+                    f"**Director Review: Test Gate FAILED**\n\n{reject_reason}",
+                )
+            return
+
         approved, review_note = await self._llm_review(task, artifacts, summary)
         await self._finalize_review(task, approved=approved, reason=review_note)
 
@@ -1045,6 +1075,126 @@ class DirectorAgent(BaseAgent):
                 task.github_issue_number,
                 f"**Director Review: {status}**\n\n{review_note}",
             )
+
+    async def _run_import_gate(self, artifacts: list[str]) -> list[str]:
+        """생성된 Python 파일의 import가 workspace에 실제 존재하는지 검증한다.
+
+        Returns: 오류 메시지 리스트 (비어있으면 통과)
+        """
+        try:
+            work_dir = Path(self._git_service.work_dir)
+            if not work_dir.is_dir():
+                return []
+        except Exception:
+            return []
+        errors: list[str] = []
+
+        # workspace의 실제 모듈 목록 구축
+        existing_modules: set[str] = set()
+        for py_file in work_dir.rglob("*.py"):
+            rel = py_file.relative_to(work_dir)
+            parts = list(rel.with_suffix("").parts)
+            # src/personal_jira/models/issue.py → personal_jira.models.issue
+            if parts and parts[0] == "src":
+                parts = parts[1:]
+            for i in range(1, len(parts) + 1):
+                existing_modules.add(".".join(parts[:i]))
+
+        # 프로젝트 루트 패키지 이름 감지
+        project_packages: set[str] = set()
+        for d in work_dir.iterdir():
+            if d.is_dir() and (d / "__init__.py").exists():
+                project_packages.add(d.name)
+        src_dir = work_dir / "src"
+        if src_dir.is_dir():
+            for d in src_dir.iterdir():
+                if d.is_dir() and (d / "__init__.py").exists():
+                    project_packages.add(d.name)
+
+        if not project_packages:
+            return []  # 프로젝트 패키지 감지 못하면 스킵
+
+        # 생성된 파일에서 import 추출 및 검증
+        import_pattern = re.compile(
+            r"^(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))", re.MULTILINE
+        )
+        for fpath in artifacts:
+            if not fpath.endswith(".py"):
+                continue
+            try:
+                content = Path(fpath).read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+            for match in import_pattern.finditer(content):
+                module = match.group(1) or match.group(2)
+                root = module.split(".")[0]
+                # 프로젝트 내부 import만 검증 (stdlib, 외부 패키지 제외)
+                if root not in project_packages:
+                    continue
+                if module not in existing_modules:
+                    rel_fpath = Path(fpath).relative_to(work_dir) if Path(fpath).is_relative_to(work_dir) else fpath
+                    errors.append(f"`{rel_fpath}`: `{module}` 모듈이 workspace에 존재하지 않음")
+
+        return errors
+
+    async def _run_test_gate(self) -> tuple[bool, str]:
+        """workspace에서 린트 + 테스트를 실행한다. (passed, output) 반환."""
+        work_dir = self._git_service.work_dir
+        if not os.path.isdir(work_dir):
+            return True, "no workspace"
+
+        outputs: list[str] = []
+
+        # ---- Step 1: 린트 (ruff) ----
+        lint_passed, lint_out = await self._run_subprocess(
+            ["uv", "run", "ruff", "check", ".", "--select=E,F", "--no-fix", "-q"],
+            work_dir, "Lint", timeout=30,
+        )
+        if lint_out:
+            outputs.append(f"=== LINT ===\n{lint_out}")
+        if not lint_passed:
+            return False, "\n\n".join(outputs)
+
+        # ---- Step 2: 테스트 (pytest) ----
+        test_dir = os.path.join(work_dir, "tests")
+        if os.path.isdir(test_dir):
+            test_passed, test_out = await self._run_subprocess(
+                ["uv", "run", "pytest", "tests/", "-x", "-q", "--tb=short"],
+                work_dir, "Test", timeout=120,
+            )
+            if test_out:
+                outputs.append(f"=== TEST ===\n{test_out}")
+            if not test_passed:
+                return False, "\n\n".join(outputs)
+
+        return True, "\n\n".join(outputs) if outputs else "all checks passed"
+
+    async def _run_subprocess(
+        self, cmd: list[str], cwd: str, label: str, timeout: int = 60,
+    ) -> tuple[bool, str]:
+        """서브프로세스를 실행하고 결과를 반환한다. 실패해도 예외 없음."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, cwd=cwd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            output = stdout.decode(errors="replace").strip()
+            passed = proc.returncode == 0
+            if passed:
+                log.info(f"{label} gate PASSED", work_dir=cwd)
+            else:
+                log.warning(f"{label} gate FAILED", work_dir=cwd, returncode=proc.returncode)
+            return passed, output
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            log.warning(f"{label} gate timed out", work_dir=cwd)
+            return False, f"{label} timed out after {timeout}s"
+        except Exception as e:
+            log.warning(f"{label} gate error", err=str(e))
+            return True, ""  # 실행 자체 실패하면 게이트 통과 (환경 문제)
 
     async def _llm_review(
         self, task: Any, artifacts: list[str], summary: str,
@@ -1138,16 +1288,27 @@ class DirectorAgent(BaseAgent):
 
         log.info("Task review finalized", task_id=task.id, approved=approved)
 
-        # 승인 시 → workspace 변경사항을 commit + push
+        # 승인 시 → branch + commit + PR + merge
         if approved:
             try:
-                pushed = await self._git_service.commit_and_push(
-                    f"feat: {task.title} (#{task.github_issue_number or '?'})"
+                pr_num = await self._git_service.commit_and_pr(
+                    f"feat: {task.title} (#{task.github_issue_number or '?'})",
+                    issue_number=task.github_issue_number,
                 )
-                if pushed:
-                    log.info("Code pushed to remote", task_id=task.id)
+                if pr_num:
+                    log.info("PR created and merged", task_id=task.id, pr=pr_num)
             except Exception as e:
-                log.warning("Failed to push approved code", task_id=task.id, err=str(e))
+                log.warning("PR failed, rolling back to ready", task_id=task.id, err=str(e))
+                # PR 실패 → Done 롤백 (코드가 main에 없으므로)
+                if task.github_issue_number:
+                    try:
+                        await self._git_service.move_issue_to_column(task.github_issue_number, "Ready")
+                    except Exception:
+                        pass
+                await self._state_store.update_task(task.id, {
+                    "status": "ready", "board_column": "Ready", "retry_count_increment": 1,
+                })
+                return  # 의존 태스크 unlock 하지 않음
 
         # 리뷰 결과를 MessageBus에 발행 (Docs Agent 기록용)
         await self._message_bus.publish(
@@ -1168,8 +1329,26 @@ class DirectorAgent(BaseAgent):
             )
         )
 
-        # 승인 시 → 이 태스크에 의존하는 태스크들을 Ready로 전환
+        # 승인 시 → 산출물 브로드캐스트 + 의존 태스크 Ready 전환
         if approved:
+            db_artifacts = await self._state_store.get_artifacts_for_task(task.id)
+            if db_artifacts:
+                file_paths = [a.file_path for a in db_artifacts if hasattr(a, "file_path")]
+                await self._message_bus.publish(
+                    Message(
+                        id=str(uuid.uuid4()),
+                        type=MessageType.TASK_ARTIFACTS,
+                        from_agent=task.assigned_agent or self.id,
+                        payload={
+                            "task_id": task.id,
+                            "task_title": task.title,
+                            "issue_number": task.github_issue_number,
+                            "files": file_paths[:20],
+                        },
+                        trace_id=str(uuid.uuid4()),
+                        timestamp=datetime.now(timezone.utc),
+                    )
+                )
             await self._unlock_dependent_tasks(task.id)
 
     async def _unlock_dependent_tasks(self, completed_task_id: str) -> None:
@@ -1199,25 +1378,42 @@ class DirectorAgent(BaseAgent):
                         log.warning("Failed to unlock task on Board", task_id=t.id, err=str(e))
                         continue
 
-                    # 연계 작업 코멘트: 선행 태스크 완료 알림
-                    dep_summaries = []
-                    for dep_id in deps:
-                        dep_task = await self._state_store.get_task(dep_id)
-                        if dep_task:
-                            dep_summaries.append(
-                                f"- **#{dep_task.github_issue_number or '?'}** {dep_task.title}"
-                            )
-                    if dep_summaries:
-                        comment = (
-                            "**선행 태스크 완료 — 작업 시작 가능**\n\n"
-                            "완료된 선행 태스크:\n"
-                            + "\n".join(dep_summaries)
-                            + "\n\n선행 태스크의 코드를 workspace에서 참조하세요."
-                        )
-                        await self._git_service.add_comment(t.github_issue_number, comment)
-
-                await self._state_store.update_task(t.id, {"status": "ready", "board_column": "Ready"})
+                # 선행 태스크 산출물을 후속 태스크 description에 추가
+                artifact_context = await self._build_dependency_context(deps)
+                if artifact_context:
+                    updated_desc = (t.description or "") + artifact_context
+                    await self._state_store.update_task(t.id, {
+                        "status": "ready", "board_column": "Ready",
+                        "description": updated_desc,
+                    })
+                else:
+                    await self._state_store.update_task(t.id, {"status": "ready", "board_column": "Ready"})
                 log.info("Dependent task unlocked", task_id=t.id, title=t.title)
+
+    async def _build_dependency_context(self, dep_ids: list[str]) -> str:
+        """선행 태스크들의 산출물(파일 경로 + 핵심 내용)을 컨텍스트 문자열로 반환."""
+        sections: list[str] = []
+        for dep_id in dep_ids:
+            dep_task = await self._state_store.get_task(dep_id)
+            if not dep_task:
+                continue
+            artifacts = await self._state_store.get_artifacts_for_task(dep_id)
+            if not artifacts:
+                continue
+            file_lines = []
+            for art in artifacts[:10]:
+                fpath = art.file_path if hasattr(art, "file_path") else str(art)
+                file_lines.append(f"  - {fpath}")
+            sections.append(
+                f"### 선행 태스크: {dep_task.title}\n"
+                f"생성된 파일:\n" + "\n".join(file_lines)
+            )
+        if not sections:
+            return ""
+        return (
+            "\n\n---\n## 선행 태스크 산출물 (이 파일들을 참조하여 작업하세요)\n"
+            + "\n\n".join(sections)
+        )
 
     # ===== Helpers =====
 

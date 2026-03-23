@@ -229,6 +229,13 @@ class StateStore:
             session.add(ArtifactModel(**artifact_data))
             await session.commit()
 
+    async def get_artifacts_for_task(self, task_id: str) -> list[ArtifactModel]:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(ArtifactModel).where(ArtifactModel.task_id == task_id)
+            )
+            return list(result.scalars().all())
+
     # ===== Plan Persistence =====
 
     async def save_plan(self, plan_data: dict[str, Any]) -> None:
