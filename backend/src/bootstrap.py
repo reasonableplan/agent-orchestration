@@ -203,9 +203,17 @@ async def _init_rag(config: AppConfig) -> tuple[Any, Any]:
         # Qdrant in-memory (프로덕션에서는 외부 Qdrant 서버로 교체)
         qdrant = QdrantClient(":memory:")
 
-        # fastembed 임베딩 함수
+        # fastembed 임베딩 함수 (GPU 가능하면 CUDA, 아니면 CPU fallback)
         from fastembed import TextEmbedding
-        embed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+        try:
+            embed_model = TextEmbedding(
+                model_name="BAAI/bge-small-en-v1.5",
+                providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            )
+            log.info("fastembed using GPU (CUDA)")
+        except Exception:
+            embed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+            log.info("fastembed using CPU")
         embedding_fn = embed_model.embed
 
         # 코드베이스 인덱싱

@@ -14,7 +14,7 @@ from src.core.messaging.message_bus import MessageBus
 from src.core.state.state_store import StateStore
 from src.core.types import AgentConfig, Task, TaskResult
 
-MAX_TOKENS = 32_000
+MAX_TOKENS = 64_000
 TOKEN_BUDGET = 100_000_000
 _MAX_CONTEXT_CHARS = 12_000  # 워크스페이스 컨텍스트 최대 길이
 _MAX_FILE_CHARS = 2_000      # 개별 파일 최대 읽기 길이
@@ -103,7 +103,11 @@ class BaseCodeGeneratorAgent(BaseAgent):
             "3. **No magic values**: Use constants, config, or environment variables.\n"
             "4. **Type safety**: Full type annotations (Python: type hints, TypeScript: strict mode).\n"
             "5. **Error handling**: Never empty catch. Log errors, provide meaningful messages.\n"
-            "6. **File naming**: Follow the existing naming conventions in the codebase.\n\n"
+            "6. **File naming**: Follow the existing naming conventions in the codebase.\n"
+            "7. **BE CONCISE**: Keep code short and minimal. No docstrings, no comments unless complex logic. "
+            "No boilerplate, no verbose error messages. Minimal imports. "
+            "Generate FEWER files with LESS code. Quality over quantity. "
+            "Empty marker files (py.typed, __init__.py, .gitkeep) MUST be included with empty content.\n\n"
             f"{feedback_section}"
             'Respond with JSON: {"files": [{"path": str, "content": str, "action": str}], "summary": str}\n'
             "Include test files BEFORE implementation files in the array.\n"

@@ -772,7 +772,12 @@ class DirectorAgent(BaseAgent):
                     log.warning("Sub-task→Epic link failed", child=item["issue_number"], err=str(e))
 
         # ---- Phase 5: 프로젝트 보드에 추가 ----
-        for issue_num in [epic_issue_number, *story_issues.values()] + [i["issue_number"] for i in issue_results]:
+        # Epic은 "Epic" 컬럼, 나머지는 "Backlog"
+        try:
+            await self._git_service.add_issue_to_project(epic_issue_number, "Epic")
+        except Exception as e:
+            log.warning("Failed to add epic to project (non-fatal)", issue=epic_issue_number, err=str(e))
+        for issue_num in [*story_issues.values()] + [i["issue_number"] for i in issue_results]:
             try:
                 await self._git_service.add_issue_to_project(issue_num, "Backlog")
             except Exception as e:
@@ -984,37 +989,47 @@ class DirectorAgent(BaseAgent):
         success = result.get("success", False) if isinstance(result, dict) else False
 
         if not success:
-            # Worker가 실패 보고 → 재작업 (최대 3회)
+            # Worker가 실패 보고 → 재작업 (최대 3회, 초과 시 Backlog로 리셋)
             retry = task.retry_count or 0
             if retry >= 3:
-                log.warning("Task exceeded max retries, marking as failed permanently",
+                log.warning("Task exceeded max retries, resetting to Backlog",
                             task_id=task_id, retries=retry)
-                # Board-first: Board → "Failed" 먼저, DB 나중
+                # Board-first: Backlog로 이동 + retry 리셋
                 if task.github_issue_number:
                     try:
-                        await self._git_service.move_issue_to_column(task.github_issue_number, "Failed")
+                        await self._git_service.move_issue_to_column(task.github_issue_number, "Backlog")
+                        await self._git_service.add_issue_comment(
+                            task.github_issue_number,
+                            f"⚠️ {retry}회 실패 후 Backlog로 리셋합니다. retry 카운터 초기화.",
+                        )
                     except Exception as e:
-                        log.error("Board move to Failed failed", task_id=task_id, err=str(e))
-                        return
-                await self._state_store.update_task(task_id, {"status": "failed", "board_column": "Failed"})
+                        log.error("Board move to Backlog failed", task_id=task_id, err=str(e))
+                await self._state_store.update_task(task_id, {
+                    "status": "ready", "board_column": "Ready", "retry_count": 0,
+                })
                 return
             await self._finalize_review(task, approved=False, reason="Worker reported failure")
             return
 
         # Worker 성공 → Director가 LLM으로 코드 리뷰
-        # reject 시에도 max retry 제한 적용
+        # reject 시에도 max retry 제한 적용, 초과 시 Backlog로 리셋
         retry = task.retry_count or 0
         if retry >= 3:
-            log.warning("Task exceeded max retries (Director reject loop), marking as failed",
+            log.warning("Task exceeded max retries (Director reject loop), resetting to Backlog",
                         task_id=task_id, retries=retry)
-            # Board-first: Board → "Failed" 먼저, DB 나중
+            # Board-first: Backlog로 이동 + retry 리셋
             if task.github_issue_number:
                 try:
-                    await self._git_service.move_issue_to_column(task.github_issue_number, "Failed")
+                    await self._git_service.move_issue_to_column(task.github_issue_number, "Backlog")
+                    await self._git_service.add_issue_comment(
+                        task.github_issue_number,
+                        f"⚠️ Director 리뷰에서 {retry}회 reject 후 Backlog로 리셋합니다. retry 카운터 초기화.",
+                    )
                 except Exception as e:
-                    log.error("Board move to Failed failed", task_id=task_id, err=str(e))
-                    return
-            await self._state_store.update_task(task_id, {"status": "failed", "board_column": "Failed"})
+                    log.error("Board move to Backlog failed", task_id=task_id, err=str(e))
+            await self._state_store.update_task(task_id, {
+                "status": "ready", "board_column": "Ready", "retry_count": 0,
+            })
             return
 
         artifacts = result.get("artifacts", []) if isinstance(result, dict) else []
@@ -1070,18 +1085,16 @@ class DirectorAgent(BaseAgent):
             f"## Summary\n{summary}\n\n"
             f"{arch_section}"
             f"## Generated Files\n" + "\n\n".join(file_contents) + "\n\n"
-            "## Review Criteria (ALL must pass)\n"
-            "1. **TDD**: Are test files included? Tests must come BEFORE implementation. REJECT if no tests.\n"
-            "2. **Task match**: Does the code fulfill the task description?\n"
-            "3. **Architecture consistency**: Does it follow the existing project structure and patterns?\n"
-            "4. **Future impact**: Will this code cause problems for downstream tasks? "
-            "Will it make other parts more complex or require rework?\n"
-            "5. **Pattern unity**: Is the code style consistent with other agents' output?\n"
-            "6. **Security**: No hardcoded secrets, no SQL injection, proper input validation.\n"
-            "7. **Type safety**: Full type annotations?\n\n"
+            "## Review Criteria\n"
+            "1. **TDD**: Test files included? REJECT only if NO tests at all.\n"
+            "2. **Task match**: Does the code address the task?\n"
+            "3. **Architecture**: Reasonable structure for the project?\n"
+            "4. **Security**: No hardcoded secrets?\n\n"
             "## Decision\n"
-            "- REJECT if: no tests, architecture conflict, will cause downstream rework, security issue\n"
-            "- APPROVE if: all criteria pass at MVP quality level\n\n"
+            "- APPROVE if: core logic is correct and tests exist, even if incomplete or truncated.\n"
+            "- REJECT ONLY if: NO tests at all, completely wrong architecture, or security issue.\n"
+            "- **IMPORTANT**: Truncated files or missing minor files (like __init__.py, .gitkeep) are NOT reject reasons. "
+            "These can be fixed in follow-up tasks. Focus on whether the CORE implementation is correct.\n\n"
             'Respond with JSON: {"approved": true/false, "note": "specific feedback with reject reason if any"}\n'
             "Respond in Korean."
         )

@@ -464,6 +464,17 @@ class GitService:
         except Exception as e:
             log.warning("ensure_label failed", label=label, err=str(e))
 
+    async def add_issue_comment(self, issue_number: int, body: str) -> None:
+        """이슈에 코멘트를 추가한다."""
+        try:
+            await self._rest(
+                "POST",
+                f"/repos/{self._owner}/{self._repo}/issues/{issue_number}/comments",
+                json={"body": body},
+            )
+        except Exception as e:
+            log.warning("add_issue_comment failed", issue=issue_number, err=str(e))
+
     # ===== Git Operations =====
 
     async def _run_git(self, *args: str, timeout_s: float = 60.0) -> str:
