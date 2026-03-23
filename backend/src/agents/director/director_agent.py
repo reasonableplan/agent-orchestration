@@ -220,16 +220,27 @@ class DirectorAgent(BaseAgent):
 
         self._append_conversation("user", safe_content)
 
+        # 승인/진행 키워드 감지 — REST API에서도 stage 전이 가능하게
+        _approve_keywords = ("진행", "승인", "확인", "좋아", "approve", "ok", "yes", "시작")
+
         if plan.stage == PlanStage.GATHERING:
             await self._handle_gathering(safe_content)
         elif plan.stage == PlanStage.STRUCTURING:
-            await self._handle_structuring(safe_content)
+            if plan.tasks and any(kw in safe_content.lower() for kw in _approve_keywords):
+                # 태스크가 이미 있고 사용자가 승인 → CONSULTING으로 전이
+                await self.handle_plan_action("approve")
+            else:
+                await self._handle_structuring(safe_content)
         elif plan.stage == PlanStage.CONSULTING:
             await self._broadcast_director_message(
                 "에이전트 상의가 진행 중입니다. 완료되면 검토 요청드리겠습니다."
             )
         elif plan.stage == PlanStage.CONFIRMING:
-            await self._handle_confirming(safe_content)
+            if any(kw in safe_content.lower() for kw in _approve_keywords):
+                # 사용자가 승인 → 이슈 생성 (COMMITTED)
+                await self.handle_plan_action("approve")
+            else:
+                await self._handle_confirming(safe_content)
 
     async def handle_plan_action(self, action: str, content: str = "") -> None:
         """WS에서 받은 plan.approve / plan.revise / plan.commit 처리."""
