@@ -5,7 +5,7 @@ DB 변경 후 Board 실패 시 DB를 원래 상태로 롤백.
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Callable
 
 from src.core.logging.logger import get_logger
 

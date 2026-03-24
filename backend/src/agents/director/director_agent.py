@@ -892,8 +892,8 @@ class DirectorAgent(BaseAgent):
 
         # 3계층 구조 요약 메시지
         summary_parts = [
-            f"GitHub Project Board에 3계층 구조로 생성 완료!",
-            f"",
+            "GitHub Project Board에 3계층 구조로 생성 완료!",
+            "",
             f"**Epic** #{epic_issue_number}: {epic_title}",
         ]
         for story in plan.stories:
@@ -906,7 +906,7 @@ class DirectorAgent(BaseAgent):
                         f"    - #{st['issue_number']} {st['title']} → {st.get('agent', '?')}"
                     )
 
-        summary_parts.append(f"\n**업무를 시작하려면 '시작해'라고 말해주세요.**")
+        summary_parts.append("\n**업무를 시작하려면 '시작해'라고 말해주세요.**")
         await self._broadcast_director_message("\n".join(summary_parts))
 
     async def _rollback_issues(self, issue_results: list[dict[str, Any]]) -> None:
@@ -1184,12 +1184,10 @@ class DirectorAgent(BaseAgent):
         # ---- Step 1: 린트 — 새로 생성된 파일만 (기존 코드 false positive 방지) ----
         lint_targets = self._collect_lint_targets(work_dir, artifacts)
         if lint_targets:
-            # Step 1a: 안전한 lint 자동 수정 (로직 변경 없음)
-            # I=import 정렬, F401=미사용 import 삭제, UP042=StrEnum 변환
+            # Step 1a: 안전한 lint 자동 수정 (--fix는 safe fix만 적용)
             await self._run_subprocess(
                 ["uv", "run", "ruff", "check", *lint_targets,
-                 "--select=I,F401,UP042", "--fix",
-                 "--exclude", ".worktrees", "-q"],
+                 "--fix", "--exclude", ".worktrees", "-q"],
                 work_dir, "Lint-autofix", timeout=15,
             )
             # Step 1b: 나머지 린트 에러 검출
@@ -1203,11 +1201,13 @@ class DirectorAgent(BaseAgent):
             if not lint_passed:
                 return False, "\n\n".join(outputs)
 
-        # ---- Step 2: 전체 테스트 (pytest) — main 기준 통합 검증 ----
+        # ---- Step 2: 테스트 — pyproject.toml 있을 때만 (인프라 셋업 단계 스킵) ----
         test_dir = os.path.join(work_dir, "tests")
-        if os.path.isdir(test_dir):
+        has_project = os.path.isfile(os.path.join(work_dir, "pyproject.toml"))
+        if os.path.isdir(test_dir) and has_project:
+            test_targets = self._collect_test_targets(work_dir, artifacts)
             test_passed, test_out = await self._run_subprocess(
-                ["uv", "run", "pytest", "tests/", "-x", "-q", "--tb=short",
+                ["uv", "run", "pytest", *test_targets, "-x", "-q", "--tb=short",
                  "--ignore=.worktrees"],
                 work_dir, "Test", timeout=180,
             )
@@ -1244,6 +1244,28 @@ class DirectorAgent(BaseAgent):
             except ValueError:
                 continue
         return targets if targets else ["."]
+
+    def _collect_test_targets(
+        self, work_dir: str, artifacts: list[str] | None,
+    ) -> list[str]:
+        """테스트 대상을 수집한다. artifacts에 테스트 파일이 있으면 그것만, 없으면 tests/ 전체."""
+        if not artifacts:
+            return ["tests/"]
+
+        targets: list[str] = []
+        for fpath in artifacts:
+            basename = os.path.basename(fpath)
+            if not (basename.startswith("test_") and basename.endswith(".py")):
+                continue
+            try:
+                rel = os.path.relpath(fpath, work_dir) if os.path.isabs(fpath) else fpath
+                if ".worktrees" in rel.replace("\\", "/"):
+                    continue
+                if os.path.isfile(os.path.join(work_dir, rel)):
+                    targets.append(rel)
+            except ValueError:
+                continue
+        return targets if targets else ["tests/"]
 
     def _structure_test_output(
         self, raw_output: str, work_dir: str, artifacts: list[str] | None,

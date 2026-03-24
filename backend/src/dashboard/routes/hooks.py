@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel
 
 from src.dashboard.routes.deps import get_state_store

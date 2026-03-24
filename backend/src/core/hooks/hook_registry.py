@@ -6,7 +6,6 @@ from typing import Any, Callable
 
 from src.core.logging.logger import get_logger
 from src.core.state.state_store import StateStore
-from src.core.types import HookEvent, HookRow
 
 log = get_logger("HookRegistry")
 

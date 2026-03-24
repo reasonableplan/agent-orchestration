@@ -711,9 +711,14 @@ class GitService:
     async def commit_all(self, message: str) -> bool:
         """workspace의 모든 변경사항을 commit한다. 변경이 없으면 False 반환."""
         await self._run_git("add", "-A")
+        # .worktrees가 stage되지 않도록 안전장치
+        try:
+            await self._run_git("reset", "HEAD", "--", ".worktrees")
+        except GitServiceError:
+            pass
         # 변경사항 확인
         try:
-            status = await self._run_git("diff", "--cached", "--quiet")
+            await self._run_git("diff", "--cached", "--quiet")
             return False  # 변경 없음
         except GitServiceError:
             pass  # diff --quiet는 변경이 있으면 exit 1
@@ -746,6 +751,10 @@ class GitService:
         # 변경사항을 먼저 stash (checkout 시 유실 방지)
         await self._run_git("add", "-A")
         try:
+            await self._run_git("reset", "HEAD", "--", ".worktrees")
+        except GitServiceError:
+            pass
+        try:
             await self._run_git("stash", "--include-untracked")
             stashed = True
         except GitServiceError:
@@ -758,7 +767,11 @@ class GitService:
         except GitServiceError:
             pass
 
-        # 브랜치 생성 + stash 복원 + commit
+        # 브랜치 생성 + stash 복원 + commit (기존 브랜치 있으면 삭제 후 재생성)
+        try:
+            await self._run_git("branch", "-D", branch_name)
+        except GitServiceError:
+            pass  # 브랜치가 없으면 무시
         await self._run_git("checkout", "-b", branch_name)
         if stashed:
             try:
