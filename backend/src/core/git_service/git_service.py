@@ -492,12 +492,16 @@ class GitService:
         except GitServiceError:
             pass  # offline이면 현재 main 기준
 
-        # 기존 worktree가 있으면 정리
+        # 기존 worktree/브랜치 정리 (재시도 시 충돌 방지)
+        full_branch = f"wt/{worktree_name}"
         if os.path.isdir(worktree_path):
             await self.remove_worktree(task_id, worktree_name)
-
-        # worktree 생성: origin/main 기반 새 브랜치
-        full_branch = f"wt/{worktree_name}"
+        else:
+            # 디렉토리 없어도 고아 브랜치가 남아있을 수 있음
+            try:
+                await self._run_git("branch", "-D", full_branch)
+            except GitServiceError:
+                pass
         try:
             await self._run_git(
                 "worktree", "add", worktree_path,
