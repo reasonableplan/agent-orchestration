@@ -33,6 +33,7 @@ def _make_director(state_store=None, git_service=None, llm_client=None):
     if state_store is None:
         state_store = MagicMock()
         state_store.save_message = AsyncMock()
+        state_store.save_plan = AsyncMock()
         state_store.get_agent_config = AsyncMock(return_value=None)
     if git_service is None:
         git_service = MagicMock()
@@ -259,8 +260,8 @@ class TestStructuringStage:
 
 
 class TestPlanAction:
-    async def test_approve_transitions_to_consulting(self, state_store, git_service):
-        """plan.approve → STRUCTURING에서 CONSULTING으로 전환 (에이전트 상의)."""
+    async def test_approve_transitions_to_confirming_via_consulting(self, state_store, git_service):
+        """plan.approve → STRUCTURING → CONSULTING(자동) → CONFIRMING 자동 전이."""
         llm = _make_llm()
         director = _make_director(state_store, git_service, llm)
 
@@ -273,7 +274,8 @@ class TestPlanAction:
 
         await director.handle_plan_action("approve")
 
-        assert director.active_plan.stage == PlanStage.CONSULTING
+        # _run_consulting 완료 후 자동으로 CONFIRMING 전이
+        assert director.active_plan.stage == PlanStage.CONFIRMING
 
     async def test_approve_consulting_transitions_to_confirming(self, state_store, git_service):
         """plan.approve → CONSULTING에서 CONFIRMING으로 전환."""

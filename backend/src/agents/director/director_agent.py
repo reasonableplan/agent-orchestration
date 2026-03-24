@@ -442,21 +442,25 @@ class DirectorAgent(BaseAgent):
         await self._broadcast_plan()
 
     async def _run_consulting(self) -> None:
-        """CONSULTING 단계 — Worker 상의 실행 후 사용자 검토 요청."""
+        """CONSULTING 단계 — Worker 상의 실행 후 CONFIRMING으로 전이."""
         await self._consult_workers()
 
         plan = self._active_plan
         if plan is None:
             return
 
-        # 상의 완료 — 사용자에게 검토 요청
+        # 상의 완료 → CONFIRMING 자동 전이
+        plan.stage = PlanStage.CONFIRMING
+        plan.updated_at = datetime.now(timezone.utc)
+
         response = (
             "에이전트 상의가 완료되었습니다. 각 파트의 피드백을 반영한 최종 태스크입니다.\n\n"
             "검토 후 승인하시면 GitHub Issues를 생성합니다. "
-            "수정이 필요하면 말씀해주세요."
+            "'진행해'라고 하시면 생성을 시작합니다."
         )
         self._append_conversation("assistant", response)
         await self._broadcast_director_message(response)
+        await self._broadcast_plan()
         await self._broadcast_plan()
 
     async def _consult_workers(self) -> None:
