@@ -663,6 +663,19 @@ class GitService:
         else:
             await self._clone_repo()
 
+        # .worktrees를 git 추적에서 제외
+        if os.path.isdir(self._work_dir):
+            gitignore_path = os.path.join(self._work_dir, ".gitignore")
+            gitignore_entry = ".worktrees/\n"
+            if os.path.isfile(gitignore_path):
+                content = open(gitignore_path).read()
+                if ".worktrees" not in content:
+                    with open(gitignore_path, "a") as f:
+                        f.write(f"\n{gitignore_entry}")
+            else:
+                with open(gitignore_path, "w") as f:
+                    f.write(gitignore_entry)
+
         log.info("Workspace initialized", path=self._work_dir, repo=f"{self._owner}/{self._repo}")
 
     async def _clone_repo(self) -> None:
