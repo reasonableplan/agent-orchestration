@@ -348,9 +348,10 @@ class BaseAgent(ABC):
                 for src_file in wt.rglob("*"):
                     if not src_file.is_file():
                         continue
-                    if any(d in src_file.parts for d in skip_dirs):
-                        continue
+                    # worktree 내부 상대 경로 기준으로 skip 판단
                     rel = src_file.relative_to(wt)
+                    if any(d in rel.parts for d in skip_dirs):
+                        continue
                     dst = ws / rel
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(str(src_file), str(dst))
