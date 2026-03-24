@@ -1185,7 +1185,8 @@ class DirectorAgent(BaseAgent):
         lint_targets = self._collect_lint_targets(work_dir, artifacts)
         if lint_targets:
             lint_passed, lint_out = await self._run_subprocess(
-                ["uv", "run", "ruff", "check", *lint_targets, "--no-fix", "-q"],
+                ["uv", "run", "ruff", "check", *lint_targets,
+                 "--exclude", ".worktrees", "--no-fix", "-q"],
                 work_dir, "Lint", timeout=30,
             )
             if lint_out:
@@ -1197,7 +1198,8 @@ class DirectorAgent(BaseAgent):
         test_dir = os.path.join(work_dir, "tests")
         if os.path.isdir(test_dir):
             test_passed, test_out = await self._run_subprocess(
-                ["uv", "run", "pytest", "tests/", "-x", "-q", "--tb=short"],
+                ["uv", "run", "pytest", "tests/", "-x", "-q", "--tb=short",
+                 "--ignore=.worktrees"],
                 work_dir, "Test", timeout=180,
             )
             if test_out:
