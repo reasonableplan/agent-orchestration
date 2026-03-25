@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import uuid
 import xml.sax.saxutils as saxutils
 from pathlib import Path
@@ -112,6 +113,24 @@ class BaseCodeGeneratorAgent(BaseAgent):
                 "Import and use them directly. Do NOT redefine or duplicate their contents.\n\n"
             )
 
+        # 공유 API 스펙 (백엔드/프론트 계약)
+        api_spec_section = ""
+        api_spec_path = os.path.join(self._git_service.work_dir, "docs", "api-spec.md")
+        if os.path.isfile(api_spec_path):
+            try:
+                with open(api_spec_path, encoding="utf-8") as f:
+                    api_spec = f.read()
+                api_spec_section = (
+                    "\n## API Specification (MUST follow this contract exactly)\n"
+                    "<api_spec>\n"
+                    f"{saxutils.escape(api_spec)}\n"
+                    "</api_spec>\n\n"
+                    "CRITICAL: All API endpoints, request/response formats, and type definitions "
+                    "MUST match this specification exactly. Do NOT invent new endpoints or change field names.\n\n"
+                )
+            except OSError:
+                pass
+
         # Director의 이전 리뷰 피드백 (reject 사유)
         feedback_section = ""
         review_note = getattr(task, "review_note", None)
@@ -138,6 +157,7 @@ class BaseCodeGeneratorAgent(BaseAgent):
             "Generate FEWER files with LESS code. Quality over quantity. "
             "Empty marker files (py.typed, __init__.py, .gitkeep) MUST be included with empty content.\n\n"
             f"{feedback_section}"
+            f"{api_spec_section}"
             f"{artifact_section}"
             'Respond with JSON: {"files": [{"path": str, "content": str, "action": str}], "summary": str}\n'
             "Include test files BEFORE implementation files in the array.\n"

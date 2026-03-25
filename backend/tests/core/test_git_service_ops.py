@@ -68,9 +68,10 @@ class TestRunGit:
 class TestCommitAll:
     async def test_no_changes_returns_false(self):
         svc = GitService(_make_config())
-        # git add -A succeeds, git diff --cached --quiet succeeds (no changes)
+        # git add -A → reset .worktrees → diff --cached --quiet (exit 0 = no changes)
         calls = [
             _make_proc(),  # add -A
+            _make_proc(),  # reset HEAD -- .worktrees
             _make_proc(),  # diff --cached --quiet (exit 0 = no changes)
         ]
         with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock, side_effect=calls):
@@ -81,6 +82,7 @@ class TestCommitAll:
         svc = GitService(_make_config())
         calls = [
             _make_proc(),                                    # add -A
+            _make_proc(),                                    # reset HEAD -- .worktrees
             _make_proc(returncode=1, stderr=b"has changes"), # diff --cached --quiet (exit 1 = has changes)
             _make_proc(),                                    # commit
         ]
