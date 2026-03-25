@@ -767,11 +767,15 @@ class GitService:
         except GitServiceError:
             pass
 
-        # 브랜치 생성 + stash 복원 + commit (기존 브랜치 있으면 삭제 후 재생성)
+        # 브랜치 생성 + stash 복원 + commit (기존 브랜치 있으면 로컬+리모트 삭제 후 재생성)
         try:
             await self._run_git("branch", "-D", branch_name)
         except GitServiceError:
-            pass  # 브랜치가 없으면 무시
+            pass
+        try:
+            await self._run_git("push", "origin", "--delete", branch_name)
+        except GitServiceError:
+            pass
         await self._run_git("checkout", "-b", branch_name)
         if stashed:
             try:
