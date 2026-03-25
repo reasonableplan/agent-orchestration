@@ -780,8 +780,13 @@ class GitService:
         if stashed:
             try:
                 await self._run_git("stash", "pop")
-            except GitServiceError:
-                pass
+            except GitServiceError as e:
+                log.error("Stash pop failed, work may be in stash", branch=branch_name, err=str(e))
+                try:
+                    await self._run_git("checkout", "main")
+                except GitServiceError:
+                    pass
+                raise
         committed = await self.commit_all(message)
         if not committed:
             await self._run_git("checkout", "main")

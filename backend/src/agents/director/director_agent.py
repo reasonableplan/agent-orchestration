@@ -461,7 +461,6 @@ class DirectorAgent(BaseAgent):
         self._append_conversation("assistant", response)
         await self._broadcast_director_message(response)
         await self._broadcast_plan()
-        await self._broadcast_plan()
 
     async def _consult_workers(self) -> None:
         """각 Worker 에이전트(역할별 LLM)와 상담하여 태스크를 보강한다."""
@@ -1543,21 +1542,24 @@ class DirectorAgent(BaseAgent):
             timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
             entry = f"\n- [{timestamp}] {task.title}: {reason[:200]}\n"
 
-            # 에이전트 전용 MD에 기록
+            # 에이전트 전용 MD에 기록 (없으면 생성)
             agent_md = os.path.join(work_dir, "docs", "agents", f"{agent_id}.md")
-            if os.path.isfile(agent_md):
-                with open(agent_md, "a", encoding="utf-8") as f:
-                    f.write(entry)
+            os.makedirs(os.path.dirname(agent_md), exist_ok=True)
+            await asyncio.to_thread(self._append_to_file, agent_md, entry)
 
             # SHARED_LESSONS에도 기록
             shared_md = os.path.join(work_dir, "docs", "agents", "SHARED_LESSONS.md")
-            if os.path.isfile(shared_md):
-                with open(shared_md, "a", encoding="utf-8") as f:
-                    f.write(entry)
+            await asyncio.to_thread(self._append_to_file, shared_md, entry)
 
             log.info("Feedback written to agent MD", agent=agent_id, task_id=task.id)
         except Exception as e:
             log.warning("Failed to write feedback to MD", err=str(e))
+
+    @staticmethod
+    def _append_to_file(path: str, content: str) -> None:
+        """파일에 내용을 추가한다. 파일이 없으면 생성."""
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(content)
 
     async def _update_architecture_md(self) -> None:
         """merge 후 ARCHITECTURE.md의 파일 트리와 라우터 목록을 갱신한다."""

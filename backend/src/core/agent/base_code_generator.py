@@ -316,8 +316,17 @@ class BaseCodeGeneratorAgent(BaseAgent):
                     changed.add(line)
 
             artifact_paths: list[str] = []
+            work_dir_path = Path(work_dir).resolve()
             for rel_path in changed:
-                abs_path = os.path.join(work_dir, rel_path)
+                # sandbox escape 검증
+                try:
+                    resolved = (work_dir_path / rel_path).resolve()
+                    if not resolved.is_relative_to(work_dir_path):
+                        self._log.warning("Sandbox escape in changed file, skipping", path=rel_path)
+                        continue
+                except (ValueError, OSError):
+                    continue
+                abs_path = str(resolved)
                 if not os.path.isfile(abs_path):
                     continue
                 try:
@@ -330,8 +339,9 @@ class BaseCodeGeneratorAgent(BaseAgent):
                         "created_by": self.id,
                     })
                     artifact_paths.append(abs_path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self._log.warning("Failed to save artifact", path=rel_path, err=str(e))
+                    artifact_paths.append(abs_path)  # 파일은 존재하므로 경로는 반환
             return artifact_paths
         except Exception as e:
             self._log.warning("Failed to collect changed files", err=str(e))

@@ -160,10 +160,11 @@ class ClaudeCliClient:
         """
         log.info("Executing in workspace", work_dir=work_dir, instructions_len=len(instructions))
 
+        # --allowedTools가 CLI 버전에 따라 미지원일 수 있으므로 fallback
+        cli_extra_args = ["--allowedTools", "Read,Write,Edit,Bash,Glob,Grep"]
         try:
             proc = await asyncio.create_subprocess_exec(
-                *self._cli_args, "-p",
-                "--allowedTools", "Read,Write,Edit,Bash,Glob,Grep",
+                *self._cli_args, "-p", *cli_extra_args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
