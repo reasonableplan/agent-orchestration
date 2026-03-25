@@ -409,6 +409,8 @@ class BaseAgent(ABC):
     async def _on_task_complete(self, task: Task, result: TaskResult) -> None:
         new_status = "review" if result.success else "failed"
         new_column = "Review" if result.success else "Failed"
+        if not result.success:
+            self._log.warning("Task failed", task_id=task.id, error=result.error)
 
         # Board-first: external state before internal state
         if task.github_issue_number:

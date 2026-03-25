@@ -1018,6 +1018,9 @@ class DirectorAgent(BaseAgent):
 
         if not success:
             # Worker가 실패 보고 → 재작업 (최대 3회, 초과 시 Backlog로 리셋)
+            error_msg = result.get("error", {}).get("message", "unknown") if isinstance(result, dict) else "unknown"
+            log.warning("Worker reported failure", task_id=task_id, error=error_msg,
+                        retry=task.retry_count or 0)
             retry = task.retry_count or 0
             if retry >= 3:
                 log.warning("Task exceeded max retries, resetting to Backlog",
@@ -1189,12 +1192,12 @@ class DirectorAgent(BaseAgent):
             for cfg_name in ("ruff.toml", ".ruff.toml"):
                 cfg_path = os.path.join(work_dir, cfg_name)
                 if os.path.isfile(cfg_path):
-                    ruff_config_args = ["--config", cfg_path]
+                    ruff_config_args = ["--config", os.path.abspath(cfg_path)]
                     break
             if not ruff_config_args:
                 pyproject = os.path.join(work_dir, "pyproject.toml")
                 if os.path.isfile(pyproject):
-                    ruff_config_args = ["--config", pyproject]
+                    ruff_config_args = ["--config", os.path.abspath(pyproject)]
 
             # Step 1a: 안전한 lint 자동 수정 (--fix는 safe fix만 적용)
             await self._run_subprocess(
