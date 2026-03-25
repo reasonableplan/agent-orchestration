@@ -1463,6 +1463,7 @@ class DirectorAgent(BaseAgent):
                 "retry_count_increment": 1,
             })
             log.info("Task review: rejected", task_id=task.id)
+            await self._write_feedback_to_agent_md(task, reason)
             await self._broadcast_review_message(task, approved, reason)
             return
 
@@ -1532,6 +1533,79 @@ class DirectorAgent(BaseAgent):
                 )
             )
         await self._unlock_dependent_tasks(task.id)
+        await self._update_architecture_md()
+
+    async def _write_feedback_to_agent_md(self, task: Any, reason: str) -> None:
+        """reject 피드백을 에이전트 MD + SHARED_LESSONS에 기록한다."""
+        try:
+            work_dir = self._git_service.work_dir
+            agent_id = task.assigned_agent or "unknown"
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+            entry = f"\n- [{timestamp}] {task.title}: {reason[:200]}\n"
+
+            # 에이전트 전용 MD에 기록
+            agent_md = os.path.join(work_dir, "docs", "agents", f"{agent_id}.md")
+            if os.path.isfile(agent_md):
+                with open(agent_md, "a", encoding="utf-8") as f:
+                    f.write(entry)
+
+            # SHARED_LESSONS에도 기록
+            shared_md = os.path.join(work_dir, "docs", "agents", "SHARED_LESSONS.md")
+            if os.path.isfile(shared_md):
+                with open(shared_md, "a", encoding="utf-8") as f:
+                    f.write(entry)
+
+            log.info("Feedback written to agent MD", agent=agent_id, task_id=task.id)
+        except Exception as e:
+            log.warning("Failed to write feedback to MD", err=str(e))
+
+    async def _update_architecture_md(self) -> None:
+        """merge 후 ARCHITECTURE.md의 파일 트리와 라우터 목록을 갱신한다."""
+        try:
+            work_dir = self._git_service.work_dir
+            arch_path = os.path.join(work_dir, "docs", "ARCHITECTURE.md")
+            if not os.path.isfile(arch_path):
+                return
+
+            # 현재 등록된 라우터 확인
+            main_py = os.path.join(work_dir, "backend", "app", "main.py")
+            registered_routers: list[str] = []
+            if os.path.isfile(main_py):
+                content = Path(main_py).read_text(encoding="utf-8", errors="replace")
+                for line in content.split("\n"):
+                    if "include_router" in line:
+                        registered_routers.append(line.strip())
+
+            # 현재 모델 목록
+            models_init = os.path.join(work_dir, "backend", "app", "models", "__init__.py")
+            model_exports: list[str] = []
+            if os.path.isfile(models_init):
+                content = Path(models_init).read_text(encoding="utf-8", errors="replace")
+                for line in content.split("\n"):
+                    stripped = line.strip().rstrip(",")
+                    if stripped and not stripped.startswith(("#", "from", "import", "__", ")", "\"", "'")):
+                        model_exports.append(stripped)
+
+            # ARCHITECTURE.md 끝에 자동 갱신 섹션 추가/업데이트
+            arch_content = Path(arch_path).read_text(encoding="utf-8", errors="replace")
+            marker = "<!-- AUTO-UPDATED -->"
+            if marker in arch_content:
+                arch_content = arch_content[:arch_content.index(marker)]
+
+            auto_section = (
+                f"{marker}\n"
+                f"## 자동 갱신 ({datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC)\n\n"
+                f"### 등록된 라우터 (main.py)\n"
+                + ("\n".join(f"- `{r}`" for r in registered_routers) or "- 없음")
+                + f"\n\n### 모델 exports (models/__init__.py)\n"
+                + ("\n".join(f"- {m}" for m in model_exports) or "- 없음")
+                + "\n"
+            )
+
+            Path(arch_path).write_text(arch_content + auto_section, encoding="utf-8")
+            log.info("ARCHITECTURE.md updated", routers=len(registered_routers), models=len(model_exports))
+        except Exception as e:
+            log.warning("Failed to update ARCHITECTURE.md", err=str(e))
 
     async def _broadcast_review_message(
         self, task: Any, approved: bool, reason: str,
