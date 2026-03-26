@@ -1094,16 +1094,130 @@ class DirectorAgent(BaseAgent):
                 )
             return
 
+        # ---- 통합 검증 게이트: 다른 파일과의 호환성 확인 ----
+        integration_errors = await self._run_integration_gate(artifacts)
+        if integration_errors:
+            reject_reason = (
+                "통합 검증 실패 — 다른 파일과 호환되지 않습니다:\n\n"
+                + "\n".join(f"- {e}" for e in integration_errors[:10])
+                + "\n\n관련 파일을 확인하고 호환성을 맞추세요."
+            )
+            await self._finalize_review(task, approved=False, reason=reject_reason)
+            if task.github_issue_number:
+                try:
+                    await self._git_service.add_comment(
+                        task.github_issue_number,
+                        f"**Director Review: Integration Gate FAILED**\n\n{reject_reason}",
+                    )
+                except Exception:
+                    pass
+            return
+
         approved, review_note = await self._llm_review(task, artifacts, summary)
         await self._finalize_review(task, approved=approved, reason=review_note)
 
         # 리뷰 코멘트를 GitHub Issue에 추가
         if task.github_issue_number and review_note:
             status = "Approved" if approved else "Changes Requested"
-            await self._git_service.add_comment(
-                task.github_issue_number,
-                f"**Director Review: {status}**\n\n{review_note}",
-            )
+            try:
+                await self._git_service.add_comment(
+                    task.github_issue_number,
+                    f"**Director Review: {status}**\n\n{review_note}",
+                )
+            except Exception:
+                pass
+
+    async def _run_integration_gate(self, artifacts: list[str]) -> list[str]:
+        """변경된 파일이 다른 파일과 호환되는지 통합 검증한다.
+
+        검사 항목:
+        - Python import에 해당하는 패키지가 requirements.txt에 있는지
+        - frontend import에 해당하는 패키지가 package.json에 있는지
+        - docker-compose.yml의 DB URL이 database.py 드라이버와 일치하는지
+        """
+        errors: list[str] = []
+        work_dir = self._git_service.work_dir
+
+        try:
+            # 1. requirements.txt vs 실제 import 확인
+            req_path = os.path.join(work_dir, "backend", "requirements.txt")
+            if os.path.isfile(req_path):
+                req_content = Path(req_path).read_text(encoding="utf-8", errors="replace").lower()
+                # 주요 패키지 매핑 (import 이름 → requirements 이름)
+                pkg_map = {
+                    "pytest_asyncio": "pytest-asyncio",
+                    "fastapi": "fastapi",
+                    "sqlalchemy": "sqlalchemy",
+                    "alembic": "alembic",
+                    "pydantic": "pydantic",
+                    "httpx": "httpx",
+                }
+                for art in artifacts:
+                    if not art.endswith(".py"):
+                        continue
+                    try:
+                        content = Path(art).read_text(encoding="utf-8", errors="replace")
+                        for imp_name, req_name in pkg_map.items():
+                            if f"import {imp_name}" in content and req_name not in req_content:
+                                errors.append(
+                                    f"{os.path.basename(art)}: `{imp_name}` import하지만 "
+                                    f"requirements.txt에 `{req_name}` 없음"
+                                )
+                    except Exception:
+                        continue
+
+            # 2. package.json vs frontend import 확인
+            pkg_json_path = os.path.join(work_dir, "frontend", "package.json")
+            if os.path.isfile(pkg_json_path):
+                import json as _json
+                try:
+                    pkg_data = _json.loads(Path(pkg_json_path).read_text(encoding="utf-8"))
+                    all_deps = set(pkg_data.get("dependencies", {}).keys())
+                    all_deps.update(pkg_data.get("devDependencies", {}).keys())
+
+                    npm_map = {
+                        "@tanstack/react-query": "@tanstack/react-query",
+                        "axios": "axios",
+                        "react-router-dom": "react-router-dom",
+                        "react-dnd": "react-dnd",
+                    }
+                    for art in artifacts:
+                        if not art.endswith((".ts", ".tsx")):
+                            continue
+                        try:
+                            content = Path(art).read_text(encoding="utf-8", errors="replace")
+                            for imp_name, pkg_name in npm_map.items():
+                                if f"from '{imp_name}" in content or f"from \"{imp_name}" in content:
+                                    if pkg_name not in all_deps:
+                                        errors.append(
+                                            f"{os.path.basename(art)}: `{imp_name}` import하지만 "
+                                            f"package.json에 없음"
+                                        )
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+            # 3. docker-compose DB URL vs database.py 드라이버 호환성
+            compose_path = os.path.join(work_dir, "docker-compose.yml")
+            db_path = os.path.join(work_dir, "backend", "app", "core", "database.py")
+            if os.path.isfile(compose_path) and os.path.isfile(db_path):
+                compose_content = Path(compose_path).read_text(encoding="utf-8", errors="replace")
+                db_content = Path(db_path).read_text(encoding="utf-8", errors="replace")
+                if "create_async_engine" in db_content and "DATABASE_URL" in compose_content:
+                    # async engine이면 +asyncpg가 URL에 있어야 함
+                    if "asyncpg" not in compose_content and "postgresql://" in compose_content:
+                        errors.append(
+                            "docker-compose.yml: DATABASE_URL에 `+asyncpg` 드라이버 누락 "
+                            "(database.py가 create_async_engine 사용)"
+                        )
+
+        except Exception as e:
+            log.warning("Integration gate check failed", err=str(e))
+
+        if errors:
+            log.warning("Integration gate: issues found", count=len(errors))
+        return errors
 
     async def _run_import_gate(self, artifacts: list[str]) -> list[str]:
         """생성된 Python 파일의 import가 workspace에 실제 존재하는지 검증한다.
