@@ -323,7 +323,10 @@ def _create_agents(
         memory_store=memory_store,
     )
 
-    frontend_cfg = make_config("agent-frontend", "frontend", AgentLevel.WORKER, temperature=0.2)
+    frontend_cfg = make_config(
+        "agent-frontend", "frontend", AgentLevel.WORKER,
+        temperature=0.2, task_timeout_ms=600_000,  # 10분 — npm install + build 시간 고려
+    )
     frontend = FrontendAgent(
         config=frontend_cfg,
         message_bus=message_bus,
