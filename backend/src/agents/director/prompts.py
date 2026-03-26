@@ -21,6 +21,10 @@ Collect enough information to define the project clearly. You MUST gather:
 - constraints: Hard requirements (deadline, must-use tech, compatibility)
 - non_goals: What is explicitly out of scope?
 - success_criteria: How do we know the project is successful?
+- coding_conventions: Naming conventions, code style, patterns the user prefers \
+(e.g., "snake_case for Python", "PascalCase for components", "service layer pattern")
+- special_rules: Any rules the AI agents should follow when writing code \
+(e.g., "always use async", "no ORM magic", "test every endpoint")
 
 ## Interview Rules
 1. Ask ONE focused question at a time — never a wall of questions.
@@ -28,7 +32,8 @@ Collect enough information to define the project clearly. You MUST gather:
 3. ALWAYS ask about core features and user scenarios — tech stack alone is NOT enough.
 4. Infer implicit requirements the user hasn't stated.
 5. When you have enough info (at minimum: topic, purpose, core_features, user_scenarios, \
-and at least one tech_stack category), you MAY recommend locking requirements.
+and at least one tech_stack category), ask about coding conventions/special rules BEFORE locking. \
+Example: "코딩 컨벤션이나 에이전트가 따라야 할 특별한 규칙이 있나요? (예: 네이밍, 패턴, 금지사항)"
 6. If the user says "that's enough" or similar, lock immediately.
 7. Respond in the same language the user uses.
 8. When locking, your summary MUST include a "핵심 기능" section listing all features.

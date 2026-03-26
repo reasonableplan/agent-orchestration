@@ -918,11 +918,15 @@ class DirectorAgent(BaseAgent):
                             issue=created["issue_number"], err=str(rollback_err))
 
     async def _start_execution(self) -> None:
-        """사용자 허가 후 Backlog 태스크를 Ready로 전환하여 에이전트 작업을 시작한다."""
+        """사용자 허가 후 foundation docs 생성 → Backlog 태스크를 Ready로 전환."""
         plan = self._active_plan
         if plan is None or plan.stage != PlanStage.COMMITTED:
             await self._broadcast_director_message("시작할 수 있는 계획이 없습니다.")
             return
+
+        # Worker 시작 전에 foundation docs 생성 (program.md 패턴)
+        await self._broadcast_director_message("Worker 가이드 문서를 생성합니다...")
+        await self._generate_foundation_docs(plan)
 
         # 이 에픽의 의존성 없는 태스크만 Ready로 이동
         tasks = await self._state_store.get_all_tasks()
@@ -958,6 +962,105 @@ class DirectorAgent(BaseAgent):
         )
         log.info("Execution started", ready_count=moved, session_id=plan.session_id)
         self._conversation.clear()
+
+    async def _generate_foundation_docs(self, plan: EpicPlan) -> None:
+        """Worker 시작 전 foundation docs를 LLM으로 생성하여 workspace에 기록한다.
+
+        ARCHITECTURE.md, CONVENTIONS.md, api-spec.md, 에이전트별 가이드를
+        사용자가 전달한 요구사항 + tech stack 기반으로 생성.
+        이 문서들이 모든 Worker의 "program.md" 역할을 한다.
+        """
+        work_dir = self._git_service.work_dir
+        project = plan.project.model_dump() if plan.project else {}
+        tasks_summary = ", ".join(t.title for t in plan.tasks[:20])
+
+        prompt = (
+            "You are a Staff-level technical architect. Generate foundation documents "
+            "for an AI agent team that will build this project autonomously.\n\n"
+            f"## Project\n"
+            f"- Title: {plan.epic_title}\n"
+            f"- Goal: {plan.goal}\n"
+            f"- Tech Stack: {project.get('tech_stack', {})}\n"
+            f"- Scope: {project.get('scope', 'MVP')}\n"
+            f"- Constraints: {project.get('constraints', [])}\n"
+            f"- Coding Conventions: {project.get('coding_conventions', 'standard')}\n"
+            f"- Special Rules: {project.get('special_rules', 'none')}\n"
+            f"- Tasks: {tasks_summary}\n\n"
+            "Generate these 3 documents as JSON:\n"
+            '{"architecture": "ARCHITECTURE.md content (file tree, import paths, DB schema, API endpoints)", '
+            '"conventions": "CONVENTIONS.md content (naming, patterns, testing rules, do/don\'t)", '
+            '"agent_guides": {'
+            '"agent-backend": "backend agent guide (FastAPI patterns, DB access, testing)", '
+            '"agent-frontend": "frontend agent guide (React patterns, components, state management)", '
+            '"agent-git": "git/infra agent guide (Docker, CI, config files)", '
+            '"agent-docs": "docs agent guide (documentation standards)"'
+            "}}\n\n"
+            "IMPORTANT:\n"
+            "- Use the ACTUAL tech stack specified above, not generic templates\n"
+            "- Include specific file paths, import patterns, naming conventions\n"
+            "- CONVENTIONS.md must include coding_conventions and special_rules from user\n"
+            "- Each agent guide: role, owned directories, patterns to follow, common mistakes to avoid\n"
+            "- Write in Korean\n"
+        )
+
+        try:
+            data, inp, out = await self._llm.chat_json(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=8192, temperature=0.3,
+            )
+            await self._publish_token_usage(inp, out)
+
+            if not isinstance(data, dict):
+                log.warning("Foundation docs: LLM returned non-dict")
+                return
+
+            docs_dir = os.path.join(work_dir, "docs")
+            agents_dir = os.path.join(docs_dir, "agents")
+            os.makedirs(agents_dir, exist_ok=True)
+
+            # ARCHITECTURE.md
+            if data.get("architecture"):
+                arch_path = os.path.join(docs_dir, "ARCHITECTURE.md")
+                await asyncio.to_thread(
+                    Path(arch_path).write_text, data["architecture"], "utf-8",
+                )
+
+            # CONVENTIONS.md
+            if data.get("conventions"):
+                conv_path = os.path.join(docs_dir, "CONVENTIONS.md")
+                await asyncio.to_thread(
+                    Path(conv_path).write_text, data["conventions"], "utf-8",
+                )
+
+            # 에이전트별 가이드
+            guides = data.get("agent_guides", {})
+            if isinstance(guides, dict):
+                for agent_id, content in guides.items():
+                    if content:
+                        guide_path = os.path.join(agents_dir, f"{agent_id}.md")
+                        await asyncio.to_thread(
+                            Path(guide_path).write_text, content, "utf-8",
+                        )
+
+            # SHARED_LESSONS.md (초기 빈 파일)
+            lessons_path = os.path.join(agents_dir, "SHARED_LESSONS.md")
+            if not os.path.isfile(lessons_path):
+                await asyncio.to_thread(
+                    Path(lessons_path).write_text,
+                    "# Shared Lessons\n\n아직 기록된 교훈이 없습니다.\n", "utf-8",
+                )
+
+            log.info("Foundation docs generated",
+                     docs=list(data.keys()), work_dir=work_dir)
+            await self._broadcast_director_message(
+                "Worker 가이드 문서 생성 완료 — ARCHITECTURE.md, CONVENTIONS.md, 에이전트별 가이드"
+            )
+        except Exception as e:
+            log.warning("Foundation docs generation failed, continuing without",
+                        err=str(e))
+            await self._broadcast_director_message(
+                "가이드 문서 자동 생성에 실패했습니다. Worker가 기본 규칙으로 작업합니다."
+            )
 
     # ===== Classification =====
 

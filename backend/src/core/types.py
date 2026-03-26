@@ -118,6 +118,8 @@ class ProjectContext(BaseModel):
     existing_system: str = ""
     constraints: list[str] = Field(default_factory=list)
     non_goals: list[str] = Field(default_factory=list)
+    coding_conventions: str = ""
+    special_rules: str = ""
 
 
 class TaskDraft(BaseModel):
