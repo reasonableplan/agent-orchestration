@@ -644,8 +644,16 @@ class GitService:
 
     async def init_workspace(self) -> None:
         """workspace를 target repo의 클론으로 초기화한다. 이미 올바른 클론이면 pull만."""
+        import shutil as _shutil
+
         repo_url = f"https://github.com/{self._owner}/{self._repo}.git"
         git_dir = os.path.join(self._work_dir, ".git")
+
+        # workspace 디렉토리가 있지만 .git이 없으면 삭제 후 재생성
+        # (.git 없이 git 명령 실행 시 부모 repo의 .git을 오염시킴)
+        if os.path.isdir(self._work_dir) and not os.path.isdir(git_dir):
+            _shutil.rmtree(self._work_dir, ignore_errors=True)
+            log.info("Removed workspace without .git to prevent parent repo contamination")
 
         if os.path.isdir(git_dir):
             # 이미 git repo — remote 확인 후 pull
