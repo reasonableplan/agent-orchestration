@@ -148,6 +148,7 @@ class TestInitWorkspace:
         ]
         with (
             patch("os.path.isdir", return_value=True),
+            patch("os.path.isfile", return_value=True),
             patch("asyncio.create_subprocess_exec", new_callable=AsyncMock, side_effect=calls),
         ):
             await svc.init_workspace()
@@ -161,6 +162,7 @@ class TestInitWorkspace:
         ]
         with (
             patch("os.path.isdir", return_value=True),
+            patch("os.path.isfile", return_value=True),
             patch("asyncio.create_subprocess_exec", new_callable=AsyncMock, side_effect=calls) as mock_exec,
         ):
             await svc.init_workspace()

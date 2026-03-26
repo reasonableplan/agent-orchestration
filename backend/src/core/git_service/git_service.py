@@ -649,13 +649,14 @@ class GitService:
         repo_url = f"https://github.com/{self._owner}/{self._repo}.git"
         git_dir = os.path.join(self._work_dir, ".git")
 
-        # workspace 디렉토리가 있지만 .git이 없으면 삭제 후 재생성
-        # (.git 없이 git 명령 실행 시 부모 repo의 .git을 오염시킴)
-        if os.path.isdir(self._work_dir) and not os.path.isdir(git_dir):
+        # workspace에 유효한 .git이 없으면 삭제 후 재클론
+        # (불완전/부재 .git 상태에서 git 명령 실행 시 부모 repo의 .git을 오염시킴)
+        head_file = os.path.join(git_dir, "HEAD")
+        if os.path.isdir(self._work_dir) and not os.path.isfile(head_file):
             _shutil.rmtree(self._work_dir, ignore_errors=True)
-            log.info("Removed workspace without .git to prevent parent repo contamination")
+            log.info("Removed workspace with invalid/missing .git", path=self._work_dir)
 
-        if os.path.isdir(git_dir):
+        if os.path.isfile(head_file):
             # 이미 git repo — remote 확인 후 pull
             try:
                 remote = await self._run_git("remote", "get-url", "origin")
