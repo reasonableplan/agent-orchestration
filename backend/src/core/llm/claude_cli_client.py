@@ -15,6 +15,52 @@ log = get_logger("ClaudeCliClient")
 
 _CLI_TIMEOUT_S = 300.0  # 5분 — 복잡한 코드 생성 태스크 고려
 
+# 프로세스 그룹 격리 — 타임아웃 시 트리 종료를 위해 필요
+_PGROUP_KWARGS: dict = (
+    {"creationflags": 0x00000200}  # CREATE_NEW_PROCESS_GROUP
+    if sys.platform == "win32"
+    else {"start_new_session": True}
+)
+
+
+async def _kill_process_tree(proc: asyncio.subprocess.Process) -> None:
+    """프로세스와 자식 프로세스 트리 전체를 종료한다.
+
+    Windows: taskkill /T /F (트리 종료)
+    Unix: process group 단위 SIGTERM → SIGKILL fallback
+    """
+    if proc.returncode is not None:
+        return  # 이미 종료됨
+
+    if sys.platform == "win32":
+        try:
+            kill_proc = await asyncio.create_subprocess_exec(
+                "taskkill", "/T", "/F", "/PID", str(proc.pid),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(kill_proc.wait(), timeout=10.0)
+        except (asyncio.TimeoutError, OSError) as e:
+            log.warning("taskkill failed, falling back to proc.kill()", err=str(e))
+            proc.kill()
+    else:
+        import signal
+
+        try:
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, signal.SIGTERM)
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            proc.kill()
+
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=5.0)
+    except asyncio.TimeoutError:
+        pass
+
 
 def _resolve_cli_args() -> list[str]:
     """subprocess에 전달할 CLI 실행 인자 목록을 반환한다.
@@ -95,6 +141,7 @@ class ClaudeCliClient:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=tempfile.gettempdir(),  # 프로젝트 CLAUDE.md 컨텍스트 차단
+                    **_PGROUP_KWARGS,
                 )
             except FileNotFoundError as e:
                 raise RuntimeError(
@@ -108,8 +155,7 @@ class ClaudeCliClient:
                     timeout=_CLI_TIMEOUT_S,
                 )
             except asyncio.TimeoutError as e:
-                proc.kill()
-                await proc.wait()
+                await _kill_process_tree(proc)
                 raise RuntimeError(f"claude CLI timed out after {_CLI_TIMEOUT_S}s") from e
 
             if proc.returncode != 0:
@@ -169,6 +215,7 @@ class ClaudeCliClient:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=work_dir,
+                **_PGROUP_KWARGS,
             )
         except FileNotFoundError as e:
             raise RuntimeError(f"claude CLI not found ({self._cli_args[0]})") from e
@@ -179,8 +226,7 @@ class ClaudeCliClient:
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
+            await _kill_process_tree(proc)
             return False, f"CLI timed out after {timeout}s"
 
         output = stdout.decode(errors="replace").strip()

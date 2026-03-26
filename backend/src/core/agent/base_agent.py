@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -20,9 +21,13 @@ from src.core.types import (
     TaskStatus,
 )
 
-DEFAULT_TASK_TIMEOUT_S = 300.0  # 5분
+DEFAULT_TASK_TIMEOUT_S = 360.0  # 6분 (CLI timeout + 여유 60s)
 MAX_BACKOFF_S = 60.0
 HEARTBEAT_INTERVAL_CYCLES = 3
+
+
+def _now_ms() -> int:
+    return int(time.monotonic() * 1000)
 
 
 class BaseAgent(ABC):
@@ -57,6 +62,7 @@ class BaseAgent(ABC):
         self._consecutive_errors = 0
         self._subscriptions: list[tuple[str, Any]] = []
         self._active_worktree: str | None = None  # 현재 태스크의 worktree 경로
+        self._token_budget: Any | None = None  # TokenBudgetManager (옵셔널)
 
         # config hot-reload 구독
         async def _config_handler(msg: Message) -> None:
@@ -104,6 +110,21 @@ class BaseAgent(ABC):
                 from_agent=self.id,
                 payload=payload,
                 trace_id=trace_id or str(uuid.uuid4()),
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+
+    async def _publish_progress(
+        self, task_id: str, stage: str, detail: str = "",
+    ) -> None:
+        """실시간 진행률 이벤트를 발행한다."""
+        await self._message_bus.publish(
+            Message(
+                id=str(uuid.uuid4()),
+                type=MessageType.TASK_PROGRESS,
+                from_agent=self.id,
+                payload={"taskId": task_id, "stage": stage, "detail": detail},
+                trace_id=str(uuid.uuid4()),
                 timestamp=datetime.now(timezone.utc),
             )
         )
@@ -187,7 +208,24 @@ class BaseAgent(ABC):
                         task_trace_id = str(uuid.uuid4())
                         await self._set_status(AgentStatus.BUSY, task.id, task_trace_id)
                         # 워크트리 생성 (격리된 작업 공간)
-                        await self._setup_worktree(task)
+                        try:
+                            await self._setup_worktree(task)
+                        except Exception as wt_err:
+                            # worktree 실패 → 태스크를 failed 처리하고 다음으로
+                            self._log.error(
+                                "Worktree setup failed, marking task as failed",
+                                task_id=task.id, err=str(wt_err),
+                            )
+                            await self._on_task_complete(
+                                task,
+                                TaskResult(
+                                    success=False,
+                                    error={"message": f"Worktree creation failed: {wt_err}"},
+                                    artifacts=[],
+                                ),
+                            )
+                            await self._set_status(AgentStatus.IDLE, None, task_trace_id)
+                            continue
                         try:
                             result = await self._execute_with_timeout(task)
                             # 워크트리 파일을 공유 workspace로 복사 + artifact 경로 재매핑
@@ -227,10 +265,86 @@ class BaseAgent(ABC):
 
     async def _execute_with_timeout(self, task: Task) -> TaskResult:
         timeout_s = (self.config.task_timeout_ms or DEFAULT_TASK_TIMEOUT_S * 1000) / 1000
+
+        log_id = str(uuid.uuid4())
+        start_ms = _now_ms()
+        attempt = (task.retry_count or 0) + 1
+
+        # 토큰 예산 체크
+        if self._token_budget:
+            allowed, reason = await self._token_budget.check_budget(task.id)
+            if not allowed:
+                try:
+                    await self._state_store.create_task_log({
+                        "id": log_id,
+                        "task_id": task.id,
+                        "agent_id": self.id,
+                        "attempt": attempt,
+                        "status": "budget_exceeded",
+                        "duration_ms": 0,
+                    })
+                except Exception as e:
+                    self._log.warning("Failed to create budget log", err=str(e))
+                return TaskResult(
+                    success=False,
+                    error={"message": reason},
+                    artifacts=[],
+                )
+
+        # 실행 로그 생성 (started)
         try:
-            return await asyncio.wait_for(self.execute_task(task), timeout=timeout_s)
+            await self._state_store.create_task_log({
+                "id": log_id,
+                "task_id": task.id,
+                "agent_id": self.id,
+                "attempt": attempt,
+                "status": "started",
+            })
+        except Exception as e:
+            self._log.warning("Failed to create task log", err=str(e))
+
+        try:
+            # LLM 토큰 사용량 추정을 위해 실행 전 값 저장
+            llm = getattr(self, "_llm", None)
+            tokens_before = getattr(llm, "tokens_used", 0) if llm else 0
+
+            result = await asyncio.wait_for(self.execute_task(task), timeout=timeout_s)
+
+            # 토큰 추정치 계산
+            tokens_after = getattr(llm, "tokens_used", 0) if llm else 0
+            token_delta = max(tokens_after - tokens_before, 0)
+            est_input = token_delta // 2
+            est_output = token_delta - est_input
+
+            # 성공/실패 로그 업데이트 (토큰 포함)
+            log_status = "success" if result.success else "failed"
+            await self._update_task_log(
+                log_id, log_status, start_ms,
+                token_input=est_input, token_output=est_output,
+            )
+            return result
         except asyncio.TimeoutError:
+            await self._update_task_log(log_id, "timeout", start_ms)
             raise TimeoutError(f'Task "{task.title}" timed out after {timeout_s}s')
+        except Exception:
+            await self._update_task_log(log_id, "failed", start_ms)
+            raise
+
+    async def _update_task_log(
+        self, log_id: str, status: str, start_ms: int,
+        token_input: int = 0, token_output: int = 0,
+    ) -> None:
+        try:
+            updates: dict[str, Any] = {
+                "status": status,
+                "duration_ms": _now_ms() - start_ms,
+            }
+            if token_input or token_output:
+                updates["token_input"] = token_input
+                updates["token_output"] = token_output
+            await self._state_store.update_task_log(log_id, updates)
+        except Exception as e:
+            self._log.warning("Failed to update task log", err=str(e))
 
     # ===== Subscription =====
 
@@ -313,16 +427,17 @@ class BaseAgent(ABC):
                     path=worktree_path, workspace=str(ws_root),
                 )
                 self._active_worktree = None
-                return
+                raise RuntimeError("SECURITY: worktree path outside workspace")
 
             self._active_worktree = worktree_path
             self._log.info("Worktree ready", task_id=task.id, path=worktree_path)
         except Exception as e:
-            self._log.warning(
-                "Worktree creation failed, using shared workspace",
+            self._log.error(
+                "Worktree creation failed, task cannot proceed",
                 task_id=task.id, err=str(e),
             )
             self._active_worktree = None
+            raise RuntimeError(f"Worktree creation failed for task {task.id}: {e}") from e
 
     async def _sync_worktree_to_workspace(self, task: Task) -> None:
         """워크트리의 변경사항을 공유 workspace로 복사한다.

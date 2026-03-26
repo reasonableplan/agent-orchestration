@@ -1591,8 +1591,10 @@ class DirectorAgent(BaseAgent):
             # ARCHITECTURE.md 끝에 자동 갱신 섹션 추가/업데이트
             arch_content = Path(arch_path).read_text(encoding="utf-8", errors="replace")
             marker = "<!-- AUTO-UPDATED -->"
-            if marker in arch_content:
-                arch_content = arch_content[:arch_content.index(marker)]
+            # 첫 번째 마커 이전까지만 유지 (중복 마커 누적 방지)
+            marker_idx = arch_content.find(marker)
+            if marker_idx >= 0:
+                arch_content = arch_content[:marker_idx].rstrip() + "\n\n"
 
             auto_section = (
                 f"{marker}\n"
@@ -1672,11 +1674,11 @@ class DirectorAgent(BaseAgent):
             if completed_task_id not in deps:
                 continue
 
-            # 이 태스크의 모든 의존성이 done인지 확인
+            # 이 태스크의 모든 의존성이 done/skipped인지 확인
             all_deps_done = True
             for dep_id in deps:
                 dep_task = await self._state_store.get_task(dep_id)
-                if dep_task is None or dep_task.status != "done":
+                if dep_task is None or dep_task.status not in ("done", "skipped"):
                     all_deps_done = False
                     break
 

@@ -178,18 +178,91 @@ class MergeQueue:
 
         log.info("MergeQueue worker stopped")
 
+    async def _check_conflicts(self, work_dir: str) -> tuple[bool, list[str]]:
+        """main과의 머지 충돌을 dry-run으로 감지한다.
+
+        Returns: (has_conflict, conflicting_files)
+        """
+        try:
+            # 최신 origin/main 가져오기
+            fetch_proc = await asyncio.create_subprocess_exec(
+                "git", "fetch", "origin", "main",
+                cwd=work_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await fetch_proc.wait()
+
+            # dry-run merge
+            proc = await asyncio.create_subprocess_exec(
+                "git", "merge", "--no-commit", "--no-ff", "origin/main",
+                cwd=work_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+
+            if proc.returncode != 0:
+                # 충돌 파일 파싱
+                conflict_files: list[str] = []
+                diff_proc = await asyncio.create_subprocess_exec(
+                    "git", "diff", "--name-only", "--diff-filter=U",
+                    cwd=work_dir,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, _ = await diff_proc.communicate()
+                for line in stdout.decode().strip().split("\n"):
+                    line = line.strip()
+                    if line:
+                        conflict_files.append(line)
+
+                # merge abort
+                abort_proc = await asyncio.create_subprocess_exec(
+                    "git", "merge", "--abort",
+                    cwd=work_dir,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await abort_proc.wait()
+                return True, conflict_files
+
+            # 충돌 없음 — merge 취소 (reset --merge가 --no-commit 후 더 안전)
+            reset_proc = await asyncio.create_subprocess_exec(
+                "git", "reset", "--merge",
+                cwd=work_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await reset_proc.wait()
+            return False, []
+        except Exception as e:
+            log.warning("Conflict check failed", err=str(e))
+            return False, []  # 체크 실패 시 진행 허용
+
     async def _process_merge(self, request: MergeRequest) -> MergeResult:
         """단일 머지 요청을 처리한다.
 
         순서:
+        0. 충돌 감지 (dry-run merge)
         1. 전체 테스트 실행 (main rebase 상태에서)
         2. commit + PR + merge
         """
         log.info("Processing merge",
                  task_id=request.task_id, title=request.task_title)
 
-        # 1. 전체 테스트 게이트
+        # 0. 충돌 감지
         work_dir = request.worktree_path or self._git_ops.work_dir
+        has_conflict, conflict_files = await self._check_conflicts(work_dir)
+        if has_conflict:
+            log.warning("Merge conflict detected",
+                        task_id=request.task_id, files=conflict_files)
+            return MergeResult(
+                success=False,
+                error=f"Merge conflict in: {', '.join(conflict_files)}",
+            )
+
+        # 1. 전체 테스트 게이트
         test_passed, test_output = await self._test_runner.run_full_test(work_dir)
         if not test_passed:
             log.warning("Merge rejected: test gate failed",

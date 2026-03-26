@@ -155,3 +155,24 @@ class ArtifactModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),nullable=False, default=func.now())
 
     task: Mapped["TaskModel"] = relationship("TaskModel", back_populates="artifacts", lazy="noload")
+
+
+class TaskLogModel(Base):
+    """Worker 작업 실행 로그 — 시도별 상태/시간/토큰 기록."""
+    __tablename__ = "task_logs"
+    __table_args__ = (
+        Index("idx_task_logs_task_id", "task_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    task_id: Mapped[str] = mapped_column(String, ForeignKey("tasks.id"), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String, nullable=False, default="")
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="started")
+    log_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_input: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    token_output: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=func.now())
+
+    task: Mapped["TaskModel"] = relationship("TaskModel", lazy="noload")

@@ -42,6 +42,10 @@ class AppConfig(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
     dashboard_auth_token: str | None = None
 
+    # Token Budget
+    max_tokens_per_task: int = 500_000
+    max_tokens_per_day: int = 10_000_000
+
     # Logging
     log_level: str = "info"
     app_env: str = "development"

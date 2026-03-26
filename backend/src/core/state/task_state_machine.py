@@ -2,12 +2,13 @@ from src.core.types import TaskStatus
 
 # 허용되는 상태 전환 맵
 _VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
-    TaskStatus.BACKLOG:      {TaskStatus.READY, TaskStatus.FAILED},
+    TaskStatus.BACKLOG:      {TaskStatus.READY, TaskStatus.FAILED, TaskStatus.SKIPPED},
     TaskStatus.READY:        {TaskStatus.IN_PROGRESS, TaskStatus.FAILED, TaskStatus.BACKLOG},
     TaskStatus.IN_PROGRESS:  {TaskStatus.REVIEW, TaskStatus.FAILED, TaskStatus.READY},
     TaskStatus.REVIEW:       {TaskStatus.DONE, TaskStatus.FAILED, TaskStatus.READY, TaskStatus.IN_PROGRESS, TaskStatus.BACKLOG},
-    TaskStatus.FAILED:       {TaskStatus.READY, TaskStatus.BACKLOG},
+    TaskStatus.FAILED:       {TaskStatus.READY, TaskStatus.BACKLOG, TaskStatus.SKIPPED},
     TaskStatus.DONE:         set(),
+    TaskStatus.SKIPPED:      {TaskStatus.READY, TaskStatus.BACKLOG},
 }
 
 

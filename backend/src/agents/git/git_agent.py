@@ -36,10 +36,12 @@ class GitAgent(BaseCodeGeneratorAgent):
         llm_client: Any,
         work_dir: str = "./workspace",
         code_search: Any = None,
+        memory_store: Any = None,
     ) -> None:
         super().__init__(
             config, message_bus, state_store, git_service,
-            llm_client, work_dir, temperature=0.2, code_search=code_search,
+            llm_client, work_dir, temperature=0.2,
+            code_search=code_search, memory_store=memory_store,
         )
 
     async def execute_task(self, task: Task) -> TaskResult:

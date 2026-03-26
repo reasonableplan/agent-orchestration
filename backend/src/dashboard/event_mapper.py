@@ -67,4 +67,11 @@ class EventMapper:
                 "issueNumber": payload.get("issue_number"),
                 "files": payload.get("files", []),
             }
+        if msg.type == MessageType.TASK_PROGRESS:
+            return "task.progress", {
+                "agentId": msg.from_agent,
+                "taskId": payload.get("taskId"),
+                "stage": payload.get("stage"),
+                "detail": payload.get("detail", ""),
+            }
         return None, {}

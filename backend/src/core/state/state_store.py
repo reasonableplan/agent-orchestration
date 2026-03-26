@@ -14,6 +14,7 @@ from src.core.db.schema import (
     HookModel,
     MessageModel,
     PlanModel,
+    TaskLogModel,
     TaskModel,
 )
 from src.core.logging.logger import get_logger
@@ -493,3 +494,40 @@ class StateStore:
                 update(HookModel).where(HookModel.id == hook_id).values(enabled=enabled)
             )
             await session.commit()
+
+    # ===== Task Logs =====
+
+    async def create_task_log(self, log_data: dict) -> None:
+        async with self._session_factory() as session:
+            session.add(TaskLogModel(**log_data))
+            await session.commit()
+
+    async def update_task_log(self, log_id: str, updates: dict) -> None:
+        async with self._session_factory() as session:
+            await session.execute(
+                update(TaskLogModel).where(TaskLogModel.id == log_id).values(**updates)
+            )
+            await session.commit()
+
+    async def get_task_logs(self, task_id: str) -> list[TaskLogModel]:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(TaskLogModel)
+                .where(TaskLogModel.task_id == task_id)
+                .order_by(TaskLogModel.created_at.desc())
+            )
+            return list(result.scalars().all())
+
+    async def get_daily_token_usage(self) -> dict[str, int]:
+        """오늘의 토큰 사용량 합계를 반환한다."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(
+                    func.coalesce(func.sum(TaskLogModel.token_input), 0),
+                    func.coalesce(func.sum(TaskLogModel.token_output), 0),
+                ).where(
+                    func.date(TaskLogModel.created_at) == func.current_date()
+                )
+            )
+            row = result.one()
+            return {"input": int(row[0]), "output": int(row[1])}

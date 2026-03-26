@@ -308,6 +308,7 @@ def _create_agents(
         llm_client=make_llm(git_cfg),
         work_dir=work_dir,
         code_search=code_search,
+        memory_store=memory_store,
     )
 
     backend_cfg = make_config("agent-backend", "backend", AgentLevel.WORKER, temperature=0.2)
@@ -319,6 +320,7 @@ def _create_agents(
         llm_client=make_llm(backend_cfg),
         work_dir=work_dir,
         code_search=code_search,
+        memory_store=memory_store,
     )
 
     frontend_cfg = make_config("agent-frontend", "frontend", AgentLevel.WORKER, temperature=0.2)
@@ -330,6 +332,7 @@ def _create_agents(
         llm_client=make_llm(frontend_cfg),
         work_dir=work_dir,
         code_search=code_search,
+        memory_store=memory_store,
     )
 
     docs_cfg = make_config("agent-docs", "docs", AgentLevel.WORKER, temperature=0.3)
@@ -341,7 +344,17 @@ def _create_agents(
         llm_client=make_llm(docs_cfg),
         work_dir=work_dir,
         code_search=code_search,
+        memory_store=memory_store,
     )
+
+    # 토큰 예산 관리자 연결 (Director 제외 — Worker만)
+    from src.core.resilience.token_budget import TokenBudgetManager
+    for agent in [git_agent, backend, frontend, docs]:
+        agent._token_budget = TokenBudgetManager(
+            state_store,
+            max_tokens_per_task=config.max_tokens_per_task,
+            max_tokens_per_day=config.max_tokens_per_day,
+        )
 
     log.info(
         "Agent LLM models configured",
@@ -371,8 +384,21 @@ async def _auto_recover_tasks(state_store: StateStore) -> None:
                 })
                 orphan_count += 1
 
+        # Step 1.5: retry 초과 backlog 태스크 → skipped (의존성 교착 방지)
+        skipped_count = 0
+        for t in all_tasks:
+            retry = getattr(t, "retry_count", 0) or 0
+            if t.status in ("backlog", "failed") and retry >= 3:
+                await state_store.update_task(t.id, {
+                    "status": "skipped", "board_column": "Skipped",
+                })
+                skipped_count += 1
+
         # Step 2: 의존성 자동 해제 (backlog → ready)
-        done_ids = {t.id for t in all_tasks if t.status == "done"}
+        # done 또는 skipped 모두 의존성 충족으로 간주
+        completed_ids = {
+            t.id for t in all_tasks if t.status in ("done", "skipped")
+        }
         unlock_count = 0
         # 복구 후 최신 상태로 다시 조회
         all_tasks = await state_store.get_all_tasks()
@@ -380,15 +406,16 @@ async def _auto_recover_tasks(state_store: StateStore) -> None:
             if t.status != "backlog":
                 continue
             deps = t.dependencies or []
-            if deps and all(d in done_ids for d in deps):
+            if deps and all(d in completed_ids for d in deps):
                 await state_store.update_task(t.id, {
                     "status": "ready", "board_column": "Ready",
                 })
                 unlock_count += 1
 
-        if orphan_count or unlock_count:
+        if orphan_count or unlock_count or skipped_count:
             log.info("Auto-recovery complete",
-                     orphans_reset=orphan_count, deps_unlocked=unlock_count)
+                     orphans_reset=orphan_count, deps_unlocked=unlock_count,
+                     skipped=skipped_count)
     except Exception as e:
         log.warning("Auto-recovery failed, continuing", err=str(e))
 

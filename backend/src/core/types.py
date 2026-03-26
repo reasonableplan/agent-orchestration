@@ -16,6 +16,7 @@ class TaskStatus(str, Enum):
     REVIEW = "review"
     FAILED = "failed"
     DONE = "done"
+    SKIPPED = "skipped"
 
 
 class TaskComplexity(str, Enum):
@@ -44,6 +45,7 @@ class BoardColumn(str, Enum):
     REVIEW = "Review"
     FAILED = "Failed"
     DONE = "Done"
+    SKIPPED = "Skipped"
 
 
 class FollowUpType(str, Enum):
@@ -81,6 +83,7 @@ class MessageType:
     SYSTEM_COMMAND = "system.command"
     AGENT_CONFIG_UPDATED = "agent.config.updated"
     TASK_ARTIFACTS = "task.artifacts"  # 태스크 완료 시 산출물 브로드캐스트
+    TASK_PROGRESS = "task.progress"    # 실시간 진행률
     # Director 대화형 워크플로우
     DIRECTOR_MESSAGE = "director.message"
     DIRECTOR_PLAN = "director.plan"

@@ -72,12 +72,14 @@ class BaseCodeGeneratorAgent(BaseAgent):
         work_dir: str = "./workspace",
         temperature: float = 0.2,
         code_search: Any = None,
+        memory_store: Any = None,
     ) -> None:
         super().__init__(config, message_bus, state_store, git_service)
         self._llm = llm_client
         self._work_dir = Path(work_dir).resolve()
         self._temperature = temperature
         self._code_search = code_search
+        self._memory_store = memory_store
 
     # 서브클래스에서 오버라이드할 role description
     _role_description: str = "You are a code generation assistant."
@@ -185,20 +187,22 @@ class BaseCodeGeneratorAgent(BaseAgent):
         retry_count = getattr(task, "retry_count", 0)
         if review_note and retry_count and retry_count > 0:
             review_section = (
-                f"\n## 이전 리뷰 피드백 (반드시 반영!)\n"
-                f"이 태스크는 {retry_count}회 reject 되었습니다:\n"
-                f"{review_note}\n\n"
+                f"## ⚠️ 이전 리뷰 피드백 — 최우선 반영 필수\n"
+                f"이 태스크는 **{retry_count}회 reject** 되었습니다.\n"
+                f"아래 피드백의 **각 항목**을 하나씩 확인하고 수정하세요.\n"
+                f"수정 전/후를 비교해서 확인하세요.\n\n"
+                f"<review_feedback>\n{saxutils.escape(review_note)}\n</review_feedback>\n\n"
             )
 
         return (
             f"{self._role_description}\n\n"
+            f"{review_section}"
             f"## 태스크\n"
             f"제목: {task.title}\n"
             f"설명: {task.description}\n\n"
-            f"{review_section}"
             f"## 작업 순서 (반드시 따를 것)\n\n"
             f"### Step 1: 프로젝트 문서 읽기\n"
-            f"다음 파일을 반드시 읽고 규칙을 따르세요:\n"
+            f"다음 파일을 **반드시 첫 번째로** 읽고 규칙을 따르세요:\n"
             f"- docs/ARCHITECTURE.md — 파일 구조, import 경로, 현재 상태\n"
             f"- docs/CONVENTIONS.md — 코딩 규칙, 패턴\n"
             f"- docs/api-spec.md — API 계약 (엔드포인트, 타입)\n"
@@ -238,10 +242,24 @@ class BaseCodeGeneratorAgent(BaseAgent):
             effective_dir = self._effective_work_dir
             instructions = self._build_workspace_instructions(task, str(effective_dir))
 
+            # RAG: 관련 교훈 검색 → instructions 상단에 주입
+            lessons_section = await self._get_relevant_lessons(task)
+            if lessons_section:
+                instructions = lessons_section + "\n\n" + instructions
+
             # Claude CLI 자율 실행 모드 시도
             from src.core.llm.claude_cli_client import ClaudeCliClient
             if isinstance(self._llm, ClaudeCliClient):
-                return await self._execute_autonomous(task, str(effective_dir), instructions)
+                result = await self._execute_autonomous(task, str(effective_dir), instructions)
+                if not result.success:
+                    self._log.warning(
+                        "CLI mode failed, falling back to JSON mode",
+                        task_id=task.id,
+                    )
+                    # CLI가 남긴 불완전한 파일 정리 후 fallback
+                    await self._reset_working_tree(str(effective_dir))
+                    return await self._execute_json_mode(task, effective_dir)
+                return result
 
             # fallback: API 클라이언트 → 기존 JSON 생성 방식
             return await self._execute_json_mode(task, effective_dir)
@@ -271,7 +289,18 @@ class BaseCodeGeneratorAgent(BaseAgent):
         from src.core.llm.claude_cli_client import ClaudeCliClient
         cli: ClaudeCliClient = self._llm
 
-        success, output = await cli.execute_in_workspace(work_dir, instructions)
+        # CLI timeout = agent timeout - 60s (파일 수집/후처리 여유)
+        agent_timeout_s = (self.config.task_timeout_ms or 360_000) / 1000
+        cli_timeout = max(agent_timeout_s - 60, 60)
+
+        # CLI 실행 전 HEAD SHA 저장 (CLI가 자동 커밋해도 diff 가능)
+        saved_head = await self._get_current_head(work_dir)
+
+        await self._publish_progress(task.id, "reading_docs", "문서 읽기 및 코드 작성 시작")
+
+        success, output = await cli.execute_in_workspace(
+            work_dir, instructions, timeout=cli_timeout,
+        )
 
         if not success:
             self._log.warning("Autonomous execution failed", task_id=task.id, output=output[:500])
@@ -281,18 +310,61 @@ class BaseCodeGeneratorAgent(BaseAgent):
                 artifacts=[],
             )
 
-        # 성공: 변경된 파일 수집 (git diff로 감지)
-        artifact_paths = await self._collect_changed_files(work_dir, task.id)
+        await self._publish_progress(task.id, "collecting", "변경 파일 수집 중")
+
+        # 성공: 변경된 파일 수집 (saved_head 기준 diff로 감지)
+        artifact_paths = await self._collect_changed_files(
+            work_dir, task.id, base_ref=saved_head,
+        )
         self._log.info("Autonomous task complete", task_id=task.id, files=len(artifact_paths))
+        await self._publish_progress(task.id, "done", f"완료 — {len(artifact_paths)}개 파일")
         return TaskResult(
             success=True,
             data={"files": artifact_paths, "summary": output[-1000:]},
             artifacts=artifact_paths,
         )
 
-    async def _collect_changed_files(self, work_dir: str, task_id: str) -> list[str]:
-        """git diff로 변경된 파일을 수집하고 artifact로 등록한다."""
+    @staticmethod
+    async def _get_current_head(work_dir: str) -> str | None:
+        """현재 HEAD의 SHA를 반환한다. 실패 시 None."""
         try:
+            proc = await asyncio.create_subprocess_exec(
+                "git", "rev-parse", "HEAD",
+                cwd=work_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode == 0:
+                return stdout.decode().strip()
+        except Exception:
+            pass
+        return None
+
+    async def _collect_changed_files(
+        self, work_dir: str, task_id: str, base_ref: str | None = None,
+    ) -> list[str]:
+        """git diff로 변경된 파일을 수집하고 artifact로 등록한다.
+
+        base_ref가 주어지면 해당 커밋 이후 변경사항을 감지한다
+        (CLI가 자동 커밋한 경우에도 누락 방지).
+        """
+        try:
+            # 커밋 간 diff + 워킹 트리 diff + untracked 모두 수집
+            stdout_parts: list[bytes] = []
+
+            if base_ref:
+                # 1. 커밋 간 diff (CLI가 자동 커밋한 파일)
+                proc_committed = await asyncio.create_subprocess_exec(
+                    "git", "diff", "--name-only", "--diff-filter=ACMR", f"{base_ref}..HEAD",
+                    cwd=work_dir,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                out, _ = await proc_committed.communicate()
+                stdout_parts.append(out)
+
+            # 2. 워킹 트리 변경 (커밋 안 된 수정사항)
             proc = await asyncio.create_subprocess_exec(
                 "git", "diff", "--name-only", "--diff-filter=ACMR", "HEAD",
                 cwd=work_dir,
@@ -300,7 +372,9 @@ class BaseCodeGeneratorAgent(BaseAgent):
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, _ = await proc.communicate()
-            # untracked 파일도 포함
+            stdout_parts.append(stdout)
+
+            # 3. untracked 파일도 포함
             proc2 = await asyncio.create_subprocess_exec(
                 "git", "ls-files", "--others", "--exclude-standard",
                 cwd=work_dir,
@@ -308,9 +382,11 @@ class BaseCodeGeneratorAgent(BaseAgent):
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout2, _ = await proc2.communicate()
+            stdout_parts.append(stdout2)
 
             changed = set()
-            for line in (stdout.decode() + stdout2.decode()).strip().split("\n"):
+            combined = b"".join(stdout_parts).decode()
+            for line in combined.strip().split("\n"):
                 line = line.strip()
                 if line:
                     changed.add(line)
@@ -346,6 +422,47 @@ class BaseCodeGeneratorAgent(BaseAgent):
         except Exception as e:
             self._log.warning("Failed to collect changed files", err=str(e))
             return []
+
+    @staticmethod
+    async def _reset_working_tree(work_dir: str) -> None:
+        """CLI fallback 전 불완전한 변경사항을 정리한다."""
+        try:
+            # 변경된 tracked 파일 복원
+            proc = await asyncio.create_subprocess_exec(
+                "git", "checkout", ".",
+                cwd=work_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.communicate()
+            # untracked 파일 삭제
+            proc2 = await asyncio.create_subprocess_exec(
+                "git", "clean", "-fd",
+                cwd=work_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await proc2.communicate()
+        except Exception:
+            pass  # 정리 실패해도 fallback은 시도
+
+    async def _get_relevant_lessons(self, task: Task) -> str:
+        """RAG로 태스크 관련 교훈을 검색하여 프롬프트 섹션으로 반환한다."""
+        if not self._memory_store:
+            return ""
+        try:
+            query = f"{task.title} {task.description or ''}"
+            lessons = await self._memory_store.search_lessons(query, top_k=5, min_score=0.3)
+            if not lessons:
+                return ""
+            items = "\n".join(f"- {saxutils.escape(lesson)}" for lesson in lessons)
+            return (
+                "## 관련 과거 교훈 (반드시 참고)\n"
+                f"{items}\n"
+            )
+        except Exception as e:
+            self._log.warning("Lessons search failed", err=str(e))
+            return ""
 
     async def _execute_json_mode(self, task: Task, effective_dir: Path) -> TaskResult:
         """기존 JSON 생성 방식 (API 클라이언트 fallback).

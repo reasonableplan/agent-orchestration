@@ -36,10 +36,11 @@ class DocsAgent(BaseCodeGeneratorAgent):
         llm_client: Any,
         work_dir: str = "./workspace",
         code_search: Any = None,
+        memory_store: Any = None,
     ) -> None:
         super().__init__(
             config, message_bus, state_store, git_service, llm_client, work_dir,
-            temperature=0.3, code_search=code_search,
+            temperature=0.3, code_search=code_search, memory_store=memory_store,
         )
         self._work_log_path = Path(work_dir).resolve() / "docs" / "work-log.md"
         self._work_log_lock = asyncio.Lock()
