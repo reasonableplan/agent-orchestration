@@ -560,53 +560,63 @@ class GitService:
         log.info("Worktree removed", task_id=task_id, path=worktree_path)
 
     async def cleanup_orphan_worktrees(self) -> None:
-        """시스템 시작 시 이전 세션에서 남은 orphan worktree를 정리한다."""
-        worktrees_dir = os.path.join(self._work_dir, ".worktrees")
-        if not os.path.isdir(worktrees_dir):
-            return
+        """시스템 시작 시 이전 세션에서 남은 orphan worktree를 정리한다.
 
+        3단계:
+        1. .git/worktrees 레지스트리에서 실제 디렉토리 없는 항목 삭제
+        2. git worktree prune 실행
+        3. 모든 wt/ 브랜치를 삭제 (활성 worktree가 아닌 것만)
+        """
+        worktrees_dir = os.path.join(self._work_dir, ".worktrees")
+        git_worktrees_dir = os.path.join(self._work_dir, ".git", "worktrees")
+
+        # Step 1: .git/worktrees 레지스트리에서 실제 디렉토리 없는 항목 삭제
+        if os.path.isdir(git_worktrees_dir):
+            for name in os.listdir(git_worktrees_dir):
+                reg_path = os.path.join(git_worktrees_dir, name)
+                if not os.path.isdir(reg_path):
+                    continue
+                wt_path = os.path.join(worktrees_dir, name) if os.path.isdir(worktrees_dir) else ""
+                if not os.path.isdir(wt_path):
+                    shutil.rmtree(reg_path, ignore_errors=True)
+                    log.info("Removed orphan worktree registry", name=name)
+
+        # Step 2: git worktree prune
         try:
             await self._run_git("worktree", "prune")
         except GitServiceError:
             pass
 
-        # git이 인식하는 활성 worktree 경로 수집
-        active_paths: set[str] = set()
+        # Step 3: 모든 wt/ 브랜치 정리 (활성 worktree 제외)
         try:
-            wt_list = await self._run_git("worktree", "list", "--porcelain")
-            for line in wt_list.split("\n"):
-                if line.startswith("worktree "):
-                    active_paths.add(os.path.normpath(line[9:].strip()))
+            branch_output = await self._run_git("branch", "--list", "wt/*")
+            for line in branch_output.split("\n"):
+                branch = line.strip().lstrip("* +")
+                if not branch:
+                    continue
+                try:
+                    await self._run_git("branch", "-D", branch)
+                    log.info("Orphan branch deleted", branch=branch)
+                except GitServiceError:
+                    pass  # 활성 worktree에서 사용 중이면 삭제 불가 — 정상
         except GitServiceError:
             pass
 
-        # git이 인식하지 못하는 orphan 디렉토리 + 브랜치 삭제
-        for name in os.listdir(worktrees_dir):
-            full_path = os.path.join(worktrees_dir, name)
-            if os.path.isdir(full_path) and os.path.normpath(full_path) not in active_paths:
-                shutil.rmtree(full_path, ignore_errors=True)
-                # 고아 브랜치도 정리
-                branch_name = f"wt/{name}"
-                try:
-                    await self._run_git("branch", "-D", branch_name)
-                    log.info("Orphan branch deleted", branch=branch_name)
-                except GitServiceError:
-                    pass
-
-        # .git/worktrees에 남은 레지스트리도 정리 (디렉토리 없는 worktree 등록)
-        git_worktrees_dir = os.path.join(self._work_dir, ".git", "worktrees")
-        if os.path.isdir(git_worktrees_dir):
-            for name in os.listdir(git_worktrees_dir):
-                reg_path = os.path.join(git_worktrees_dir, name)
-                wt_path = os.path.join(worktrees_dir, name)
-                if os.path.isdir(reg_path) and not os.path.isdir(wt_path):
-                    shutil.rmtree(reg_path, ignore_errors=True)
-            # prune 재실행 (레지스트리 정리 후)
+        # Step 4: .worktrees 디렉토리 내 orphan 디렉토리 삭제
+        if os.path.isdir(worktrees_dir):
+            active_paths: set[str] = set()
             try:
-                await self._run_git("worktree", "prune")
+                wt_list = await self._run_git("worktree", "list", "--porcelain")
+                for line in wt_list.split("\n"):
+                    if line.startswith("worktree "):
+                        active_paths.add(os.path.normpath(line[9:].strip()))
             except GitServiceError:
                 pass
-                log.info("Cleaned orphan worktree", path=full_path)
+            for name in os.listdir(worktrees_dir):
+                full_path = os.path.join(worktrees_dir, name)
+                if os.path.isdir(full_path) and os.path.normpath(full_path) not in active_paths:
+                    shutil.rmtree(full_path, ignore_errors=True)
+                    log.info("Removed orphan worktree dir", path=full_path)
 
         # 고아 브랜치 정리 (wt/ 접두사)
         try:
