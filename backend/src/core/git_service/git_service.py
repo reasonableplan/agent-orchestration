@@ -241,13 +241,15 @@ class GitService:
 
         option_id = self._status_options.get(column)
         if not option_id:
-            log.warning("Column not found in project status options", column=column, available=list(self._status_options))
-            return
+            raise GitServiceError(
+                f"Column '{column}' not found in project status options: {list(self._status_options)}"
+            )
 
         item_id = await self._get_project_item_id(issue_number)
         if not item_id:
-            log.warning("Issue not found as project item", issue=issue_number)
-            return
+            raise GitServiceError(
+                f"Issue #{issue_number} not found as project item"
+            )
 
         await self._graphql(
             """
@@ -578,11 +580,32 @@ class GitService:
         except GitServiceError:
             pass
 
-        # git이 인식하지 못하는 orphan 디렉토리만 삭제
+        # git이 인식하지 못하는 orphan 디렉토리 + 브랜치 삭제
         for name in os.listdir(worktrees_dir):
             full_path = os.path.join(worktrees_dir, name)
             if os.path.isdir(full_path) and os.path.normpath(full_path) not in active_paths:
                 shutil.rmtree(full_path, ignore_errors=True)
+                # 고아 브랜치도 정리
+                branch_name = f"wt/{name}"
+                try:
+                    await self._run_git("branch", "-D", branch_name)
+                    log.info("Orphan branch deleted", branch=branch_name)
+                except GitServiceError:
+                    pass
+
+        # .git/worktrees에 남은 레지스트리도 정리 (디렉토리 없는 worktree 등록)
+        git_worktrees_dir = os.path.join(self._work_dir, ".git", "worktrees")
+        if os.path.isdir(git_worktrees_dir):
+            for name in os.listdir(git_worktrees_dir):
+                reg_path = os.path.join(git_worktrees_dir, name)
+                wt_path = os.path.join(worktrees_dir, name)
+                if os.path.isdir(reg_path) and not os.path.isdir(wt_path):
+                    shutil.rmtree(reg_path, ignore_errors=True)
+            # prune 재실행 (레지스트리 정리 후)
+            try:
+                await self._run_git("worktree", "prune")
+            except GitServiceError:
+                pass
                 log.info("Cleaned orphan worktree", path=full_path)
 
         # 고아 브랜치 정리 (wt/ 접두사)
