@@ -121,3 +121,26 @@ class StateManager:
 
         with open(path, encoding="utf-8") as f:
             return json.load(f)  # type: ignore[no-any-return]
+
+    def list_task_results(self) -> list[dict[str, Any]]:
+        """모든 태스크 결과를 반환."""
+        results: list[dict[str, Any]] = []
+        if not self._results_dir.exists():
+            return results
+        for path in sorted(self._results_dir.iterdir()):
+            if path.suffix == ".json":
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, dict) and "task_id" not in data:
+                        data["task_id"] = path.stem
+                    results.append(data)
+                except (json.JSONDecodeError, OSError) as exc:
+                    logger.warning("list_task_results: %s 파일 읽기 실패: %s", path.name, exc)
+        return results
+
+    def task_result_count(self) -> int:
+        """태스크 결과 파일 수를 반환."""
+        if not self._results_dir.exists():
+            return 0
+        return sum(1 for p in self._results_dir.iterdir() if p.suffix == ".json")

@@ -19,6 +19,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from src.dashboard.auth import make_auth_checker
+from src.dashboard.event_mapper import EventMapper
 from src.dashboard.routes import agents, command, health, hooks, stats, tasks
 from src.dashboard.routes.deps import get_phase_manager, get_runner, init_deps
 from src.dashboard.websocket_manager import WebSocketManager
@@ -33,6 +34,7 @@ except ImportError:
     _HAS_STRUCTLOG = False
 
 _ws_manager: WebSocketManager | None = None
+_event_mapper: EventMapper | None = None
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -143,8 +145,9 @@ def create_app(
     app.include_router(command.router, dependencies=[Depends(auth_check)])
 
     # WebSocket
-    global _ws_manager
+    global _ws_manager, _event_mapper
     _ws_manager = WebSocketManager()
+    _event_mapper = EventMapper(_ws_manager)
 
     # 진행 중인 WS 백그라운드 태스크 — GC 방지
     _ws_bg_tasks: set[asyncio.Task] = set()
@@ -210,6 +213,7 @@ def create_app(
                         runner = get_runner()
                     except RuntimeError:
                         logger.error("PhaseManager/AgentRunner not available for %s", msg_type)
+                        await ws.send_text(json.dumps({"type": "error", "message": "Server not initialized"}))
                         continue
 
                     phase = pm.current_phase
@@ -224,7 +228,11 @@ def create_app(
 
                     async def _run_chat(a: str = agent, c: str = content) -> None:
                         try:
+                            await _event_mapper.emit_agent_start(a, c)
                             result = await runner.run(a, c)
+                            await _event_mapper.emit_agent_complete(
+                                a, result.success, result.duration_ms, result.error
+                            )
                             logger.info("WS command completed agent=%s success=%s", a, result.success)
                         except Exception:
                             logger.error("WS command failed agent=%s", a, exc_info=True)
@@ -246,6 +254,7 @@ def create_app(
                     target_phase_str = _action_phase_map.get(action)
                     if target_phase_str is None:
                         logger.warning("plan.%s: 지원하지 않는 액션", action)
+                        await ws.send_text(json.dumps({"type": "error", "message": f"Unsupported plan action: {action}"}))
                         continue
 
                     try:
@@ -254,6 +263,7 @@ def create_app(
                         logger.info("Phase transitioned to %s via plan.%s", target_phase_str, action)
                     except RuntimeError:
                         logger.error("PhaseManager not available for plan action")
+                        await ws.send_text(json.dumps({"type": "error", "message": "Server not initialized"}))
                     except InvalidTransitionError as exc:
                         await ws.send_text(
                             json.dumps({"type": "error", "message": str(exc)})
@@ -309,6 +319,12 @@ def get_ws_manager() -> WebSocketManager:
     if _ws_manager is None:
         raise RuntimeError("WebSocketManager not initialized")
     return _ws_manager
+
+
+def get_event_mapper() -> EventMapper:
+    if _event_mapper is None:
+        raise RuntimeError("EventMapper not initialized")
+    return _event_mapper
 
 
 # WS/command 백그라운드 태스크 참조 (셧다운 시 정리용)

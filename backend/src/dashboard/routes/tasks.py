@@ -1,7 +1,6 @@
 """GET /api/tasks — 태스크 결과 조회."""
 from __future__ import annotations
 
-import json
 import logging
 
 from fastapi import APIRouter, HTTPException, Path
@@ -17,25 +16,11 @@ async def list_tasks() -> list[dict]:
     from src.dashboard.routes.deps import get_state_manager
 
     sm = get_state_manager()
-    results: list[dict] = []
-
     try:
-        for path in sorted(sm._results_dir.iterdir()):
-            if path.suffix != ".json":
-                continue
-            try:
-                with open(path, encoding="utf-8") as f:
-                    data = json.load(f)
-                # task_id를 파일명(확장자 제거)에서 복원
-                if isinstance(data, dict) and "task_id" not in data:
-                    data["task_id"] = path.stem
-                results.append(data)
-            except (json.JSONDecodeError, OSError) as exc:
-                logger.warning("tasks: %s 파일 읽기 실패: %s", path.name, exc)
+        return sm.list_task_results()
     except OSError as exc:
         logger.error("tasks: results 디렉토리 접근 실패: %s", exc)
-
-    return results
+        return []
 
 
 @router.get("/{task_id}")

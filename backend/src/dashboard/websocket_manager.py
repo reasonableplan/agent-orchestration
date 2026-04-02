@@ -4,13 +4,13 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import WebSocket
-from src.core.logging.logger import get_logger
 
-log = get_logger("WSManager")
+log = logging.getLogger("WSManager")
 
 _AUTH_TIMEOUT_S = 5.0
 _MAX_WS_CONNECTIONS = 50
@@ -44,7 +44,7 @@ class WebSocketManager:
         if auth_token is None:
             # 인증 불필요 — 연결 풀에 바로 추가
             self._connections.add(ws)
-            log.info("WS connected (no auth)", total=len(self._connections))
+            log.info("WS connected (no auth) total=%s", len(self._connections))
             return True
 
         # 5초 안에 {"type": "auth", "token": "..."} 수신 필요
@@ -72,18 +72,18 @@ class WebSocketManager:
 
         self._connections.add(ws)
         await ws.send_text(json.dumps({"type": "auth.ok"}))
-        log.info("WS authenticated and connected", total=len(self._connections))
+        log.info("WS authenticated and connected total=%s", len(self._connections))
         return True
 
     async def connect(self, ws: WebSocket) -> None:
         """레거시 호환용 — auth 없이 연결 (dev 모드 내부 사용)."""
         await ws.accept()
         self._connections.add(ws)
-        log.info("WS connected", total=len(self._connections))
+        log.info("WS connected total=%s", len(self._connections))
 
     def disconnect(self, ws: WebSocket) -> None:
         self._connections.discard(ws)
-        log.info("WS disconnected", total=len(self._connections))
+        log.info("WS disconnected total=%s", len(self._connections))
 
     async def broadcast(self, event_type: str, data: Any) -> None:
         if not self._connections:

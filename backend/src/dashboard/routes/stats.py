@@ -26,10 +26,8 @@ async def get_summary() -> SystemSummary:
     pm = get_phase_manager()
     sm = get_state_manager()
 
-    # results/ 디렉토리의 JSON 파일 수로 태스크 결과 수를 파악
-    results_dir = sm._results_dir
     try:
-        task_count = sum(1 for p in results_dir.iterdir() if p.suffix == ".json")
+        task_count = sm.task_result_count()
     except Exception as exc:
         logger.warning("stats: results 디렉토리 읽기 실패: %s", exc)
         task_count = 0
