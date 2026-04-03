@@ -14,6 +14,7 @@ import {
   CHAR_H,
   RENDER_SCALE,
   AGENT_COLORS,
+  DEFAULT_COLOR,
   getAgentPixelPosition,
   getAgentLabel,
 } from './sprite-config';
@@ -91,8 +92,8 @@ function drawNameBadge(
   domain: string,
 ) {
   const label = getAgentLabel(agentId, domain);
-  const colors = AGENT_COLORS[domain];
-  const accent = colors?.accent ?? '#FFFFFF';
+  const colors = AGENT_COLORS[domain] ?? DEFAULT_COLOR;
+  const accent = colors.accent;
 
   const S = RENDER_SCALE;
   const badgeW = 22 * S;

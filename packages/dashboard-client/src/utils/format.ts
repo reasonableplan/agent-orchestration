@@ -15,10 +15,17 @@ export function formatDuration(ms: number | null): string {
 
 /** Agent domain → brand color mapping */
 export const DOMAIN_COLORS: Record<string, string> = {
-  director: '#FFD700',
-  orchestration: '#FFD700', // server sends "orchestration" for director
-  git: '#F05032',
-  frontend: '#61DAFB',
-  backend: '#68A063',
-  docs: '#F7DF1E',
+  architect: '#FFD700',       // 보라+금 → 금색 강조
+  designer: '#FF69B4',        // 핑크
+  orchestrator: '#00BFFF',    // 딥스카이블루
+  backend_coder: '#90EE90',   // 라이트그린
+  frontend_coder: '#7FDBFF',  // 밝은 하늘색
+  reviewer: '#FF6347',        // 토마토
+  qa: '#FFD700',              // 황금
+  // 기존 에이전트 ID 호환 (demo 모드/이전 데이터)
+  director: '#00BFFF',
+  git: '#FF6347',
+  frontend: '#7FDBFF',
+  backend: '#90EE90',
+  docs: '#FFD700',
 };

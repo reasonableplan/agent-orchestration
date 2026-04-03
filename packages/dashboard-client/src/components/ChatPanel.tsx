@@ -45,7 +45,7 @@ export default function ChatPanel({ targetAgent, onClose, onSend }: ChatPanelPro
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
           <span className="font-pixel text-[8px] text-amber-300">
-            CHAT: {targetAgent?.toUpperCase() ?? 'DIRECTOR'}
+            CHAT: {targetAgent?.toUpperCase() ?? 'ORCHESTRATOR'}
           </span>
           {planStage && (
             <span className="font-pixel text-[6px] text-gray-500 bg-[#2D1B0E] px-1.5 py-0.5">

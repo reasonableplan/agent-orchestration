@@ -20,3 +20,4 @@ backend/.venv/
 *.zip
 *.png
 *.pdf
+.gstack/

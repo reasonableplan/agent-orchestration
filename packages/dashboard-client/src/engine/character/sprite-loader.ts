@@ -56,12 +56,21 @@ const CHARACTER_DEFS: CharacterDef[] = [
 ];
 
 const DEFAULT_ASSIGNMENTS: Record<string, string> = {
+  // 새 에이전트 (7개)
+  architect: 'bob',
+  designer: 'amelia',
+  orchestrator: 'bob',
+  backend_coder: 'adam',
+  frontend_coder: 'alex',
+  reviewer: 'amelia',
+  qa: 'alex',
+  // 기존 호환
   director: 'bob',
-  orchestration: 'bob', // server sends "orchestration" for director agent
+  orchestration: 'bob',
   git: 'alex',
   frontend: 'amelia',
   backend: 'adam',
-  docs: 'amelia', // shared — badge distinguishes
+  docs: 'amelia',
 };
 
 const POSE_SHEETS: PoseSheet[] = ['idle', 'idle-anim', 'sit', 'sit2', 'run'];

@@ -3,7 +3,7 @@
  * Characters are rendered from 32×48 string grids defined in sprite-data.ts
  */
 
-import { CHAR_W, CHAR_H, AGENT_COLORS } from '../sprite-config';
+import { CHAR_W, CHAR_H, AGENT_COLORS, DEFAULT_COLOR } from '../sprite-config';
 import { getWalkBob } from './draw-utils';
 import { getCharacterSprite, buildPalette, renderSprite, type SpritePatch } from './sprite-data';
 
@@ -19,7 +19,7 @@ export function drawCharacter(
   status: string,
   frame: CharacterFrame,
 ): void {
-  const colors = AGENT_COLORS[domain] ?? AGENT_COLORS.frontend;
+  const colors = AGENT_COLORS[domain] ?? DEFAULT_COLOR;
   const palette = buildPalette(colors);
   const spriteSet = getCharacterSprite(domain);
 

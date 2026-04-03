@@ -35,70 +35,164 @@ export interface AgentColors {
   hairStyle: 'short' | 'spiky' | 'long' | 'curly' | 'ponytail';
 }
 
+export const DEFAULT_COLOR: AgentColors = {
+  body: '#666666',
+  bodyDark: '#444444',
+  accent: '#999999',
+  hair: '#333333',
+  skin: '#E8C8A0',
+  skinShadow: '#C8A880',
+  pants: '#555555',
+  shoes: '#444444',
+  hairStyle: 'short',
+};
+
 export const AGENT_COLORS: Record<string, AgentColors> = {
-  director: {
-    body: '#4A3068',     // Royal purple vest
+  architect: {
+    body: '#4A3068',     // 보라 (설계자)
     bodyDark: '#362050',
-    accent: '#FFD700',   // Gold star
-    hair: '#5C3A1A',     // Warm brown
-    skin: '#FFD5B8',
-    skinShadow: '#E8B898',
-    pants: '#2A2040',
-    shoes: '#4A3A2A',
-    hairStyle: 'short',
-  },
-  git: {
-    body: '#C04020',     // Warm barn red
-    bodyDark: '#A03018',
-    accent: '#FF8C55',   // Sunset orange
-    hair: '#1C1C1C',
-    skin: '#D4A574',
-    skinShadow: '#B8885C',
-    pants: '#5A4030',
-    shoes: '#3A2A1A',
-    hairStyle: 'spiky',
-  },
-  frontend: {
-    body: '#2A7A8A',     // Ocean teal
-    bodyDark: '#1E5A6A',
-    accent: '#5CE0D0',   // Seafoam
-    hair: '#8B4513',     // Auburn
-    skin: '#FFE0C4',
-    skinShadow: '#E8C4A4',
-    pants: '#3A4A50',
-    shoes: '#4A3A2A',
-    hairStyle: 'long',
-  },
-  backend: {
-    body: '#3A7A2E',     // Forest green
-    bodyDark: '#2A5A1E',
-    accent: '#7CC46A',   // Spring green
-    hair: '#2A1A0A',
+    accent: '#FFD700',   // 금
+    hair: '#2A1A38',
     skin: '#E8C8A0',
     skinShadow: '#CCA880',
-    pants: '#4A4030',
-    shoes: '#3A3020',
+    pants: '#2A2040',
+    shoes: '#3A2A40',
+    hairStyle: 'short',
+  },
+  designer: {
+    body: '#E06080',     // 핑크 (디자이너)
+    bodyDark: '#C04060',
+    accent: '#FF69B4',   // 핫핑크
+    hair: '#3A2020',
+    skin: '#F0D0B0',
+    skinShadow: '#D8B090',
+    pants: '#6A2040',
+    shoes: '#4A2830',
+    hairStyle: 'long',
+  },
+  orchestrator: {
+    body: '#2060A0',     // 파랑 (조율자)
+    bodyDark: '#184880',
+    accent: '#00BFFF',   // 딥스카이블루
+    hair: '#1A1A2E',
+    skin: '#E8C8A0',
+    skinShadow: '#CCA880',
+    pants: '#1A3050',
+    shoes: '#2A3040',
+    hairStyle: 'spiky',
+  },
+  backend_coder: {
+    body: '#3A7A2E',     // 초록 (백엔드)
+    bodyDark: '#2A5A1E',
+    accent: '#90EE90',   // 라이트그린
+    hair: '#2A1A10',
+    skin: '#D8B090',
+    skinShadow: '#C09870',
+    pants: '#2A3A20',
+    shoes: '#2A2A18',
+    hairStyle: 'curly',
+  },
+  frontend_coder: {
+    body: '#2A7A8A',     // 청록 (프론트)
+    bodyDark: '#1E5A6A',
+    accent: '#7FDBFF',   // 밝은 하늘색
+    hair: '#1A2A2A',
+    skin: '#E8C8A0',
+    skinShadow: '#CCA880',
+    pants: '#1A3A40',
+    shoes: '#2A3830',
+    hairStyle: 'ponytail',
+  },
+  reviewer: {
+    body: '#C04020',     // 빨강 (리뷰어)
+    bodyDark: '#A03018',
+    accent: '#FF6347',   // 토마토
+    hair: '#3A1A10',
+    skin: '#D8B090',
+    skinShadow: '#C09870',
+    pants: '#4A1A10',
+    shoes: '#3A1A10',
+    hairStyle: 'short',
+  },
+  qa: {
+    body: '#C4880A',     // 황금 (QA)
+    bodyDark: '#A07008',
+    accent: '#FFD700',   // 금
+    hair: '#2A2A1A',
+    skin: '#E8C8A0',
+    skinShadow: '#CCA880',
+    pants: '#4A3A10',
+    shoes: '#3A2A10',
+    hairStyle: 'curly',
+  },
+  // 기존 에이전트 ID 호환 (demo 모드/이전 데이터)
+  director: {
+    body: '#2060A0',
+    bodyDark: '#184880',
+    accent: '#00BFFF',
+    hair: '#1A1A2E',
+    skin: '#E8C8A0',
+    skinShadow: '#CCA880',
+    pants: '#1A3050',
+    shoes: '#2A3040',
+    hairStyle: 'spiky',
+  },
+  git: {
+    body: '#C04020',
+    bodyDark: '#A03018',
+    accent: '#FF6347',
+    hair: '#3A1A10',
+    skin: '#D8B090',
+    skinShadow: '#C09870',
+    pants: '#4A1A10',
+    shoes: '#3A1A10',
+    hairStyle: 'short',
+  },
+  frontend: {
+    body: '#2A7A8A',
+    bodyDark: '#1E5A6A',
+    accent: '#7FDBFF',
+    hair: '#1A2A2A',
+    skin: '#E8C8A0',
+    skinShadow: '#CCA880',
+    pants: '#1A3A40',
+    shoes: '#2A3830',
+    hairStyle: 'ponytail',
+  },
+  backend: {
+    body: '#3A7A2E',
+    bodyDark: '#2A5A1E',
+    accent: '#90EE90',
+    hair: '#2A1A10',
+    skin: '#D8B090',
+    skinShadow: '#C09870',
+    pants: '#2A3A20',
+    shoes: '#2A2A18',
     hairStyle: 'curly',
   },
   docs: {
-    body: '#C4880A',     // Harvest gold
+    body: '#C4880A',
     bodyDark: '#A07008',
-    accent: '#FFD54F',   // Sunflower yellow
-    hair: '#6B4226',     // Chestnut
-    skin: '#FFE4CC',
-    skinShadow: '#E8CAB0',
-    pants: '#5A4830',
-    shoes: '#4A3A28',
-    hairStyle: 'ponytail',
+    accent: '#FFD700',
+    hair: '#2A2A1A',
+    skin: '#E8C8A0',
+    skinShadow: '#CCA880',
+    pants: '#4A3A10',
+    shoes: '#3A2A10',
+    hairStyle: 'curly',
   },
 };
 
-// Server sends domain "orchestration" for the director agent — alias it
-AGENT_COLORS['orchestration'] = AGENT_COLORS['director']!;
-
 export const DOMAIN_LABELS: Record<string, string> = {
+  architect: 'ARC',
+  designer: 'DES',
+  orchestrator: 'ORC',
+  backend_coder: 'BE',
+  frontend_coder: 'FE',
+  reviewer: 'REV',
+  qa: 'QA',
+  // 기존 에이전트 ID 호환 (demo 모드/이전 데이터)
   director: 'DIR',
-  orchestration: 'DIR',
   git: 'GIT',
   frontend: 'FE',
   backend: 'BE',
@@ -114,53 +208,64 @@ export interface DeskSlot {
 // Desk positions are derived from FURNITURE tile coords:
 //   desk.x = (col + w/2) * TILE_SIZE   — centered on desk
 //   desk.y = (row + h) * TILE_SIZE + 16 — in chair (south of desk), character faces up toward computer
-// Idle positions are near the sofa (col 18, row 13, 4×2).
+// Idle positions are directly in front of each agent's desk (one tile south),
+// keeping agents near their workstation when not active.
 export const DESK_SLOTS: DeskSlot[] = [
-  // Slot 0: Director — desk tile (11, 5, 3×2)
-  { desk: { x: 400, y: 240 }, idle: { x: 600, y: 468 } },
-  // Slot 1: Git — desk tile (2, 8, 3×2)
-  { desk: { x: 112, y: 336 }, idle: { x: 624, y: 470 } },
-  // Slot 2: Frontend — desk tile (7, 9, 3×2)
-  { desk: { x: 272, y: 368 }, idle: { x: 648, y: 468 } },
-  // Slot 3: Backend — desk tile (15, 8, 3×2)
-  { desk: { x: 528, y: 336 }, idle: { x: 672, y: 470 } },
-  // Slot 4: Docs — desk tile (19, 9, 3×2)
-  { desk: { x: 656, y: 368 }, idle: { x: 696, y: 468 } },
-  // Slot 5: Extra — desk tile (12, 10, 3×2)
-  { desk: { x: 432, y: 400 }, idle: { x: 608, y: 472 } },
-  // Slot 6: Extra — desk tile (5, 12, 3×2)
-  { desk: { x: 208, y: 464 }, idle: { x: 632, y: 472 } },
-  // Slot 7: Extra — desk tile (16, 11, 3×2)
-  { desk: { x: 560, y: 432 }, idle: { x: 656, y: 472 } },
+  // Slot 0: Architect — desk tile (11, 5, 3×2)
+  { desk: { x: 400, y: 240 }, idle: { x: 400, y: 272 } },
+  // Slot 1: Designer — desk tile (2, 8, 3×2)
+  { desk: { x: 112, y: 336 }, idle: { x: 112, y: 368 } },
+  // Slot 2: Orchestrator — desk tile (7, 9, 3×2)
+  { desk: { x: 272, y: 368 }, idle: { x: 272, y: 400 } },
+  // Slot 3: Backend Coder — desk tile (15, 8, 3×2)
+  { desk: { x: 528, y: 336 }, idle: { x: 528, y: 368 } },
+  // Slot 4: Frontend Coder — desk tile (19, 9, 3×2)
+  { desk: { x: 656, y: 368 }, idle: { x: 656, y: 400 } },
+  // Slot 5: Reviewer — desk tile (12, 10, 3×2)
+  { desk: { x: 432, y: 400 }, idle: { x: 432, y: 432 } },
+  // Slot 6: QA — desk tile (5, 12, 3×2)
+  { desk: { x: 208, y: 464 }, idle: { x: 208, y: 496 } },
 ];
 
 export const BOOKSHELF_POS = { x: 704, y: 280 };
 
-export function getAgentPixelPosition(slotIndex: number, status: string): { x: number; y: number } {
-  const slot = DESK_SLOTS[slotIndex] ?? DESK_SLOTS[0];
+export function getAgentPixelPosition(
+  slotIndex: number,
+  status: string,
+  tick: number = 0,
+): { x: number; y: number } {
+  const slot = DESK_SLOTS[slotIndex] ?? DESK_SLOTS[0]!;
+  // Small oscillation offset so agents appear subtly animated without leaving their desk area
+  const phase = (slotIndex * 1.3 + tick * 0.05) % (Math.PI * 2);
+
   switch (status) {
     case 'working':
     case 'thinking':
+    case 'reviewing':
+    case 'paused':
     case 'error':
     case 'waiting':
+      // Seated at desk — no movement
       return slot.desk;
+
     case 'idle':
+      // Stand directly in front of the desk (deskFront)
       return slot.idle;
+
     case 'searching':
+      // Small drift near desk — stays within ±15px of desk
       return {
-        x: BOOKSHELF_POS.x - (slotIndex % 3) * 20,
-        y: BOOKSHELF_POS.y + Math.floor(slotIndex / 3) * 20,
+        x: slot.desk.x + Math.round(Math.sin(phase) * 12),
+        y: slot.desk.y + Math.round(Math.cos(phase * 0.7) * 8) + 12,
       };
-    case 'delivering': {
-      const dir = DESK_SLOTS[0].desk;
-      return { x: (slot.desk.x + dir.x) / 2, y: (slot.desk.y + dir.y) / 2 };
-    }
-    case 'reviewing': {
-      const dir = DESK_SLOTS[0].desk;
-      // Stagger reviewing agents so they don't overlap
-      const offset = slotIndex * 24;
-      return { x: dir.x + 40 + (offset % 72), y: dir.y + 16 + Math.floor(offset / 72) * 20 };
-    }
+
+    case 'delivering':
+      // Slightly away from desk but bounded to ±30px
+      return {
+        x: slot.desk.x + Math.round(Math.sin(phase) * 24),
+        y: slot.desk.y + Math.round(Math.cos(phase) * 16) + 16,
+      };
+
     default:
       return slot.desk;
   }

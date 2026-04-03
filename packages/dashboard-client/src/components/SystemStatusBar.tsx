@@ -22,6 +22,7 @@ export default function SystemStatusBar() {
   const agents = useOfficeStore((s) => s.agents);
   const tasks = useOfficeStore((s) => s.tasks);
   const epics = useOfficeStore((s) => s.epics);
+  const activePlan = useOfficeStore((s) => s.activePlan);
   const isPaused = useOfficeStore((s) => s.isPaused);
   const elapsedTime = useOfficeStore((s) => s.elapsedTime);
   const togglePause = useOfficeStore((s) => s.togglePause);
@@ -56,6 +57,9 @@ export default function SystemStatusBar() {
 
   const epicList = Object.values(epics);
   const currentEpic = epicList.length > 0 ? epicList[epicList.length - 1] : null;
+  const currentPhase = activePlan != null
+    ? (activePlan['stage'] as string | undefined) ?? (activePlan['phase'] as string | undefined)
+    : null;
 
   // Token summary
   const totalUsed = Object.values(tokenUsage).reduce((sum, t) => sum + t.totalTokens, 0);
@@ -65,21 +69,21 @@ export default function SystemStatusBar() {
 
   return (
     <div className="flex items-center gap-4 px-4 py-2 bg-[#3A2410] border-b-2 border-[#5C3A1A] font-pixel text-[8px] select-none">
-      {/* Epic info */}
+      {/* Phase info */}
       <div className="flex items-center gap-2 min-w-0 flex-shrink">
-        <span className="text-agent-director">EPIC:</span>
+        <span className="text-amber-400">PHASE:</span>
         <span className="text-gray-300 truncate max-w-[160px]">
-          {currentEpic ? currentEpic.title : 'No active epic'}
+          {currentPhase ? currentPhase.toUpperCase() : currentEpic ? currentEpic.title : 'IDLE'}
         </span>
-        {currentEpic && (
+        {currentEpic && !currentPhase && (
           <div className="flex items-center gap-1">
             <div className="w-20 h-2 bg-[#5C3A1A] pixel-border-light">
               <div
-                className="h-full bg-agent-director transition-all duration-500"
+                className="h-full bg-amber-400 transition-all duration-500"
                 style={{ width: `${Math.round(currentEpic.progress * 100)}%` }}
               />
             </div>
-            <span className="text-agent-director">{Math.round(currentEpic.progress * 100)}%</span>
+            <span className="text-amber-400">{Math.round(currentEpic.progress * 100)}%</span>
           </div>
         )}
       </div>

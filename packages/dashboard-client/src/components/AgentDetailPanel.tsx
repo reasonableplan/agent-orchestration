@@ -6,12 +6,19 @@ import { formatTokens, formatDuration, DOMAIN_COLORS } from '@/utils/format';
 import { apiGet } from '@/utils/api';
 
 const DOMAIN_TITLES: Record<string, string> = {
-  director: 'Director Agent',
-  orchestration: 'Director Agent',
-  git: 'Git Agent',
-  frontend: 'Frontend Agent',
-  backend: 'Backend Agent',
-  docs: 'Docs Agent',
+  architect: 'Architect — System Design',
+  designer: 'Designer — UI/UX Design',
+  orchestrator: 'Orchestrator — Task Distribution',
+  backend_coder: 'Backend Coder — Server Implementation',
+  frontend_coder: 'Frontend Coder — Client Implementation',
+  reviewer: 'Reviewer — Code Review',
+  qa: 'QA — Quality Assurance',
+  // legacy compatibility
+  director: 'Director',
+  git: 'Git Operations',
+  frontend: 'Frontend',
+  backend: 'Backend',
+  docs: 'Documentation',
 };
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {

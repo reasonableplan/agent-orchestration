@@ -147,18 +147,22 @@ export function useWebSocket() {
         break;
       }
 
-      case 'director.message': {
+      case 'director.message':
+      case 'phase.message': {
         const content = (payload as Record<string, unknown>).content;
+        const from = type === 'phase.message'
+          ? ((payload as Record<string, unknown>).from as string | undefined) ?? 'orchestrator'
+          : 'orchestrator';
         addMessage({
-          id: `dir-msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          type: 'director.message',
-          from: 'director',
+          id: `phase-msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type,
+          from,
           content: typeof content === 'string' ? content : JSON.stringify(content),
           timestamp: new Date().toISOString(),
         });
         const { addChatMessage } = useOfficeStore.getState();
         addChatMessage({
-          id: `dir-chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: `phase-chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           role: 'assistant',
           content: typeof content === 'string' ? content : JSON.stringify(content),
           timestamp: new Date().toISOString(),
@@ -166,7 +170,8 @@ export function useWebSocket() {
         break;
       }
 
-      case 'director.plan': {
+      case 'director.plan':
+      case 'phase.plan': {
         const { setActivePlan } = useOfficeStore.getState();
         if (payload && typeof payload === 'object') {
           setActivePlan(payload as Record<string, unknown>);
@@ -174,7 +179,8 @@ export function useWebSocket() {
         break;
       }
 
-      case 'director.committed': {
+      case 'director.committed':
+      case 'phase.committed': {
         if (payload && typeof payload === 'object') {
           const commitPayload = payload as Record<string, unknown>;
           const issueCount = Array.isArray(commitPayload.issues) ? commitPayload.issues.length : 0;
@@ -185,6 +191,39 @@ export function useWebSocket() {
             title: 'Epic Created',
             message: `${epicTitle}: ${issueCount} issues created`,
           });
+        }
+        break;
+      }
+
+      case 'phase.change': {
+        const { setActivePlan } = useOfficeStore.getState();
+        const currentPlan = useOfficeStore.getState().activePlan;
+        const phase = (payload as Record<string, unknown>).phase;
+        if (typeof phase === 'string') {
+          setActivePlan({ ...(currentPlan ?? {}), stage: phase });
+        }
+        addMessage({
+          id: `phase-change-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'phase.change',
+          from: 'system',
+          content: typeof phase === 'string' ? `Phase: ${phase}` : JSON.stringify(payload),
+          timestamp: new Date().toISOString(),
+        });
+        break;
+      }
+
+      case 'agent.start': {
+        const agentId = (payload as Record<string, unknown>).agentId;
+        if (typeof agentId === 'string') {
+          updateAgent(agentId, { status: 'working' });
+        }
+        break;
+      }
+
+      case 'agent.complete': {
+        const agentId = (payload as Record<string, unknown>).agentId;
+        if (typeof agentId === 'string') {
+          updateAgent(agentId, { status: 'idle', currentTask: null });
         }
         break;
       }

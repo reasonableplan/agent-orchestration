@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useOfficeStore } from '@/stores/office-store';
 
 interface CommandBarProps {
   onSend: (command: string) => void;
@@ -15,9 +16,8 @@ const SLASH_COMMANDS = [
   '/help',
 ];
 
-const AGENT_MENTIONS = ['@director', '@git', '@frontend', '@backend', '@docs'];
-
 export default function CommandBar({ onSend }: CommandBarProps) {
+  const agents = useOfficeStore((s) => s.agents);
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
@@ -25,27 +25,31 @@ export default function CommandBar({ onSend }: CommandBarProps) {
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const updateSuggestions = useCallback((value: string) => {
-    if (!value) {
-      setSuggestions([]);
-      return;
-    }
+  const updateSuggestions = useCallback(
+    (value: string) => {
+      if (!value) {
+        setSuggestions([]);
+        return;
+      }
 
-    const words = value.split(/\s+/);
-    const lastWord = words[words.length - 1];
+      const words = value.split(/\s+/);
+      const lastWord = words[words.length - 1];
 
-    if (lastWord.startsWith('/')) {
-      const matches = SLASH_COMMANDS.filter((c) => c.startsWith(lastWord.toLowerCase()));
-      setSuggestions(matches);
-      setSelectedSuggestion(0);
-    } else if (lastWord.startsWith('@')) {
-      const matches = AGENT_MENTIONS.filter((m) => m.startsWith(lastWord.toLowerCase()));
-      setSuggestions(matches);
-      setSelectedSuggestion(0);
-    } else {
-      setSuggestions([]);
-    }
-  }, []);
+      if (lastWord.startsWith('/')) {
+        const matches = SLASH_COMMANDS.filter((c) => c.startsWith(lastWord.toLowerCase()));
+        setSuggestions(matches);
+        setSelectedSuggestion(0);
+      } else if (lastWord.startsWith('@')) {
+        const agentMentions = Object.keys(agents).map((id) => `@${id}`);
+        const matches = agentMentions.filter((m) => m.startsWith(lastWord.toLowerCase()));
+        setSuggestions(matches);
+        setSelectedSuggestion(0);
+      } else {
+        setSuggestions([]);
+      }
+    },
+    [agents],
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;

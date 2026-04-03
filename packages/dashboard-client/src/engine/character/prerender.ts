@@ -90,7 +90,11 @@ function buildCache(
   collection: SpriteCollection | null,
 ): Map<string, HTMLCanvasElement[]> {
   const cache = new Map<string, HTMLCanvasElement[]>();
-  const domains = ['director', 'orchestration', 'git', 'frontend', 'backend', 'docs'];
+  const domains = [
+    'architect', 'designer', 'orchestrator', 'backend_coder', 'frontend_coder', 'reviewer', 'qa',
+    // legacy compatibility
+    'director', 'orchestration', 'git', 'frontend', 'backend', 'docs',
+  ];
   const statuses = [
     'idle', 'working', 'thinking', 'error',
     'waiting', 'searching', 'delivering', 'reviewing',

@@ -142,32 +142,62 @@ export interface OfficeStore {
 }
 
 const DEFAULT_AGENTS: Record<string, AgentState> = {
-  director: {
-    id: 'director',
+  architect: {
+    id: 'architect',
     status: 'idle',
     currentTask: null,
     bubble: null,
-    domain: 'director',
+    domain: 'architect',
     slot: 0,
   },
-  git: { id: 'git', status: 'idle', currentTask: null, bubble: null, domain: 'git', slot: 1 },
-  frontend: {
-    id: 'frontend',
+  designer: {
+    id: 'designer',
     status: 'idle',
     currentTask: null,
     bubble: null,
-    domain: 'frontend',
+    domain: 'designer',
+    slot: 1,
+  },
+  orchestrator: {
+    id: 'orchestrator',
+    status: 'idle',
+    currentTask: null,
+    bubble: null,
+    domain: 'orchestrator',
     slot: 2,
   },
-  backend: {
-    id: 'backend',
+  backend_coder: {
+    id: 'backend_coder',
     status: 'idle',
     currentTask: null,
     bubble: null,
-    domain: 'backend',
+    domain: 'backend_coder',
     slot: 3,
   },
-  docs: { id: 'docs', status: 'idle', currentTask: null, bubble: null, domain: 'docs', slot: 4 },
+  frontend_coder: {
+    id: 'frontend_coder',
+    status: 'idle',
+    currentTask: null,
+    bubble: null,
+    domain: 'frontend_coder',
+    slot: 4,
+  },
+  reviewer: {
+    id: 'reviewer',
+    status: 'idle',
+    currentTask: null,
+    bubble: null,
+    domain: 'reviewer',
+    slot: 5,
+  },
+  qa: {
+    id: 'qa',
+    status: 'idle',
+    currentTask: null,
+    bubble: null,
+    domain: 'qa',
+    slot: 6,
+  },
 };
 
 /** Find the next unoccupied desk slot */
@@ -180,11 +210,13 @@ function findNextSlot(agents: Record<string, AgentState>): number {
 }
 
 const DEFAULT_TOKEN_USAGE: Record<string, TokenUsageState> = {
-  director: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
-  git: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
-  frontend: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
-  backend: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
-  docs: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  architect: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  designer: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  orchestrator: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  backend_coder: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  frontend_coder: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  reviewer: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
+  qa: { inputTokens: 0, outputTokens: 0, totalTokens: 0, callCount: 0 },
 };
 
 export const useOfficeStore = create<OfficeStore>((set) => ({

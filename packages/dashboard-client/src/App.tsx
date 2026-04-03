@@ -50,12 +50,8 @@ export default function App() {
 
   // Demo mode: simulate agent activity when there is no real server
   const startDemo = useCallback(() => {
-    const domains = ['director', 'git', 'frontend', 'backend', 'docs'] as const;
-    // Extra agents to demo dynamic slot assignment
-    const extraAgents = [
-      { id: 'frontend-2', domain: 'frontend' },
-      { id: 'backend-2', domain: 'backend' },
-    ];
+    const agents = ['architect', 'designer', 'orchestrator', 'backend_coder', 'frontend_coder', 'reviewer', 'qa'] as const;
+
     // Weighted toward desk statuses; includes searching/delivering for variety
     const statuses = [
       'idle',
@@ -65,44 +61,62 @@ export default function App() {
       'searching',
       'delivering',
     ] as const;
-    const bubbles: Array<{ content: string; type: 'task' | 'thinking' | 'info' }> = [
-      { content: 'Code fix!', type: 'task' },
-      { content: 'API done!', type: 'info' },
-      { content: 'Thinking...', type: 'thinking' },
-      { content: 'PR ready!', type: 'task' },
-      { content: 'Tests pass!', type: 'info' },
-      { content: 'Docs updated', type: 'task' },
-      { content: 'Reviewing...', type: 'thinking' },
-      { content: 'Bug found!', type: 'task' },
-      { content: 'Deploying...', type: 'info' },
-      { content: 'Sprint done!', type: 'info' },
-      { content: 'Koffee?', type: 'info' },
-      { content: 'Refactoring', type: 'task' },
-    ];
 
-    // Spawn extra agents after a short delay
-    let extraSpawned = false;
+    const agentBubbles: Record<string, Array<{ content: string; type: 'task' | 'thinking' | 'info' }>> = {
+      architect: [
+        { content: 'Designing DB...', type: 'thinking' },
+        { content: 'API schema done!', type: 'info' },
+        { content: 'Updating ERD', type: 'task' },
+        { content: 'Defining types...', type: 'thinking' },
+      ],
+      designer: [
+        { content: 'UI mockup WIP', type: 'task' },
+        { content: 'Component tree', type: 'thinking' },
+        { content: 'Design guide done!', type: 'info' },
+        { content: 'Responsive layout', type: 'thinking' },
+      ],
+      orchestrator: [
+        { content: 'Assigning tasks...', type: 'thinking' },
+        { content: 'Analyzing deps', type: 'task' },
+        { content: 'Sprint planned!', type: 'info' },
+        { content: 'Board updated', type: 'task' },
+      ],
+      backend_coder: [
+        { content: 'Coding API...', type: 'task' },
+        { content: 'Writing tests', type: 'task' },
+        { content: 'DB model done!', type: 'info' },
+        { content: 'Adding endpoint', type: 'task' },
+      ],
+      frontend_coder: [
+        { content: 'Building component', type: 'task' },
+        { content: 'API integration...', type: 'thinking' },
+        { content: 'Page complete!', type: 'info' },
+        { content: 'Zustand store', type: 'task' },
+      ],
+      reviewer: [
+        { content: 'Reviewing PR...', type: 'thinking' },
+        { content: 'Checking code', type: 'task' },
+        { content: 'APPROVED!', type: 'info' },
+        { content: 'REJECTED — fix needed', type: 'task' },
+      ],
+      qa: [
+        { content: 'E2E testing...', type: 'task' },
+        { content: 'Verifying API', type: 'thinking' },
+        { content: 'Tests passed!', type: 'info' },
+        { content: 'Bug found!', type: 'task' },
+      ],
+    };
 
     const interval = setInterval(() => {
-      // Spawn extra agents once after a few ticks
-      if (!extraSpawned) {
-        extraSpawned = true;
-        for (const extra of extraAgents) {
-          updateAgent(extra.id, { domain: extra.domain, status: 'idle' });
-        }
-      }
-
-      // Pick a random agent (base + extra)
-      const allIds = [...domains, ...extraAgents.map((e) => e.id)];
-      const agentId = allIds[Math.floor(Math.random() * allIds.length)];
-      const domain = extraAgents.find((e) => e.id === agentId)?.domain ?? agentId;
+      const agentId = agents[Math.floor(Math.random() * agents.length)];
       const status = statuses[Math.floor(Math.random() * statuses.length)];
 
       const showBubble = Math.random() > 0.35;
-      const bubble = showBubble ? bubbles[Math.floor(Math.random() * bubbles.length)] : null;
+      const agentSpecificBubbles = agentBubbles[agentId] ?? agentBubbles.orchestrator;
+      const bubble = showBubble ? agentSpecificBubbles[Math.floor(Math.random() * agentSpecificBubbles.length)] : null;
 
       updateAgent(agentId, {
-        domain,
+        domain: agentId,
         status,
         bubble,
         currentTask: status === 'working' ? `task-${Math.floor(Math.random() * 100)}` : null,
