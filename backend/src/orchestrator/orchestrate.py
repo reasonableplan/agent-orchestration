@@ -412,53 +412,22 @@ class Orchestra:
             logger.warning("Phase %d 리뷰 결과 파싱 실패.", phase_num)
         return parsed
 
-    async def run_pipeline_with_phases(
+    async def run_breakdown(
         self,
         requirements: str,
-        max_task_retries: int = 3,
-        max_phase_retries: int = 2,
-    ) -> dict[str, Any]:
-        """Phase 분리 전체 파이프라인.
-
-        Architect + Designer가 skeleton을 설계하고, Orchestrator가 skeleton을 바탕으로
-        Phase별 태스크를 동적으로 분해한다.
+        design_results: dict[str, RunResult],
+    ) -> tuple[list[list[TaskItem]], dict[str, Any]]:
+        """태스크 분해 단계 — Orchestrator 에이전트 실행 + parse_phases.
 
         Args:
             requirements: PM 요구사항
-            max_task_retries: 태스크당 최대 재시도 횟수
-            max_phase_retries: Phase 리뷰 reject 시 최대 재시도 횟수
+            design_results: design()의 반환값 (architect, designer RunResult)
 
         Returns:
-            {
-                "design": dict,
-                "breakdown": dict,
-                "phases": [{
-                    "phase_num": int,
-                    "tasks": dict,
-                    "review": PhaseReviewResult | None,
-                    "passed": bool,
-                }],
-                "success": bool,
-            }
+            (phases, breakdown_dict)
+            phases: Phase별 TaskItem 리스트 (파싱 실패 시 빈 리스트)
+            breakdown_dict: Orchestrator RunResult의 dict 표현
         """
-        pipeline_results: dict[str, Any] = {
-            "design": {},
-            "breakdown": {},
-            "phases": [],
-            "success": False,
-        }
-
-        # 1. 설계
-        design_results = await self.design(requirements)
-        pipeline_results["design"] = design_results
-
-        # 1-1. Architect + Designer 출력 → docs/skeleton.md 기록
-        self.materialize_skeleton(
-            architect_output=design_results["architect"].output,
-            designer_output=design_results["designer"].output,
-        )
-
-        # 2. 태스크 분해
         self.phase_manager.transition(Phase.TASK_BREAKDOWN)
         breakdown_prompt = (
             f"{requirements}\n\n"
@@ -469,17 +438,35 @@ class Orchestra:
         self._log_result("orchestrator", breakdown_result)
         breakdown_dict = self._result_to_dict(breakdown_result)
         self.state.save_task_result("task_breakdown", breakdown_dict)
-        pipeline_results["breakdown"] = breakdown_dict
 
-        # Orchestrator 출력 → Phase별 태스크 목록
         phases: list[list[TaskItem]] = parse_phases(breakdown_result.output)
         if not phases:
             logger.warning("Orchestrator 태스크 분해 실패 — 파싱된 Phase 없음")
-            pipeline_results["success"] = False
-            return pipeline_results
 
-        # 3. Phase별 실행
-        all_phases_passed = True
+        return phases, breakdown_dict
+
+    async def run_phases(
+        self,
+        phases: list[list[TaskItem]],
+        *,
+        max_task_retries: int = 3,
+        max_phase_retries: int = 2,
+    ) -> dict[str, Any]:
+        """Phase별 태스크 실행 + Phase 리뷰.
+
+        Args:
+            phases: run_breakdown()이 반환한 Phase별 TaskItem 리스트
+            max_task_retries: 태스크당 최대 재시도 횟수
+            max_phase_retries: Phase 리뷰 reject 시 최대 재시도 횟수
+
+        Returns:
+            {
+                "phases": [{"phase_num", "tasks", "review", "passed"}],
+                "success": bool,
+            }
+        """
+        results: list[dict[str, Any]] = []
+        all_passed = True
         allowed_endpoints = self._extract_allowed_endpoints()
 
         for phase_num, phase_tasks in enumerate(phases, start=1):
@@ -491,7 +478,6 @@ class Orchestra:
             }
 
             for phase_attempt in range(1, max_phase_retries + 1):
-                # 태스크 실행
                 task_ids: list[str] = []
                 for task in phase_tasks:
                     task_id: str = task.id
@@ -515,7 +501,6 @@ class Orchestra:
                         task_result = {"output": "", "error": str(e), "passed": False}
                     phase_result["tasks"][task_id] = task_result
 
-                # Phase 리뷰
                 review = await self.review_phase(phase_num, task_ids)
                 phase_result["review"] = review
 
@@ -525,29 +510,68 @@ class Orchestra:
                     break
 
                 if phase_attempt < max_phase_retries:
-                    logger.warning(
-                        "Phase %d REJECT — 재시도 %d/%d",
-                        phase_num, phase_attempt, max_phase_retries,
-                    )
+                    logger.warning("Phase %d REJECT — 재시도 %d/%d", phase_num, phase_attempt, max_phase_retries)
                 else:
                     logger.error("Phase %d — 최대 재시도 초과.", phase_num)
-                    all_phases_passed = False
+                    all_passed = False
 
-            pipeline_results["phases"].append(phase_result)
+            results.append(phase_result)
 
             if not phase_result["passed"]:
-                all_phases_passed = False
+                all_passed = False
                 logger.error("Phase %d 실패 — 이후 Phase 중단.", phase_num)
-                break  # Phase 실패 시 다음 Phase 진행 안 함
+                break
 
-        pipeline_results["success"] = all_phases_passed
+        return {"phases": results, "success": all_passed}
 
-        if all_phases_passed:
+    async def run_pipeline_with_phases(
+        self,
+        requirements: str,
+        max_task_retries: int = 3,
+        max_phase_retries: int = 2,
+    ) -> dict[str, Any]:
+        """Phase 분리 전체 파이프라인 (단일 호출 버전).
+
+        인터랙티브 게이트가 필요하면 pipeline_runner.run()을 사용한다.
+
+        Args:
+            requirements: PM 요구사항
+            max_task_retries: 태스크당 최대 재시도 횟수
+            max_phase_retries: Phase 리뷰 reject 시 최대 재시도 횟수
+
+        Returns:
+            {"design", "breakdown", "phases", "success"}
+        """
+        # 1. 설계
+        design_results = await self.design(requirements)
+        self.materialize_skeleton(
+            architect_output=design_results["architect"].output,
+            designer_output=design_results["designer"].output,
+        )
+
+        # 2. 태스크 분해
+        phases, breakdown_dict = await self.run_breakdown(requirements, design_results)
+        if not phases:
+            return {"design": design_results, "breakdown": breakdown_dict, "phases": [], "success": False}
+
+        # 3. Phase별 실행
+        phase_results = await self.run_phases(
+            phases,
+            max_task_retries=max_task_retries,
+            max_phase_retries=max_phase_retries,
+        )
+
+        if phase_results["success"]:
             self.phase_manager.transition(Phase.DEPLOYING)
             self.phase_manager.transition(Phase.DONE)
             logger.info("전체 파이프라인 완료 — Phase.DONE")
 
-        return pipeline_results
+        return {
+            "design": design_results,
+            "breakdown": breakdown_dict,
+            "phases": phase_results["phases"],
+            "success": phase_results["success"],
+        }
 
     # ── 내부 헬퍼 ──────────────────────────────────────────────────────────────
 
