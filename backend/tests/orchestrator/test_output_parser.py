@@ -453,3 +453,75 @@ UI 설계 내용...
         result = parse_design_verdict(output)
         assert result is not None
         assert result.raw == output
+
+
+# ── Harness v2: 섹션 ID 기반 ─────────────────────────────────────────
+
+
+class TestExtractFilledSectionsByIdMapping:
+    def test_section_id_inferred_from_title(self) -> None:
+        """헤딩 제목이 SECTION_TITLES 와 매칭되면 section_id 자동 채움."""
+        output = """## 1. 프로젝트 개요
+- 이름: Sample
+
+## 2. 기술 스택
+- Python 3.12
+"""
+        sections = extract_filled_sections(output)
+        assert len(sections) == 2
+        assert sections[0].section_num == "1"
+        assert sections[0].section_id == "overview"
+        assert sections[1].section_num == "2"
+        assert sections[1].section_id == "stack"
+
+    def test_section_id_none_for_unmatched_title(self) -> None:
+        """SECTION_TITLES 에 없는 제목은 section_id=None."""
+        output = """## 5. 알 수 없는 임의 섹션
+content
+"""
+        sections = extract_filled_sections(output)
+        assert len(sections) == 1
+        assert sections[0].section_id is None
+
+    def test_dotted_id_inferred(self) -> None:
+        """interface.cli 같은 dotted ID 도 정상 매칭."""
+        output = """## 4. CLI 커맨드
+- 실행: hijack
+"""
+        sections = extract_filled_sections(output)
+        assert sections[0].section_id == "interface.cli"
+
+
+class TestExtractFilledSectionsById:
+    def test_returns_dict_keyed_by_id(self) -> None:
+        from src.orchestrator.output_parser import extract_filled_sections_by_id
+
+        output = """## 1. 프로젝트 개요
+content A
+
+## 2. 도메인 로직
+content B
+"""
+        result = extract_filled_sections_by_id(output)
+        assert "overview" in result
+        assert "core.logic" in result
+        assert "content A" in result["overview"]
+        assert "content B" in result["core.logic"]
+
+    def test_skips_unmapped_sections(self) -> None:
+        from src.orchestrator.output_parser import extract_filled_sections_by_id
+
+        output = """## 1. 프로젝트 개요
+ok
+
+## 99. 임의 섹션
+ignored
+"""
+        result = extract_filled_sections_by_id(output)
+        assert "overview" in result
+        # 임의 섹션은 ID 매칭 안 됨 → 결과에 없음
+        assert len(result) == 1
+
+    def test_empty_input_returns_empty(self) -> None:
+        from src.orchestrator.output_parser import extract_filled_sections_by_id
+        assert extract_filled_sections_by_id("") == {}

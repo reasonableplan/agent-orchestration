@@ -62,10 +62,15 @@ class TaskItem:
 
 @dataclass
 class SkeletonSection:
-    """에이전트가 채운 skeleton 섹션."""
+    """에이전트가 채운 skeleton 섹션.
 
-    section_num: str  # "6", "7", "17" 등
+    section_num — 레거시 (구 skeleton_template.md 의 번호).
+    section_id  — Harness v2 (헤딩 제목이 SECTION_TITLES 와 매칭되면 자동 채워짐).
+    """
+
+    section_num: str  # "6", "7", "17" 등 — 레거시
     content: str
+    section_id: str | None = None  # Harness v2 — None 이면 매칭 안 됨
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +365,10 @@ _SECTION_HEADING = re.compile(
     r"^#{2,4}\s+(\d+(?:-\d+)?)[.\s]",
     re.MULTILINE,
 )
+# `## N. <Title>` 에서 제목 추출 (id 매핑용)
+_SECTION_HEADING_WITH_TITLE = re.compile(
+    r"^#{2,4}\s+\d+(?:-\d+)?\.\s+(.+?)\s*$",
+)
 
 
 def extract_filled_sections(output: str) -> list[SkeletonSection]:
@@ -368,9 +377,16 @@ def extract_filled_sections(output: str) -> list[SkeletonSection]:
     에이전트가 "## 6. DB 스키마" 같은 섹션 헤딩을 포함해서 출력하면
     해당 섹션 내용을 추출한다.
 
+    Harness v2: 헤딩 제목이 SECTION_TITLES 와 매칭되면 section_id 자동 채움.
+
     Returns:
         SkeletonSection 리스트. 없으면 빈 리스트.
     """
+    # 순환 import 방지 — 함수 내 import
+    from src.orchestrator.context import SECTION_TITLES
+
+    title_to_id = {v: k for k, v in SECTION_TITLES.items()}
+
     sections: list[SkeletonSection] = []
     lines = output.split("\n")
     i = 0
@@ -384,6 +400,13 @@ def extract_filled_sections(output: str) -> list[SkeletonSection]:
                 i += 1
                 continue
             heading_level = len(heading_m.group(1))
+
+            # 제목으로 section_id 추론
+            title_match = _SECTION_HEADING_WITH_TITLE.match(lines[i].rstrip())
+            section_id: str | None = None
+            if title_match:
+                section_id = title_to_id.get(title_match.group(1).strip())
+
             start = i
             i += 1
 
@@ -396,8 +419,27 @@ def extract_filled_sections(output: str) -> list[SkeletonSection]:
 
             content = "\n".join(lines[start:i]).strip()
             if content:
-                sections.append(SkeletonSection(section_num=section_num, content=content))
+                sections.append(SkeletonSection(
+                    section_num=section_num,
+                    content=content,
+                    section_id=section_id,
+                ))
         else:
             i += 1
 
     return sections
+
+
+def extract_filled_sections_by_id(output: str) -> dict[str, str]:
+    """에이전트 출력에서 섹션을 ID 기반으로 추출 (Harness v2).
+
+    SECTION_TITLES 와 매칭되는 헤딩만 포함. ID 가 없는 섹션은 무시.
+
+    Returns:
+        {section_id: content} dict. 매칭 없으면 빈 dict.
+    """
+    return {
+        s.section_id: s.content
+        for s in extract_filled_sections(output)
+        if s.section_id is not None
+    }
