@@ -7,10 +7,50 @@ AI가 코드를 잘 짜는 건 알겠는데, **내 스타일대로 짜지 않는
 HarnessAI는 이 문제를 해결하기 위해 만들었다. **AI가 짜되, 내 규칙대로 짜게 하는 것.**
 
 - `agents/*/CLAUDE.md` — 에이전트마다 코딩 규칙을 직접 정의한다
-- skeleton 계약서 — 기획 범위를 19개 섹션으로 못 박는다. 벗어나면 Reviewer가 즉시 reject
+- **프로파일 시스템 (v2)** — `~/.claude/harness/profiles/` 에서 스택별 관례/화이트리스트를 선언. 어떤 프로젝트 타입이든 지원
+- skeleton 계약서 — 기획 범위를 20개 ID 기반 섹션으로 못 박는다. 벗어나면 Reviewer가 즉시 reject
 - shared-lessons — 한 번 발생한 실수는 시스템에 기록해 반복을 막는다
 
 AI를 대체하는 게 아니라 **통제하는** 오케스트레이터다.
+
+---
+
+## 🚀 v2 (권장) — `/ha-*` 스킬 7종
+
+v2 는 프로파일 기반으로 **어떤 프로젝트 타입이든 지원**한다 (웹/CLI/라이브러리/스킬/모바일/데스크탑/모노레포).
+
+```
+[초기화]
+  /ha-init              스택 자동감지 + 인터뷰 → harness-plan.md + 빈 skeleton.md
+  /ha-deepinit          (기존 코드베이스) hierarchical AGENTS.md 자동 생성
+
+[설계]
+  /ha-design            Architect+Designer 역할로 skeleton 섹션 채움
+
+[분해]
+  /ha-plan              Orchestrator 역할로 tasks.md 생성
+
+[구현]
+  /ha-build T-001        Coder 역할로 태스크 구현  [model: sonnet]
+  /ha-build --parallel T-001,T-002   독립 태스크 병렬 실행 (ultrawork 패턴)
+
+[검증]
+  /ha-verify            프로파일 toolchain 실행 (test/lint/type)  [model: sonnet]
+
+[리뷰]
+  /ha-review            보안 훅 + LESSON + AI slop (7번째 훅) 종합 리뷰
+```
+
+**환경변수**: `HARNESS_AI_HOME` (기본: 현재 HarnessAI 레포 절대 경로).
+
+**지원 프로파일 (기본 5개)**: `fastapi`, `react-vite`, `python-cli`, `python-lib`, `claude-skill`
+새 스택은 `~/.claude/harness/profiles/*.md` 추가만으로 확장.
+
+---
+
+## 🗂 v1 (레거시) — `/my-*` 스킬 12종
+
+아래는 v1 시절 스킬 파이프라인. 여전히 동작하지만 **하드코딩된 4개 스택(fastapi/nextjs/react-native/electron)**만 지원. 새 프로젝트는 v2 권장.
 
 ---
 
@@ -22,7 +62,11 @@ AI 에이전트 팀이 **하네스 엔지니어링**(skeleton 계약서 + 검증
 
 ## 핵심 개념: Skeleton 계약서
 
-모든 구현의 출발점. Architect + Designer가 코드 한 줄 쓰기 전에 19개 섹션을 채운다.
+모든 구현의 출발점. Architect + Designer가 코드 한 줄 쓰기 전에 skeleton 섹션을 채운다.
+
+**v2** (권장): 20개 ID 기반 섹션 (`overview`, `interface.http`, `persistence` 등). 프로파일이 필요한 것만 선택적 포함.
+
+**v1** (레거시): 19개 번호 기반 섹션 (섹션 1~18).
 
 ```
 섹션 1  — 프로젝트 개요 / 요구사항
@@ -544,8 +588,9 @@ LESSON 패턴 자동 탐지: LESSON-001~007
 - **서버**: FastAPI + WebSocket (포트 3002)
 - **패키지 매니저**: uv
 - **에이전트 실행**: Claude CLI subprocess / Gemini API / 로컬 모델 (OpenAI 호환)
-- **상태 저장**: JSON 파일 (`.orchestra/`) — DB 없음
-- **테스트**: pytest (236개)
+- **상태 저장**: JSON 파일 (`.orchestra/`) + `harness-plan.md` (v2) — DB 없음
+- **테스트**: pytest (**327개**, 회귀 0건)
+- **v2 인프라**: `profile_loader.py`, `skeleton_assembler.py`, `plan_manager.py` + `harness` 검증 CLI
 
 ---
 

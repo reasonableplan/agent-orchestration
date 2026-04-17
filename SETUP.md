@@ -4,7 +4,48 @@
 
 ---
 
-## 목차
+## 🚀 v2 Quick Start (`/ha-*` 스킬 7종)
+
+v2 흐름이 **권장 경로**. v1 (`/my-*`) 은 레거시.
+
+### 설치 (1회)
+
+```bash
+git clone https://github.com/reasonableplan/harnessai.git
+cd harnessai/backend && uv sync
+
+# 환경변수 (선택 — 기본값 있음)
+export HARNESS_AI_HOME=/path/to/harnessai   # /ha-* 스킬이 v2 모듈 import 시 사용
+
+# v2 스키마 무결성 확인
+python ~/.claude/harness/bin/harness validate
+```
+
+### 프로젝트 시작 (어떤 프로젝트든)
+
+```bash
+cd <my-project>
+claude   # Claude Code 실행
+
+# 세션 안에서:
+/ha-init            # 프로파일 자동감지 + 인터뷰 → harness-plan.md + skeleton.md
+/ha-design          # Architect+Designer 역할로 skeleton 채움
+/ha-plan            # Orchestrator 역할로 tasks.md
+/ha-build T-001     # 태스크 구현 (병렬: --parallel T-001,T-002)
+/ha-verify          # 프로파일 toolchain 실행 (test/lint/type)
+/ha-review          # 보안/LESSON/AI-slop 종합 리뷰
+```
+
+### 기존 코드베이스 도입
+
+```bash
+/ha-deepinit        # 코드 분석 → hierarchical AGENTS.md 자동 생성 (선택)
+/ha-init            # 이어서 v2 흐름 시작
+```
+
+---
+
+## v1 (레거시) — 목차
 
 1. [사전 요구사항](#1-사전-요구사항)
 2. [저장소 클론 및 의존성 설치](#2-저장소-클론-및-의존성-설치)

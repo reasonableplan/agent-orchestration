@@ -1144,14 +1144,22 @@ Phase 2 후처리 — PoC 리뷰 반영
   [x] 사전 존재 lint 6건 정리 (B904, SIM105, SIM117, F401, F541, I001)
   [x] 설계 문서 Phase 1~2 체크리스트 갱신
 
-Phase 3 — 스킬 작성
-  [ ] 3.1 /ha-init 구현 + 동작 테스트
-  [ ] 3.2 /ha-design 구현
-  [ ] 3.3 /ha-plan 구현
-  [ ] 3.4 /ha-build 구현
-  [ ] 3.5 /ha-verify 구현
-  [ ] 3.6 /ha-review 구현
-  [ ] 3.7 커밋: "feat: /ha-* 스킬 6개 추가"
+Phase 3 — 스킬 작성 ✅ 완료 (7/7, 옵션 C 채택: deepinit 추가)
+  [x] 3.1 /ha-init  구현 + PoC (code-hijack 동작 확인)
+  [x] 3.2 /ha-design 구현 (Architect+Designer 역할)
+  [x] 3.3 /ha-plan 구현 (Orchestrator 역할)
+  [x] 3.4 /ha-build 구현 (Coder, `--parallel` ultrawork 패턴, model: sonnet)
+  [x] 3.5 /ha-verify 구현 (toolchain 실행, model: sonnet)
+  [x] 3.6 /ha-review 구현 (보안훅 + LESSON + ai-slop 7번째 훅)
+  [x] 3.7 (추가) /ha-deepinit — 기존 코드베이스 hierarchical AGENTS.md
+  [x] 3.8 공유 유틸 모듈 `~/.claude/skills/_ha_shared/utils.py`
+  [x] 3.9 스모크 테스트: detect/prepare 모두 code-hijack 에서 정상 작동
+
+흡수된 oh-my-claudecode 패턴:
+  - ultrawork → /ha-build --parallel
+  - ai-slop-cleaner → /ha-review 7번째 훅
+  - deepinit → /ha-deepinit 독립 스킬
+보류: ccg (외부 CLI 환경 불안정), Plugins (배포 단계)
 
 Phase 4 — 구 스킬 삭제
   [ ] 4.1 /my-* 12개 삭제

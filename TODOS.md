@@ -6,17 +6,16 @@
 
 ## 아키텍처
 
-- [ ] **Architect ↔ Designer 중재 루프** (최대 3회)
-  - `design()` 현재 1회 순차 실행 (Architect → Designer)
-  - Designer가 "이 API 구조로는 이 UI를 못 만든다"고 판단해도 Architect에 피드백 불가
-  - `agents/architect/CLAUDE.md`에 3회 중재 규칙 있지만 코드에 없음
-  - **비용 주의**: 구현 시 LLM 호출 최대 6회 (현재 2회)
+- [x] **Architect ↔ Designer 중재 루프** (최대 3회) ✅ 완료
+  - `design()` 의 협의 루프 구현 (max_negotiation_rounds=3)
+  - Designer → ACCEPT/CONFLICT 파싱 후 Architect 재호출
+  - 파일: `backend/src/orchestrator/orchestrate.py::design`, `output_parser.py::parse_design_verdict`
 
-- [ ] **의존성 기반 병렬 실행** (DAG 스케줄러)
-  - `TaskItem.depends_on`이 이미 파싱되어 있음
-  - `AgentRunner.run_many()`가 이미 구현되어 있음
-  - `run_phases()` 에서 위상 정렬(topological sort) 후 독립 태스크 병렬 실행
-  - 예: `[T-001(backend), T-002(backend), T-003(frontend)]`에서 T-002, T-003이 T-001에만 의존 → T-001 완료 후 T-002+T-003 동시 실행
+- [x] **의존성 기반 병렬 실행** (DAG 스케줄러) ✅ 완료 (ha-build)
+  - `/ha-build --parallel T-001,T-002` 지원 (ultrawork 패턴)
+  - depends_on 검증 + 병렬 그룹 내 충돌 방지
+  - 파일: `~/.claude/skills/ha-build/run.py`
+  - **Orchestra 내부 사용은 미완** — run_phases() 에서 진짜 topological sort 는 후속
 
 ## 에이전트
 
@@ -61,3 +60,39 @@
 - [ ] **Pipeline 재개** (state.json 기반 resume)
 - [ ] **--dry-run 모드** (DryRunProvider — LLM 호출 없이 파이프라인 구조 검증)
 - [ ] **Claude API (HTTP) provider** — CLI subprocess 없이 직접 REST API 호출, 토큰 비용 추적
+
+---
+
+## v2 후속 (Phase 4+)
+
+- [ ] **Orchestra production 흐름의 v2 wiring**
+  - 현재: `run_pipeline_with_phases()` 가 레거시 `materialize_skeleton` 사용
+  - 개선: `assemble_skeleton_for_profiles()` 직접 호출로 전환
+  - 파일: `backend/src/orchestrator/orchestrate.py:787`
+
+- [ ] **/my-* 스킬 삭제 (Phase 4)**
+  - 12개 스킬: `~/.claude/skills/my-*/`
+  - 사전 조건: /ha-* 로 실제 프로젝트 1개 완주 검증
+
+- [ ] **레거시 코드 정리 (Phase 4)**
+  - `SECTION_MAP`, `fill_skeleton_template`, `extract_section` (번호 기반)
+  - `backend/src/orchestrator/context.py` + `orchestrate.py`
+
+- [ ] **ccg 멀티 LLM consensus**
+  - Reviewer 판단 고위험 결정만 Claude+Codex+Gemini 합의
+  - 사전 조건: codex CLI 설치 + gemini API 키
+
+- [ ] **Plugins 패키징**
+  - HarnessAI 를 oh-my-claudecode plugin 으로 배포 가능하게
+  - manifest + install 스크립트
+
+- [ ] **비용 추적**
+  - 각 에이전트 실행마다 token usage + 추정 비용 harness-plan 에 누적
+  - 파일: `backend/src/orchestrator/runner.py`
+
+- [ ] **스트리밍 에이전트 출력**
+  - `claude --stream` → WebSocket 실시간 브로드캐스트
+  - 긴 빌드 UX 개선
+
+- [ ] **Live LESSONS 자동 학습**
+  - `/ha-review` 가 N회 발견한 패턴 → shared-lessons.md 자동 LESSON 후보 등록
