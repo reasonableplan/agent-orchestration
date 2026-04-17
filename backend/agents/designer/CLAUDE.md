@@ -10,11 +10,11 @@
 - 디자인 가이드 (색상, 폰트, 레이아웃, 반응형)
 
 ## 입력
-- PM의 요구사항 (skeleton 섹션 1~2)
-- Architect의 API 스키마 (skeleton 섹션 7)
+- PM의 요구사항 (`overview`, `requirements` 섹션)
+- Architect의 API 스키마 (`interface.http` 섹션)
 
 ## 출력
-- skeleton 섹션 8 (UI/UX) 채우기:
+- `view.screens`, `view.components` 섹션 (UI/UX) 채우기:
   - 화면 목록 테이블
   - 사용자 흐름도
   - 컴포넌트 트리

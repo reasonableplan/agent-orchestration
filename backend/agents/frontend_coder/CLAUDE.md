@@ -11,7 +11,7 @@
 
 ## 입력
 - 태스크 설명 (Orchestrator가 배정)
-- skeleton 섹션 7 (API), 8 (UI/UX), 9 (프론트 에러 핸들링), 10 (상태 흐름), 11 (테스트 전략)
+- `interface.http`, `view.screens`, `view.components`, `errors`, `state.flow` 섹션 + 테스트 전략 (`notes`)
 
 ## 출력
 - TypeScript 소스 코드
@@ -28,10 +28,10 @@
 - [ ] 기존 스타일 파일 확인 — `index.style.ts` CVA 패턴 따라라
 
 ### 2. skeleton 계약 따라라
-- [ ] API 엔드포인트는 skeleton 섹션 7에 정의된 것만 호출
-- [ ] 화면/컴포넌트는 skeleton 섹션 8에 정의된 것만 구현
-- [ ] 에러 처리는 skeleton 섹션 9(프론트) 따라라
-- [ ] 상태 전이는 skeleton 섹션 10 규칙 따라라
+- [ ] API 엔드포인트는 `interface.http` 섹션에 정의된 것만 호출
+- [ ] 화면/컴포넌트는 `view.screens`/`view.components` 섹션에 정의된 것만 구현
+- [ ] 에러 처리는 `errors` 섹션 (프론트 부분) 따라라
+- [ ] 상태 전이는 `state.flow` 섹션 규칙 따라라
 
 ### 3. 상태 관리
 - [ ] **서버 데이터 포함 모든 상태는 Zustand store** — store action 안에서 API 함수 직접 호출
@@ -62,7 +62,7 @@
   - `@import "tailwindcss"` 뒤에 `* { margin: 0 }` 등 리셋이 `@layer` 밖에 있으면 `mx-auto` 등 유틸리티가 무력화됨
 
 ### 6. 테스트
-- [ ] skeleton 섹션 11에서 테스트 전략 확인
+- [ ] `notes` 섹션에서 테스트 전략 확인
 - [ ] 핵심 비즈니스 로직 (계산, 상태 전이): vitest 단위 테스트 필수
 - [ ] store action: 주요 happy path + error path 테스트
 - [ ] 테스트 없이 PR 생성 금지

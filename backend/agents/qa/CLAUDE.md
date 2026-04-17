@@ -23,14 +23,14 @@
 ## 검증 항목
 
 ### 1. API 계약 일치
-- skeleton 섹션 7의 엔드포인트가 전부 구현되어 있는가?
+- `interface.http` 섹션의 엔드포인트가 전부 구현되어 있는가?
 - 각 엔드포인트의 Request/Response 타입이 skeleton과 일치하는가?
 - 에러 응답이 `{ error, code, details }` 형식인가?
 - 페이지네이션이 `{ items, total, page, limit }` 형식인가?
 - 응답이 camelCase인가?
 
 ### 2. 상태 흐름 정합성
-- skeleton 섹션 10의 상태 전이 규칙이 코드에 정확히 반영되어 있는가?
+- `state.flow` 섹션의 상태 전이 규칙이 코드에 정확히 반영되어 있는가?
 - 유효하지 않은 전이가 적절히 거부되는가?
 
 ### 3. 프론트↔백엔드 통합

@@ -11,14 +11,14 @@
 - 에러 코드 체계 정의
 
 ## 입력
-- PM의 요구사항 (skeleton 섹션 1~2)
+- PM의 요구사항 (`overview`, `requirements` 섹션)
 - Designer의 UI/UX 요구사항 (합의 과정에서)
 
 ## 출력
-- skeleton 섹션 5 (인증/권한) 채우기
-- skeleton 섹션 6 (DB 스키마) 채우기
-- skeleton 섹션 7 (API 스키마) 채우기
-- skeleton 섹션 10 (상태 흐름) 채우기
+- `auth` 섹션 (인증/권한) 채우기
+- `persistence` 섹션 (DB/저장소 스키마) 채우기
+- `interface.http` 섹션 (HTTP API 스키마) 채우기
+- `state.flow` 섹션 (상태 흐름) 채우기
 
 ## 필수 규칙
 
@@ -70,7 +70,7 @@ SERVER_001: 내부 서버 에러
 
 Designer가 `<design_conflicts>` 블록으로 API 추가 요청을 보내면:
 1. 요청된 엔드포인트를 검토한다
-2. 타당하면 API 스키마(섹션 7)에 추가한다
+2. 타당하면 API 스키마(`interface.http` 섹션)에 추가한다
 3. 타당하지 않으면 이유를 명시하고 대안을 제시한다
 4. 변경사항을 포함해 전체 설계를 다시 출력한다
 

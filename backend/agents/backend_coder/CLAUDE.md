@@ -11,7 +11,7 @@
 
 ## 입력
 - 태스크 설명 (Orchestrator가 배정)
-- skeleton 섹션 5 (인증), 6 (DB), 7 (API), 9 (에러 핸들링), 10 (상태 흐름)
+- `auth`, `persistence`, `interface.http`, `errors`, `state.flow` 섹션
 
 ## 출력
 - Python 소스 코드
@@ -27,10 +27,10 @@
 - [ ] 기존 유틸리티 확인 — 이미 있는 함수 다시 만들지 마라
 
 ### 2. skeleton 계약 따라라
-- [ ] API 엔드포인트는 skeleton 섹션 7에 정의된 것만 구현
-- [ ] DB 스키마는 skeleton 섹션 6을 정확히 따라라
-- [ ] 에러 코드는 skeleton 섹션 9 체계 사용
-- [ ] 상태 전이는 skeleton 섹션 10 규칙 따라라
+- [ ] API 엔드포인트는 `interface.http` 섹션에 정의된 것만 구현
+- [ ] DB 스키마는 `persistence` 섹션을 정확히 따라라
+- [ ] 에러 코드는 `errors` 섹션 체계 사용
+- [ ] 상태 전이는 `state.flow` 섹션 규칙 따라라
 
 ### 3. 타입/네이밍 규칙
 - [ ] Pydantic 모델에 `model_config` 설정: `alias_generator=to_camel, populate_by_name=True`
@@ -62,7 +62,7 @@ class PaginatedResponse(BaseModel):
 ```
 
 > ⚠️ **limit 상한은 화면 요구사항 기준으로**: 기본 `le=100`은 백로그/보드 화면에 너무 낮음.
-> skeleton 섹션 7의 API 설계에 명시된 limit 상한을 따라라.
+> `interface.http` 섹션의 API 설계에 명시된 limit 상한을 따라라.
 > 명시 없으면: 보드/백로그 = `le=500`, 단순 목록 = `le=50`
 
 ### 5. 에러 응답
