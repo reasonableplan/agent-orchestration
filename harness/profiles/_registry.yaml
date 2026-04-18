@@ -1,0 +1,90 @@
+version: 1
+
+# HarnessAI Profile Registry
+# ===========================
+# Stack detection rules. Evaluated top to bottom.
+# Multiple rules CAN match simultaneously (monorepo case):
+#   e.g., fastapi in backend/ + react-vite in frontend/.
+# Each match yields {profile, path} — no merging, no composition.
+# /ha-build dispatches per-task based on which path the task targets.
+#
+# detect operators (all optional, AND semantics):
+#   files:          list of paths (relative to `paths` entry) that must all exist
+#   contains:       {file: [substrings]} — file must contain ALL substrings
+#   contains_any:   {file: [substrings]} — file must contain AT LEAST ONE
+#   not_contains:   {file: [substrings]} — file must contain NONE
+#
+# `paths` lists candidate root paths. The first one where ALL detect rules
+# match becomes the matched path for this profile.
+
+rules:
+  # ── Python backends ────────────────────────────────────────────────────
+  - profile: fastapi
+    paths: [".", "backend/", "apps/backend/", "apps/api/", "services/api/"]
+    detect:
+      files: [pyproject.toml]
+      contains:
+        pyproject.toml: ["fastapi"]
+
+  - profile: python-cli
+    paths: [".", "backend/", "cli/", "packages/cli/", "apps/cli/"]
+    detect:
+      files: [pyproject.toml]
+      contains_any:
+        pyproject.toml: ["[project.scripts]", "console_scripts", "entry_points"]
+      not_contains:
+        pyproject.toml: ["fastapi", "django", "flask"]
+
+  - profile: python-lib
+    paths: [".", "packages/", "libs/"]
+    detect:
+      files: [pyproject.toml]
+      not_contains:
+        pyproject.toml:
+          - "fastapi"
+          - "django"
+          - "flask"
+          - "[project.scripts]"
+          - "console_scripts"
+
+  # ── JavaScript frontends ───────────────────────────────────────────────
+  - profile: nextjs
+    paths: [".", "frontend/", "apps/web/", "apps/frontend/"]
+    detect:
+      files: [package.json]
+      contains:
+        package.json: ['"next"']
+
+  - profile: react-vite
+    paths: [".", "frontend/", "apps/web/", "apps/frontend/"]
+    detect:
+      files: [package.json]
+      contains:
+        package.json: ['"react"']
+      contains_any:
+        package.json: ['"vite"']
+      not_contains:
+        package.json: ['"next"', '"electron"', '"react-native"', '"expo"']
+
+  # ── Desktop ────────────────────────────────────────────────────────────
+  - profile: electron
+    paths: [".", "apps/desktop/", "desktop/"]
+    detect:
+      files: [package.json]
+      contains:
+        package.json: ['"electron"']
+
+  # ── Mobile ─────────────────────────────────────────────────────────────
+  - profile: react-native
+    paths: [".", "apps/mobile/", "mobile/"]
+    detect:
+      files: [package.json]
+      contains_any:
+        package.json: ['"react-native"', '"expo"']
+
+# ── Fallback ─────────────────────────────────────────────────────────────
+# If ZERO rules match, /ha-init asks the user which profile to use or
+# offers to create a custom one. Never guesses silently.
+fallback:
+  action: prompt_user
+  message: "스택을 자동 감지하지 못했습니다. 프로파일을 선택하거나 새로 만들어주세요."

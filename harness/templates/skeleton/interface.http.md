@@ -1,0 +1,60 @@
+---
+id: interface.http
+name: HTTP API
+required_when: has.http_server
+description: REST API 엔드포인트, Request/Response, 공통 규칙
+---
+
+## {{section_number}}. HTTP API
+
+### 공통 규칙
+- **응답 네이밍**: camelCase (`projectId`, `createdAt`)
+- **Query params**: snake_case (`?project_id=1`)
+- **날짜/시간**: ISO 8601 (`2026-04-01T09:00:00Z`)
+- **페이지네이션**: `{ items: [...], total: N, page: N, limit: N }`
+- **limit 상한**: 보드/백로그 500, 단순 목록 50
+
+### 응답 래핑
+```json
+// 성공 — 단일
+{ "data": { ... } }
+
+// 성공 — 목록
+{ "items": [...], "total": 100, "page": 1, "limit": 50 }
+
+// 에러
+{ "error": "...", "code": "...", "details": {} }
+```
+
+### 엔드포인트
+
+#### Auth
+
+**`POST /api/auth/register`**
+```
+Request:  { email: string, password: string (min 8자) }
+Response 201: { id, email, createdAt }
+Error 409: RESOURCE_002 (이메일 중복)
+Error 422: VALIDATION_001
+```
+
+**`POST /api/auth/login`** `[public]`
+```
+Request:  { email, password }
+Response 200: { accessToken, refreshToken, tokenType: "bearer" }
+Error 401: AUTH_001
+```
+
+#### <도메인 그룹>
+
+**`GET /api/<resource>`** `[Auth]`
+```
+Query: (필요시)
+Response 200: items
+```
+
+> 작성 가이드:
+> - 각 엔드포인트: Method, Path, [Auth 여부], Request, Response, 에러 코드
+> - N+1 쿼리 방지 주석 (예: eager load)
+> - 전체 목록은 `persistence` 스키마와 1:1 대응
+> - `ha-build` 실행 시 이 섹션을 직접 읽어 구현

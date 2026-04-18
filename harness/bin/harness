@@ -1,0 +1,721 @@
+#!/usr/bin/env python3
+"""harness — HarnessAI v2 스키마 검증 CLI
+
+사용법:
+  python harness validate                  # 전체 검증 (registry + profiles + fragments)
+  python harness validate profiles         # 프로파일만
+  python harness validate fragments        # 스켈레톤 조각만
+  python harness validate <path>           # 단일 파일
+  python harness validate --plan <path>    # harness-plan.md 검증
+
+종료 코드:
+  0: 전부 통과
+  1: 검증 실패 (하나 이상)
+  2: 사용 오류 (잘못된 인자)
+  3: 내부 오류 (파일 없음 등)
+"""
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+# UTF-8 stdout/stderr 강제 (Windows cp949 호환성)
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, OSError):
+    pass  # Python < 3.7 또는 non-TTY 환경
+
+try:
+    import yaml
+except ImportError:
+    print("[FATAL] PyYAML required. Install: pip install pyyaml", file=sys.stderr)
+    sys.exit(3)
+
+
+# ── 상수 ───────────────────────────────────────────────────────────────
+
+HARNESS_ROOT = Path.home() / ".claude" / "harness"
+
+STANDARD_SECTION_IDS = {
+    "overview", "requirements", "stack", "configuration", "errors",
+    "auth", "persistence", "integrations",
+    "interface.http", "interface.cli", "interface.ipc", "interface.sdk",
+    "view.screens", "view.components", "state.flow", "core.logic",
+    "observability", "deployment", "tasks", "notes",
+}
+
+ALLOWED_GSTACK_MODES = {"auto", "manual", "prompt"}
+ALLOWED_PROFILE_STATUS = {"confirmed", "draft"}
+
+# required_when 표준 vocabulary (design doc §4.6)
+REQUIRED_WHEN_ATOMS = {
+    "always",
+    "has.users", "has.storage", "has.env_config", "has.external_deps",
+    "has.http_server", "has.cli_entrypoint", "has.ipc", "has.ui",
+    "has.complex_state", "has.sdk_surface", "has.production_concerns",
+    "scale.small_or_larger", "scale.medium_or_larger", "scale.large",
+}
+
+# detect 블록 허용 연산자
+DETECT_OPERATORS = {"files", "contains", "contains_any", "not_contains"}
+
+FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---", re.DOTALL)
+
+
+# ── 결과 ───────────────────────────────────────────────────────────────
+
+@dataclass
+class Issue:
+    severity: str  # "error" | "warn"
+    file: str
+    message: str
+
+
+@dataclass
+class Report:
+    issues: list[Issue] = field(default_factory=list)
+    files_checked: int = 0
+
+    @property
+    def error_count(self) -> int:
+        return sum(1 for i in self.issues if i.severity == "error")
+
+    @property
+    def warn_count(self) -> int:
+        return sum(1 for i in self.issues if i.severity == "warn")
+
+    def error(self, file: str, msg: str) -> None:
+        self.issues.append(Issue("error", file, msg))
+
+    def warn(self, file: str, msg: str) -> None:
+        self.issues.append(Issue("warn", file, msg))
+
+    def merge(self, other: Report) -> None:
+        self.issues.extend(other.issues)
+        self.files_checked += other.files_checked
+
+
+# ── 파싱 ───────────────────────────────────────────────────────────────
+
+def parse_frontmatter(path: Path) -> dict[str, Any] | None:
+    """Markdown 파일에서 YAML frontmatter 추출. 없으면 None."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(f"{path} 읽기 실패: {exc}") from exc
+
+    m = FRONTMATTER_RE.match(text)
+    if not m:
+        return None
+
+    try:
+        data = yaml.safe_load(m.group(1))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path} YAML 파싱 실패: {exc}") from exc
+
+    return data if isinstance(data, dict) else None
+
+
+# ── 검증: 프로파일 ─────────────────────────────────────────────────────
+
+_PROFILE_REQUIRED = {
+    "id": str,
+    "name": str,
+    "status": str,
+    "version": int,
+    "components": list,
+    "skeleton_sections": dict,
+    "toolchain": dict,
+    "whitelist": dict,
+    "file_structure": str,
+    "gstack_mode": str,
+}
+
+
+def validate_profile(path: Path, report: Report) -> None:
+    report.files_checked += 1
+    name = path.name
+
+    try:
+        data = parse_frontmatter(path)
+    except (RuntimeError, ValueError) as exc:
+        report.error(name, str(exc))
+        return
+
+    if data is None:
+        report.error(name, "YAML frontmatter 없음")
+        return
+
+    # 필수 필드 + 타입
+    for key, expected_type in _PROFILE_REQUIRED.items():
+        if key not in data:
+            report.error(name, f"필수 필드 누락: {key}")
+            continue
+        if not isinstance(data[key], expected_type):
+            report.error(name, f"{key}: {expected_type.__name__} 필요, {type(data[key]).__name__} 발견")
+
+    # _base 제외 — _base는 다른 스키마
+    if data.get("id") == "_base":
+        return
+
+    # id가 파일명과 일치
+    stem = path.stem
+    if data.get("id") != stem:
+        report.error(name, f"id='{data.get('id')}' 가 파일명 stem '{stem}' 와 불일치")
+
+    # status
+    if data.get("status") not in ALLOWED_PROFILE_STATUS:
+        report.error(name, f"status: {ALLOWED_PROFILE_STATUS} 중 하나여야 함, 현재 '{data.get('status')}'")
+
+    # gstack_mode
+    if data.get("gstack_mode") not in ALLOWED_GSTACK_MODES:
+        report.error(name, f"gstack_mode: {ALLOWED_GSTACK_MODES} 중 하나여야 함, 현재 '{data.get('gstack_mode')}'")
+
+    # skeleton_sections 스키마
+    sections = data.get("skeleton_sections", {})
+    if isinstance(sections, dict):
+        for sub in ("required", "optional", "order"):
+            if sub not in sections:
+                report.error(name, f"skeleton_sections.{sub} 누락")
+            elif not isinstance(sections[sub], list):
+                report.error(name, f"skeleton_sections.{sub}: list 필요")
+
+        # 섹션 ID 유효성 (표준 또는 dotted 도메인 허용)
+        for sub in ("required", "optional", "order"):
+            for sid in sections.get(sub, []) or []:
+                if sid not in STANDARD_SECTION_IDS and "." not in sid:
+                    report.warn(name, f"비표준 섹션 ID: '{sid}' (dotted 도메인 ID 권장)")
+
+        # order는 required ∪ optional 의 부분집합
+        required_set = set(sections.get("required", []) or [])
+        optional_set = set(sections.get("optional", []) or [])
+        declared = required_set | optional_set
+        for sid in sections.get("order", []) or []:
+            if sid not in declared:
+                report.error(name, f"order의 '{sid}' 가 required/optional 에 선언 안 됨")
+
+    # components 스키마 + skeleton_section 참조 무결성
+    components = data.get("components", [])
+    declared_sections: set[str] = set()
+    sections_frontmatter = data.get("skeleton_sections", {})
+    if isinstance(sections_frontmatter, dict):
+        declared_sections = set(sections_frontmatter.get("required", []) or []) | set(sections_frontmatter.get("optional", []) or [])
+
+    if isinstance(components, list):
+        for i, comp in enumerate(components):
+            if not isinstance(comp, dict):
+                report.error(name, f"components[{i}]: dict 필요")
+                continue
+            for req_key in ("id", "required", "skeleton_section"):
+                if req_key not in comp:
+                    report.error(name, f"components[{i}].{req_key} 누락")
+            sec = comp.get("skeleton_section")
+            if sec:
+                if sec not in STANDARD_SECTION_IDS and "." not in sec:
+                    report.warn(name, f"components[{i}].skeleton_section='{sec}' 비표준")
+                # 참조 무결성 — components가 참조하는 섹션이 skeleton_sections에 선언되어야 함
+                if declared_sections and sec not in declared_sections:
+                    report.error(name, f"components[{i}].skeleton_section='{sec}' 가 skeleton_sections.required/optional 에 선언 안 됨")
+
+    # detect 블록 스키마
+    detect = data.get("detect")
+    if detect is not None:
+        if not isinstance(detect, dict):
+            report.error(name, "detect: dict 여야 함")
+        else:
+            if "paths" in data.get("detect", {}):
+                report.warn(name, "detect.paths 는 frontmatter 최상위 'paths' 에 위치 (detect 내부 X)")
+            for op, val in detect.items():
+                if op == "paths":
+                    continue
+                if op not in DETECT_OPERATORS:
+                    report.error(name, f"detect.{op}: 알 수 없는 연산자 (허용: {sorted(DETECT_OPERATORS)})")
+                    continue
+                if op == "files":
+                    if not isinstance(val, list):
+                        report.error(name, "detect.files: list 필요")
+                elif op in ("contains", "contains_any", "not_contains"):
+                    if not isinstance(val, dict):
+                        report.error(name, f"detect.{op}: dict (file → substrings) 필요")
+                    else:
+                        for fname, subs in val.items():
+                            if not isinstance(subs, list):
+                                report.error(name, f"detect.{op}.{fname}: list 필요")
+
+    # toolchain 스키마
+    toolchain = data.get("toolchain", {})
+    if isinstance(toolchain, dict):
+        for req_key in ("install", "test", "lint"):
+            if req_key not in toolchain:
+                report.error(name, f"toolchain.{req_key} 누락 (null 허용)")
+
+    # whitelist 스키마
+    whitelist = data.get("whitelist", {})
+    if isinstance(whitelist, dict):
+        for req_key in ("runtime", "dev"):
+            if req_key not in whitelist:
+                report.error(name, f"whitelist.{req_key} 누락")
+            elif not isinstance(whitelist[req_key], list):
+                report.error(name, f"whitelist.{req_key}: list 필요")
+
+
+def validate_base_md(path: Path, report: Report) -> None:
+    """_base.md는 프로파일과 다른 스키마. 존재 확인만."""
+    report.files_checked += 1
+    try:
+        data = parse_frontmatter(path)
+    except (RuntimeError, ValueError) as exc:
+        report.error(path.name, str(exc))
+        return
+    if data is None:
+        report.error(path.name, "YAML frontmatter 없음")
+        return
+    if data.get("id") != "_base":
+        report.error(path.name, f"_base.md의 id는 '_base' 여야 함, 현재 '{data.get('id')}'")
+
+
+# ── 검증: 순환 상속 ────────────────────────────────────────────────────
+
+def detect_inheritance_cycles(profiles_dir: Path, report: Report) -> None:
+    """extends 체인에서 순환 탐지 + 존재하지 않는 부모 참조 탐지."""
+    extends_map: dict[str, str | None] = {}
+    known_ids: set[str] = {"_base"}  # _base는 암묵적 최상위
+
+    for f in profiles_dir.glob("*.md"):
+        if f.name == "_base.md":  # _base는 최상위 — extends 검증 대상 아님
+            continue
+        try:
+            data = parse_frontmatter(f)
+        except (RuntimeError, ValueError):
+            continue
+        if not data:
+            continue
+        pid = data.get("id")
+        if isinstance(pid, str):
+            extends_map[pid] = data.get("extends")
+            known_ids.add(pid)
+
+    for start, parent in extends_map.items():
+        # 존재하지 않는 부모 참조 탐지
+        if parent is not None and parent not in known_ids:
+            report.error(f"{start}.md", f"extends 참조 '{parent}' — 해당 프로파일 파일 없음")
+            continue
+
+        # 순환 탐지
+        visited = set()
+        cur: str | None = start
+        while cur is not None:
+            if cur in visited:
+                report.error(f"{start}.md", f"순환 상속 탐지: {' -> '.join([*visited, cur])}")
+                break
+            visited.add(cur)
+            nxt = extends_map.get(cur)
+            if nxt == "_base" or nxt is None:
+                break
+            cur = nxt
+
+
+# ── 검증: 섹션 조각 ────────────────────────────────────────────────────
+
+_FRAGMENT_REQUIRED = {
+    "id": str,
+    "name": str,
+    "required_when": str,
+    "description": str,
+}
+
+
+def validate_fragment(path: Path, report: Report) -> None:
+    report.files_checked += 1
+    name = path.name
+
+    try:
+        data = parse_frontmatter(path)
+    except (RuntimeError, ValueError) as exc:
+        report.error(name, str(exc))
+        return
+
+    if data is None:
+        report.error(name, "YAML frontmatter 없음")
+        return
+
+    for key, expected_type in _FRAGMENT_REQUIRED.items():
+        if key not in data:
+            report.error(name, f"필수 필드 누락: {key}")
+            continue
+        if not isinstance(data[key], expected_type):
+            report.error(name, f"{key}: {expected_type.__name__} 필요")
+
+    stem = path.stem
+    if data.get("id") != stem:
+        report.error(name, f"id='{data.get('id')}' 가 파일명 stem '{stem}' 와 불일치")
+
+    # required_when vocabulary 검증
+    rw = data.get("required_when")
+    if isinstance(rw, str):
+        # AND 조합은 '+' 로 분리
+        atoms = [a.strip() for a in rw.split("+")]
+        for atom in atoms:
+            if atom not in REQUIRED_WHEN_ATOMS:
+                report.error(
+                    name,
+                    f"required_when='{rw}' — '{atom}' 는 표준 vocabulary 외 (허용: {sorted(REQUIRED_WHEN_ATOMS)})",
+                )
+
+    # 본문에 {{section_number}} 플레이스홀더 있는지 확인
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        report.error(name, f"파일 읽기 실패: {exc}")
+        return
+    body = FRONTMATTER_RE.sub("", text, count=1).strip()
+    if "{{section_number}}" not in body:
+        report.warn(name, "본문에 {{section_number}} 플레이스홀더 없음")
+
+
+# ── 검증: _registry.yaml ──────────────────────────────────────────────
+
+def validate_registry(path: Path, report: Report) -> None:
+    report.files_checked += 1
+    name = path.name
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        report.error(name, f"읽기 실패: {exc}")
+        return
+
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        report.error(name, f"YAML 파싱 실패: {exc}")
+        return
+
+    if not isinstance(data, dict):
+        report.error(name, "최상위가 dict 여야 함")
+        return
+
+    if data.get("version") != 1:
+        report.error(name, f"version: 1 필요, 현재 {data.get('version')}")
+
+    rules = data.get("rules", [])
+    if not isinstance(rules, list):
+        report.error(name, "rules: list 필요")
+        return
+
+    for i, rule in enumerate(rules):
+        if not isinstance(rule, dict):
+            report.error(name, f"rules[{i}]: dict 필요")
+            continue
+        for req in ("profile", "paths", "detect"):
+            if req not in rule:
+                report.error(name, f"rules[{i}].{req} 누락")
+        if "paths" in rule and not isinstance(rule["paths"], list):
+            report.error(name, f"rules[{i}].paths: list 필요")
+        if "detect" in rule and not isinstance(rule["detect"], dict):
+            report.error(name, f"rules[{i}].detect: dict 필요")
+
+    fb = data.get("fallback")
+    if isinstance(fb, dict) and fb.get("action") not in ("prompt_user",):
+        report.warn(name, f"fallback.action: 'prompt_user' 권장, 현재 '{fb.get('action')}'")
+
+
+# ── 검증: harness-plan.md ──────────────────────────────────────────────
+
+_PLAN_REQUIRED = {
+    "harness_version": int,
+    "schema_version": int,
+    "project_name": str,
+    "profiles": list,
+    "skeleton_sections": dict,
+    "pipeline": dict,
+}
+
+
+def validate_plan(path: Path, report: Report) -> None:
+    report.files_checked += 1
+    name = path.name
+
+    try:
+        data = parse_frontmatter(path)
+    except (RuntimeError, ValueError) as exc:
+        report.error(name, str(exc))
+        return
+
+    if data is None:
+        report.error(name, "YAML frontmatter 없음")
+        return
+
+    for key, expected in _PLAN_REQUIRED.items():
+        if key not in data:
+            report.error(name, f"필수 필드 누락: {key}")
+        elif not isinstance(data[key], expected):
+            report.error(name, f"{key}: {expected.__name__} 필요")
+
+    pipe = data.get("pipeline", {})
+    if isinstance(pipe, dict):
+        for req in ("steps", "current_step", "completed_steps", "gstack_mode"):
+            if req not in pipe:
+                report.error(name, f"pipeline.{req} 누락")
+        if pipe.get("gstack_mode") not in ALLOWED_GSTACK_MODES:
+            report.error(name, f"pipeline.gstack_mode: {ALLOWED_GSTACK_MODES} 중 하나여야 함")
+
+    skel = data.get("skeleton_sections", {})
+    if isinstance(skel, dict) and "included" not in skel:
+        report.error(name, "skeleton_sections.included 누락")
+
+
+# ── skeleton 정합성 (integrity) ───────────────────────────────────────
+#
+# skeleton.md 의 ```filesystem 블록에서 선언한 경로가 실제 존재하는지 + 플레이스홀더
+# (<pkg>, <cmd_a> 등) 잔존 여부를 검사한다. /ha-verify 가 toolchain 실행 전에 호출.
+
+_PLACEHOLDER_RE = re.compile(r"<[a-z_][a-z0-9_]*>")
+
+_FILESYSTEM_BLOCK_RE = re.compile(r"^```filesystem\s*\n(.*?)\n```", re.MULTILINE | re.DOTALL)
+
+
+def _parse_filesystem_tree(block: str) -> list[str]:
+    """들여쓰기 트리를 상대 경로 리스트로 평면화.
+
+    예:
+        backend/
+          pyproject.toml
+          src/pkg/
+            cli.py
+
+    결과: ['backend/', 'backend/pyproject.toml', 'backend/src/pkg/', 'backend/src/pkg/cli.py']
+    """
+    paths: list[str] = []
+    stack: list[tuple[int, str]] = []  # (indent_depth, parent_prefix)
+    for raw in block.splitlines():
+        line = raw.rstrip()
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        # 인라인 주석 제거
+        if " #" in stripped:
+            stripped = stripped.split(" #", 1)[0].rstrip()
+        if not stripped:
+            continue
+        indent = len(line) - len(stripped)
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        prefix = stack[-1][1] if stack else ""
+        full = prefix + stripped
+        paths.append(full)
+        if stripped.endswith("/"):
+            stack.append((indent, full))
+    return paths
+
+
+def _find_plan_file(project: Path, override: Path | None) -> Path | None:
+    if override is not None:
+        return override if override.exists() else None
+    candidates = [
+        project / "docs" / "harness-plan.md",
+        project / "backend" / "docs" / "harness-plan.md",
+    ]
+    return next((c for c in candidates if c.exists()), None)
+
+
+def _check_placeholders(skeleton_path: Path, text: str, report: Report) -> None:
+    """skeleton 본문에 치환 안 된 플레이스홀더가 있는지 확인."""
+    # 백틱 코드 블록 중 ```python/```ts 등은 예제 코드일 수 있어 스킵.
+    # filesystem 블록은 포함 (실제 경로여야 함).
+    # 개행 보존 치환 — 라인 번호가 원본과 일치하도록.
+    sanitized = re.sub(
+        r"```(?!filesystem)\w*\n.*?\n```",
+        lambda m: "\n" * m.group(0).count("\n"),
+        text,
+        flags=re.DOTALL,
+    )
+    found: dict[str, int] = {}
+    for lineno, line in enumerate(sanitized.splitlines(), 1):
+        for m in _PLACEHOLDER_RE.finditer(line):
+            found.setdefault(m.group(0), lineno)
+    for placeholder, first_line in sorted(found.items()):
+        report.error(
+            skeleton_path.name,
+            f"플레이스홀더 미치환 (line {first_line}): {placeholder} — /ha-design 에서 실제 값으로 기입",
+        )
+
+
+def _check_filesystem(skeleton_path: Path, text: str, project: Path, report: Report) -> None:
+    """```filesystem 블록에 선언된 경로가 실재하는지 검사."""
+    m = _FILESYSTEM_BLOCK_RE.search(text)
+    if not m:
+        # filesystem 블록은 선택 사항 (프로파일이 선언 요구 시 별도 체크)
+        report.warn(skeleton_path.name, "```filesystem 블록 없음 — 파일 구조 명세 권장")
+        return
+    declared = _parse_filesystem_tree(m.group(1))
+    if not declared:
+        report.warn(skeleton_path.name, "```filesystem 블록이 비어있음")
+        return
+
+    missing: list[str] = []
+    for rel in declared:
+        abs_path = (project / rel).resolve()
+        if not abs_path.exists():
+            missing.append(rel)
+
+    if missing:
+        for rel in missing:
+            report.error(
+                skeleton_path.name,
+                f"선언 경로 미존재: {rel}",
+            )
+
+
+def check_integrity(project: Path, plan_override: Path | None, report: Report) -> None:
+    """skeleton.md 선언 ↔ 실재 파일시스템 정합성 검사 (플레이스홀더 + 경로 존재)."""
+    plan_path = _find_plan_file(project, plan_override)
+    if plan_path is None:
+        report.error("harness-plan.md", f"파일 없음 (프로젝트: {project})")
+        return
+    report.files_checked += 1  # plan.md 는 참고만 하고 실제 검증은 skeleton.md 에
+
+    skeleton_path = plan_path.parent / "skeleton.md"
+    if not skeleton_path.exists():
+        report.warn("skeleton.md", "아직 생성 안 됨 (skip) — /ha-design 후 다시 실행")
+        return
+
+    report.files_checked += 1
+    try:
+        text = skeleton_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        report.error(skeleton_path.name, f"읽기 실패: {exc}")
+        return
+
+    _check_placeholders(skeleton_path, text, report)
+    _check_filesystem(skeleton_path, text, project, report)
+
+
+# ── 러너 ───────────────────────────────────────────────────────────────
+
+def validate_all(report: Report) -> None:
+    registry_path = HARNESS_ROOT / "profiles" / "_registry.yaml"
+    if registry_path.exists():
+        validate_registry(registry_path, report)
+    else:
+        report.error("_registry.yaml", "파일 없음")
+
+    profiles_dir = HARNESS_ROOT / "profiles"
+    if profiles_dir.exists():
+        for f in sorted(profiles_dir.glob("*.md")):
+            if f.name == "_base.md":
+                validate_base_md(f, report)
+            else:
+                validate_profile(f, report)
+        detect_inheritance_cycles(profiles_dir, report)
+    else:
+        report.error("profiles/", "디렉토리 없음")
+
+    fragments_dir = HARNESS_ROOT / "templates" / "skeleton"
+    if fragments_dir.exists():
+        for f in sorted(fragments_dir.glob("*.md")):
+            validate_fragment(f, report)
+    else:
+        report.error("templates/skeleton/", "디렉토리 없음")
+
+
+def validate_single(target: Path, report: Report) -> None:
+    if not target.exists():
+        report.error(target.name, "파일 없음")
+        return
+
+    # 경로 기반 분기
+    name = target.name
+    parent = target.parent.name
+
+    if name == "_registry.yaml":
+        validate_registry(target, report)
+    elif name == "_base.md":
+        validate_base_md(target, report)
+    elif parent == "profiles":
+        validate_profile(target, report)
+    elif parent == "skeleton":
+        validate_fragment(target, report)
+    elif name == "harness-plan.md":
+        validate_plan(target, report)
+    else:
+        report.error(name, f"알 수 없는 파일 위치 (parent='{parent}'). --plan 플래그를 쓰거나 올바른 위치에 두세요.")
+
+
+def print_report(report: Report) -> None:
+    for issue in report.issues:
+        tag = "[ERROR]" if issue.severity == "error" else "[WARN] "
+        print(f"{tag} [{issue.file}] {issue.message}")
+
+    print()
+    print(f"Files checked: {report.files_checked}")
+    print(f"Errors: {report.error_count}")
+    print(f"Warnings: {report.warn_count}")
+
+    if report.error_count == 0:
+        print("\n[OK] Schema validation passed")
+    else:
+        print("\n[FAIL] Validation failed - fix errors above")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="harness")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    v = sub.add_parser("validate", help="스키마 검증")
+    v.add_argument("target", nargs="?", help="검증 대상: all|profiles|fragments|registry|<path>")
+    v.add_argument("--plan", type=Path, help="harness-plan.md 경로")
+
+    i = sub.add_parser("integrity", help="skeleton.md ↔ 실재 파일시스템 정합성 검사")
+    i.add_argument("--project", type=Path, default=Path.cwd(), help="프로젝트 루트 (default: cwd)")
+    i.add_argument("--plan", type=Path, default=None, help="harness-plan.md 경로 (자동 탐색)")
+
+    args = parser.parse_args()
+
+    if args.cmd == "integrity":
+        report = Report()
+        check_integrity(args.project.resolve(), args.plan, report)
+        print_report(report)
+        return 0 if report.error_count == 0 else 1
+
+    if args.cmd != "validate":
+        parser.print_help()
+        return 2
+
+    report = Report()
+
+    if args.plan:
+        validate_plan(args.plan, report)
+    elif args.target is None or args.target == "all":
+        validate_all(report)
+    elif args.target == "profiles":
+        profiles_dir = HARNESS_ROOT / "profiles"
+        registry = profiles_dir / "_registry.yaml"
+        if registry.exists():
+            validate_registry(registry, report)
+        for f in sorted(profiles_dir.glob("*.md")):
+            if f.name == "_base.md":
+                validate_base_md(f, report)
+            else:
+                validate_profile(f, report)
+        detect_inheritance_cycles(profiles_dir, report)
+    elif args.target == "fragments":
+        fragments_dir = HARNESS_ROOT / "templates" / "skeleton"
+        for f in sorted(fragments_dir.glob("*.md")):
+            validate_fragment(f, report)
+    elif args.target == "registry":
+        validate_registry(HARNESS_ROOT / "profiles" / "_registry.yaml", report)
+    else:
+        validate_single(Path(args.target).expanduser().resolve(), report)
+
+    print_report(report)
+    return 0 if report.error_count == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
