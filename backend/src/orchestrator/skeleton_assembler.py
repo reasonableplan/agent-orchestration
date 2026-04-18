@@ -17,9 +17,36 @@ DEFAULT_HARNESS_DIR = Path.home() / ".claude" / "harness"
 _FRONTMATTER_RE = re.compile(r"^---\r?\n.*?\r?\n---\r?\n?", re.DOTALL)
 _PLACEHOLDER_NUMBER = "{{section_number}}"
 
+# 치환 안 된 템플릿 플레이스홀더 (예: <pkg>, <cmd_a>, <domain>). lowercase snake_case.
+_ANGLE_PLACEHOLDER_RE = re.compile(r"<[a-z_][a-z0-9_]*>")
+# non-filesystem 코드 블록 (예: ```python, ```ts) — 예제용 placeholder 허용.
+_NON_FS_CODE_BLOCK_RE = re.compile(r"```(?!filesystem)\w*\n.*?\n```", re.DOTALL)
+
 
 class FragmentNotFoundError(LookupError):
     """섹션 조각 파일을 글로벌·로컬 어느 곳에서도 찾을 수 없음."""
+
+
+def find_placeholders(text: str) -> dict[str, list[int]]:
+    """assembled skeleton 에서 미치환 템플릿 placeholder (<pkg> 등) 탐색.
+
+    - 코드 블록 (```python, ```ts 등) 내 예제 placeholder 는 제외.
+    - ```filesystem 블록은 포함 (실제 경로여야 함 — LESSON-018 관련 정합성 게이트).
+    - 라인 번호는 원본 기준 (sanitize 시 개행 유지).
+
+    Returns:
+        {placeholder_literal: [line_numbers]}. 없으면 빈 dict.
+    """
+    def _strip_block(m: re.Match[str]) -> str:
+        # 개행만 남겨 라인 번호 보존
+        return "\n" * m.group(0).count("\n")
+
+    sanitized = _NON_FS_CODE_BLOCK_RE.sub(_strip_block, text)
+    found: dict[str, list[int]] = {}
+    for lineno, line in enumerate(sanitized.splitlines(), 1):
+        for match in _ANGLE_PLACEHOLDER_RE.finditer(line):
+            found.setdefault(match.group(0), []).append(lineno)
+    return found
 
 
 class SkeletonAssembler:
