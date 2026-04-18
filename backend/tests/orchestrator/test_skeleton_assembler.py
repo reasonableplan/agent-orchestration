@@ -13,6 +13,7 @@ import pytest
 from src.orchestrator.skeleton_assembler import (
     FragmentNotFoundError,
     SkeletonAssembler,
+    find_placeholders,
 )
 
 
@@ -169,3 +170,83 @@ def test_assemble_with_local_override(tmp_path: Path) -> None:
     out = asm.assemble(["overview"])
     assert "LOCAL" in out
     assert "GLOBAL" not in out
+
+
+# ── find_placeholders ──────────────────────────────────────────────
+
+
+def test_find_placeholders_empty_text_returns_empty() -> None:
+    assert find_placeholders("") == {}
+
+
+def test_find_placeholders_clean_skeleton() -> None:
+    text = dedent("""
+        # Project
+        ## Stack
+        Python, FastAPI
+    """).strip()
+    assert find_placeholders(text) == {}
+
+
+def test_find_placeholders_reports_body_placeholders_with_line_numbers() -> None:
+    text = dedent("""
+        # Project
+        Description of <pkg> module.
+
+        Next line references <cmd_a> again.
+    """).strip()
+    result = find_placeholders(text)
+    assert result == {"<pkg>": [2], "<cmd_a>": [4]}
+
+
+def test_find_placeholders_ignores_non_filesystem_code_blocks() -> None:
+    text = dedent("""
+        # Project
+
+        ```python
+        def <func_name>():  # placeholder in example code — should be ignored
+            return <return_type>
+        ```
+
+        Real placeholder at line 8: <pkg>
+    """).strip()
+    result = find_placeholders(text)
+    assert list(result.keys()) == ["<pkg>"]
+    assert result["<pkg>"] == [8]
+
+
+def test_find_placeholders_catches_filesystem_block_placeholders() -> None:
+    text = dedent("""
+        # Project
+
+        ```filesystem
+        src/<pkg>/
+          cli.py
+        ```
+    """).strip()
+    result = find_placeholders(text)
+    assert "<pkg>" in result
+    assert result["<pkg>"] == [4]
+
+
+def test_find_placeholders_line_numbers_preserved_after_code_block_strip() -> None:
+    """코드 블록 치환 시 개행 보존 — placeholder 라인 번호가 원본과 일치."""
+    text = dedent("""
+        # Header
+
+        ```python
+        line 4 in block
+        line 5 in block
+        line 6 in block
+        ```
+
+        <pkg> at line 9
+    """).strip()
+    result = find_placeholders(text)
+    assert result["<pkg>"] == [9]
+
+
+def test_find_placeholders_multiple_occurrences_same_placeholder() -> None:
+    text = "<pkg>\n<pkg>\n<pkg>"
+    result = find_placeholders(text)
+    assert result == {"<pkg>": [1, 2, 3]}
