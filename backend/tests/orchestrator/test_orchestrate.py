@@ -732,14 +732,8 @@ class TestRunPipelineWithPhases:
 
 
 class TestMaterializeSkeleton:
-    def test_creates_skeleton_md(self, orchestra: Orchestra, tmp_path: Path) -> None:
-        docs_dir = tmp_path / "docs"
-        docs_dir.mkdir()
-        (docs_dir / "skeleton_template.md").write_text(
-            "## 6. DB 스키마\n_미작성_\n\n## 7. API 스키마\n_미작성_\n",
-            encoding="utf-8",
-        )
-
+    def test_creates_skeleton_md(self, orchestra: Orchestra) -> None:
+        """Architect + Designer 출력 섹션을 추출해 skeleton.md 로 이어붙인다."""
         architect_out = "## 6. DB 스키마\n| id | UUID |\n"
         designer_out = "## 7. API 스키마\n| GET | /api |\n"
 
@@ -750,23 +744,23 @@ class TestMaterializeSkeleton:
         assert "| id | UUID |" in content
         assert "| GET | /api |" in content
 
+    def test_designer_overwrites_architect_for_same_section(
+        self, orchestra: Orchestra
+    ) -> None:
+        """같은 section_num 이면 Designer 가 Architect 를 덮어쓴다 (dedup 계약)."""
+        architect_out = "## 7. API 스키마\n| GET | /old |\n"
+        designer_out = "## 7. API 스키마\n| GET | /new |\n"
+
+        path = orchestra.materialize_skeleton(architect_out, designer_out)
+        content = path.read_text(encoding="utf-8")
+
+        assert "/new" in content
+        assert "/old" not in content
+
     def test_no_sections_extracted_raises(self, orchestra: Orchestra) -> None:
         """섹션 헤딩 없는 출력 → ValueError (빈 skeleton 방지)."""
         with pytest.raises(ValueError, match="skeleton 섹션 추출 실패"):
             orchestra.materialize_skeleton("출력 A", "출력 B")
-
-    def test_no_sections_with_template_raises(
-        self, orchestra: Orchestra, tmp_path: Path
-    ) -> None:
-        """템플릿이 있어도 섹션 헤딩 없는 출력 → ValueError."""
-        docs_dir = tmp_path / "docs"
-        docs_dir.mkdir()
-        (docs_dir / "skeleton_template.md").write_text(
-            "## 6. DB 스키마\n_미작성_\n", encoding="utf-8"
-        )
-
-        with pytest.raises(ValueError, match="skeleton 섹션 추출 실패"):
-            orchestra.materialize_skeleton("일반 텍스트", "일반 텍스트")
 
     async def test_pipeline_returns_failure_on_empty_skeleton(
         self, orchestra: Orchestra

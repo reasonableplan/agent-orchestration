@@ -64,13 +64,15 @@ class TaskItem:
 class SkeletonSection:
     """에이전트가 채운 skeleton 섹션.
 
-    section_num — 레거시 (구 skeleton_template.md 의 번호).
-    section_id  — Harness v2 (헤딩 제목이 SECTION_TITLES 와 매칭되면 자동 채워짐).
+    section_num — 에이전트 출력의 `## N.` 헤딩에서 추출한 번호 ("6", "7", "17" 등).
+                  materialize_skeleton 의 dedup 키로 사용.
+    section_id  — 헤딩 제목이 SECTION_TITLES 와 매칭되면 자동 채워짐 (Harness v2).
+                  None 이면 매칭 안 된 것.
     """
 
-    section_num: str  # "6", "7", "17" 등 — 레거시
+    section_num: str
     content: str
-    section_id: str | None = None  # Harness v2 — None 이면 매칭 안 됨
+    section_id: str | None = None
 
 
 # ---------------------------------------------------------------------------

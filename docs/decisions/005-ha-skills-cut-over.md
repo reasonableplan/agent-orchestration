@@ -96,9 +96,10 @@ v1 의 `/my-*` 스킬 12종 과 v2 의 `/ha-*` 스킬 7종 이 **현재 병행**
 **Phase 4b 후속** (별도 플랜):
 
 - [ ] `Orchestra.run_pipeline_with_phases` 자체를 `assemble_skeleton_for_profiles` 기반으로 재작성 (v2 스킬 경로와 일원화)
-- [ ] `docs/workflow-unified.md` 등 v1 워크플로우 문서 `docs/archive/` 로 이동
 
-**참고**: install.sh / install.ps1 — my-\* 관련 제거 불필요 (원래 복사 대상 아님)
+**참고**:
+- `docs/` 디렉토리 전체가 `.gitignore` 대상이므로 `workflow-unified.md` 등 로컬 v1 문서는 공개 포트폴리오에 포함되지 않음 (아카이브 불필요).
+- `install.sh` / `install.ps1` — my-\* 관련 제거 불필요 (원래 복사 대상 아님).
 
 ## References
 

@@ -200,8 +200,7 @@ class Orchestra:
         """
         skeleton_path = self.project_dir / "docs" / "skeleton.md"
 
-        # 두 에이전트 출력에서 섹션 추출 (Designer가 Architect를 덮어쓸 수 있음).
-        # 중복 section_num 은 나중에 온 것이 이전 것을 덮어씀.
+        # 두 에이전트 출력에서 섹션 추출. Architect 먼저, Designer 뒤.
         raw_sections = extract_filled_sections(architect_output)
         raw_sections += extract_filled_sections(designer_output)
         if not raw_sections:
@@ -209,6 +208,9 @@ class Orchestra:
                 "skeleton 섹션 추출 실패 — Architect/Designer 출력에서 유효한 섹션을 찾을 수 없음"
             )
 
+        # 같은 section_num 이면 Designer 가 Architect 를 덮어씀 (Python dict: 같은 key
+        # 재할당 시 값만 갱신, 최초 삽입 순서는 유지). 결과 섹션 순서는 Architect 가
+        # 먼저 선언한 순서 + Designer 만 선언한 섹션이 뒤에 오는 구조.
         deduped: dict[str, str] = {s.section_num: s.content for s in raw_sections}
         filled_text = "\n\n".join(deduped.values())
 
@@ -440,7 +442,7 @@ class Orchestra:
             prompt: 태스크 프롬프트
             max_retries: 최대 재시도 횟수 (기본 3)
             is_frontend: 프론트엔드 코드면 True (의존성/스타일 규칙 적용)
-            allowed_endpoints: skeleton 섹션 7에서 추출한 허용 엔드포인트 목록
+            allowed_endpoints: skeleton `interface.http` 섹션에서 추출한 허용 엔드포인트 목록
 
         Returns:
             {"implement": RunResult, "verify": dict, "attempts": int, "passed": bool}
