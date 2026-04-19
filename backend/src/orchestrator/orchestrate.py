@@ -126,6 +126,8 @@ class Orchestra:
     agent_logger: AgentLogger = field(init=False)
     # implement_with_retry per-task Lock — task_id별 직렬화, 병렬 태스크 간 간섭 방지
     _task_locks: dict[str, asyncio.Lock] = field(init=False)
+    # SecurityHooks 지연 캐시 — 첫 verify() 호출 시 프로파일 감지 후 주입.
+    _security_hooks: SecurityHooks | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         self.project_dir = Path(self.project_dir).resolve()
@@ -140,6 +142,40 @@ class Orchestra:
         )
         self.pipeline = ValidationPipeline(self.project_dir)
         self._task_locks: dict[str, asyncio.Lock] = {}
+        self._security_hooks = None
+
+    def _get_security_hooks(self) -> SecurityHooks:
+        """프로파일 기반 SecurityHooks 를 지연 생성/캐싱 (v2).
+
+        첫 감지된 프로파일의 whitelist.runtime + whitelist.dev 합집합을 주입한
+        SecurityHooks 인스턴스를 반환. 프로파일 감지 실패 시 기본 모듈 whitelist
+        사용 (legacy 호환). 프로젝트당 1회 빌드 후 캐시.
+        """
+        if self._security_hooks is not None:
+            return self._security_hooks
+        try:
+            loader = ProfileLoader(project_dir=self.project_dir)
+            matches = loader.detect()
+        except Exception as exc:  # 감지 실패는 치명적이지 않음 — fallback
+            logger.info("프로파일 감지 실패 — 기본 SecurityHooks 사용: %s", exc)
+            self._security_hooks = SecurityHooks()
+            return self._security_hooks
+
+        if not matches:
+            logger.info("매칭 프로파일 없음 — 기본 SecurityHooks 사용")
+            self._security_hooks = SecurityHooks()
+            return self._security_hooks
+
+        # 첫 매칭 프로파일 사용 (모노레포는 상위 루트 기준)
+        profile = matches[0].profile
+        logger.info(
+            "SecurityHooks v2 — 프로파일 '%s' whitelist 주입 (runtime=%d, dev=%d)",
+            profile.id,
+            len(profile.whitelist.runtime),
+            len(profile.whitelist.dev),
+        )
+        self._security_hooks = SecurityHooks.from_profile(profile)
+        return self._security_hooks
 
     def _get_task_lock(self, task_id: str) -> asyncio.Lock:
         """task_id별 Lock을 반환한다. 없으면 새로 생성."""
@@ -485,7 +521,7 @@ class Orchestra:
         # 1. 보안 훅 — 에이전트 출력 코드 분석
         task_result = self.state.load_task_result(task_id)
         agent_output = (task_result or {}).get("output", "") if isinstance(task_result, dict) else ""
-        security_result: SecurityResult = SecurityHooks().run_all(
+        security_result: SecurityResult = self._get_security_hooks().run_all(
             agent_output,
             is_frontend=is_frontend,
             allowed_endpoints=allowed_endpoints,

@@ -96,6 +96,7 @@ async def run(
     from_skeleton: bool = False,
     max_task_retries: int = 3,
     max_phase_retries: int = 2,
+    profile_ids: list[str] | None = None,
 ) -> bool:
     """인터랙티브 파이프라인 실행.
 
@@ -106,6 +107,9 @@ async def run(
         project_dir: 프로젝트 루트 디렉토리
         max_task_retries: 태스크당 최대 재시도 횟수
         max_phase_retries: Phase 리뷰 reject 시 최대 재시도 횟수
+        profile_ids: 지정 시 v2 경로 (`materialize_skeleton_v2`) 사용 — 프로파일
+                     템플릿으로 빈 skeleton 조립 후 에이전트 출력을 section_id 로
+                     merge. 미지정이면 legacy `materialize_skeleton` 사용.
 
     Returns:
         True: 전체 파이프라인 성공, False: 중단 또는 실패
@@ -216,10 +220,17 @@ async def run(
         return False
 
     try:
-        orchestra.materialize_skeleton(
-            architect_output=design_results["architect"].output,
-            designer_output=design_results["designer"].output,
-        )
+        if profile_ids:
+            orchestra.materialize_skeleton_v2(
+                architect_output=design_results["architect"].output,
+                designer_output=design_results["designer"].output,
+                profile_ids=profile_ids,
+            )
+        else:
+            orchestra.materialize_skeleton(
+                architect_output=design_results["architect"].output,
+                designer_output=design_results["designer"].output,
+            )
     except ValueError as exc:
         print(f"\n❌ skeleton 생성 실패 — Architect/Designer 출력에 유효한 섹션 없음: {exc}")
         return False
@@ -314,6 +325,13 @@ def main() -> None:
         default=None,
         help="프로젝트 루트 디렉토리 (기본: PROJECT_DIR 환경변수 또는 backend/)",
     )
+    parser.add_argument(
+        "--profile",
+        action="append",
+        default=None,
+        help="v2 프로파일 ID (복수 지정 가능: --profile fastapi --profile react-vite). "
+             "지정 시 프로파일 템플릿으로 skeleton 조립 후 섹션 ID 로 merge.",
+    )
     args = parser.parse_args()
 
     if args.requirements:
@@ -341,7 +359,12 @@ def main() -> None:
         or Path(__file__).parents[2]
     )
     success = asyncio.run(
-        run(requirements, project_dir, from_skeleton=args.from_skeleton)
+        run(
+            requirements,
+            project_dir,
+            from_skeleton=args.from_skeleton,
+            profile_ids=args.profile,
+        )
     )
     sys.exit(0 if success else 1)
 

@@ -98,16 +98,19 @@ class AgentRunner:
             for agent, prompt in tasks
         ]
         results = await asyncio.gather(*coros, return_exceptions=True)
-        # 예외를 RunResult로 변환 — 한 에이전트 실패가 나머지에 영향 없음.
-        # BaseException 으로 체크해야 KeyboardInterrupt/SystemExit 도 안전하게 캡처.
+        # 예외를 RunResult 로 변환 — 한 에이전트 실패가 나머지에 영향 없음.
+        # `Exception` 만 캐치 — `CancelledError` / `KeyboardInterrupt` / `SystemExit` 는
+        # `BaseException` 직속이므로 자동으로 제외되어 상위 취소/중단 전파가 보존됨.
         converted: list[RunResult] = []
         for i, r in enumerate(results):
-            if isinstance(r, BaseException):
+            if isinstance(r, Exception):
                 agent_name = tasks[i][0]
                 converted.append(RunResult(
                     agent=agent_name, output="", success=False,
                     duration_ms=0, attempts=0, error=str(r),
                 ))
+            elif isinstance(r, BaseException):
+                raise r  # CancelledError 등 — 절대 삼키지 말고 재발생
             else:
                 converted.append(r)
         return converted
