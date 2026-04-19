@@ -30,7 +30,7 @@ async def list_issues(projectId: int): ...
 **규칙**:
 - 보드/백로그 = `le=500`
 - 단순 목록 = `le=50`
-- skeleton 섹션 7에 명시된 상한 따라라
+- skeleton `interface.http` 섹션에 명시된 상한 따라라
 
 ---
 
@@ -82,7 +82,7 @@ const projectId = paramId ? Number(paramId) : storeId
 
 **문제**: SQLModel/SQLAlchemy 기본값이 Integer인지 UUID인지 불명확해서 프론트-백 타입 불일치 발생.
 
-**규칙**: skeleton 섹션 6에서 Integer auto-increment vs UUID 명시 후 모델 구현 방법까지 기술.
+**규칙**: skeleton `persistence` 섹션에서 Integer auto-increment vs UUID 명시 후 모델 구현 방법까지 기술.
 
 ---
 
@@ -93,7 +93,7 @@ const projectId = paramId ? Number(paramId) : storeId
 
 **규칙**: Designer는 화면마다 가능한 **모든 사용자 액션**을 명시해야 함.
 - 생성 버튼, 편집 버튼, 삭제 버튼, 상태 변경 드롭다운 등 전부 포함
-- Reviewer는 skeleton 섹션 7 API와 섹션 8 UI를 대조해서 API는 있는데 UI 액션이 없는 경우 reject
+- Reviewer는 skeleton `interface.http` 와 `view.screens` / `view.components` 를 대조해서 API는 있는데 UI 액션이 없는 경우 reject
 
 ---
 
@@ -158,7 +158,7 @@ if __name__ == "__main__":
 **문제**: task breakdown에 프론트엔드 테스트 태스크가 없었고 화이트리스트에 vitest가 없었음.
 프론트엔드 테스트 0개로 완료 → 시각적 회귀 및 로직 버그 자동 감지 불가.
 
-**규칙**: skeleton 섹션 11(테스트)에서 프론트엔드 테스트 전략 명시 필수.
+**규칙**: skeleton `notes` 섹션 (테스트 전략 영역) 에 프론트엔드 테스트 전략 명시 필수.
 - 화이트리스트에 `vitest`, `@testing-library/react` 포함
 - 핵심 비즈니스 로직(계산, 상태 전이)은 단위 테스트 필수
 - Orchestrator는 프론트엔드 테스트 태스크를 task breakdown에 포함
@@ -234,7 +234,7 @@ confirmedBy: confidence >= Math.round(AUTO_CONFIRM_THRESHOLD * 100) ? 'auto' : n
 **문제**: Designer가 색상/간격을 처음부터 직접 정의하면 검증된 시각적 품질 보장 불가.
 "기능은 되지만 디자인은 밋밋한" 수준에 머무름.
 
-**규칙**: skeleton 섹션 8 디자인 가이드에 디자인 시스템 소스를 반드시 명시.
+**규칙**: skeleton `view.screens` / `view.components` 섹션의 디자인 가이드에 디자인 시스템 소스를 반드시 명시.
 - `shadcn/ui 기본 테마 사용` (권장 — 접근성 검증됨)
 - 커스텀 시: Mobbin/Dribbble 레퍼런스 URL 첨부 필수
 - Designer가 색상을 직접 정의하는 경우 Reviewer가 레퍼런스 없으면 reject

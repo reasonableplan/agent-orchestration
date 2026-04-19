@@ -236,29 +236,51 @@ frontend_coder:
 - celery         ← 백그라운드 작업 추가
 ```
 
-> **주의**: 허용 라이브러리를 변경하면 `backend/docs/skeleton_template.md`의 섹션 3(기술 스택)도 함께 수정해야 Architect가 올바른 기술 스택으로 설계한다.
+> **주의**: 허용 라이브러리를 변경하면 해당 프로파일 (`~/.claude/harness/profiles/<stack>.md`) 의 `whitelist.runtime` / `whitelist.dev` 도 함께 수정해야 `SecurityHooks` 가 올바른 의존성을 허용한다.
 
-### 방법 B: 프로젝트 계약서 템플릿 수정
+### 방법 B: 프로파일 / skeleton 조각 수정 (v2)
 
-`backend/docs/skeleton_template.md`는 Architect + Designer가 채우는 19개 섹션의 구조를 정의한다.
-프로젝트 유형에 맞게 섹션을 추가하거나 기본 제약을 바꿀 수 있다.
+HarnessAI v2 는 프로파일 + 재사용 가능한 skeleton 조각 구조.
 
-**예시 — 모든 프로젝트에 WebSocket 섹션 추가:**
+**1. 프로파일** (`~/.claude/harness/profiles/<stack>.md`) — 스택별 규칙 전체:
+- 감지 규칙, 컴포넌트, `skeleton_sections.required/optional/order`, `toolchain`, `whitelist`, `lessons_applied`
 
-```markdown
-<!-- skeleton_template.md 에 섹션 추가 -->
-## 18. WebSocket 이벤트 스키마
-- 실시간 알림이 필요한 이벤트 목록
-- 클라이언트 → 서버 / 서버 → 클라이언트 페이로드 타입
+**2. Skeleton 조각** (`~/.claude/harness/templates/skeleton/<section_id>.md`) — 20개 표준 섹션 템플릿:
+- `overview.md`, `interface.http.md`, `core.logic.md`, `persistence.md` 등
+
+**예시 — 새 스택 지원 추가:**
+
+```yaml
+# ~/.claude/harness/profiles/my-stack.md (frontmatter 부분)
+---
+id: my-stack
+extends: _base
+skeleton_sections:
+  required: [overview, stack, interface.http, persistence, errors, tasks, notes]
+  order:    [overview, stack, persistence, interface.http, errors, tasks, notes]
+toolchain:
+  test: "uv run pytest tests/"
+  lint: "uv run ruff check src/"
+  type: "uv run pyright src/"
+whitelist:
+  runtime: [my_custom_lib]
+  dev: [pytest, ruff, pyright]
+---
+```
+
+**검증:**
+```bash
+python ~/.claude/harness/bin/harness validate   # 프로파일 스키마 체크
 ```
 
 ### 커스터마이징 후 확인 사항
 
 ```
 [ ] agents/[에이전트]/CLAUDE.md 수정 완료
-[ ] skeleton_template.md 섹션 3(기술 스택) 업데이트 (라이브러리 변경 시)
+[ ] 프로파일 whitelist 업데이트 (라이브러리 변경 시)
 [ ] agents.yaml 모델/타임아웃 조정 (필요 시)
-[ ] uv run pytest tests/ 통과 확인
+[ ] harness validate — 27 files, 0 errors
+[ ] cd backend && uv run pytest tests/ — 357 pass
 ```
 
 ---
@@ -392,7 +414,7 @@ Claude Code 세션 내에서 gstack 설치 (별도 가이드 참조).
 # → DB 정규화, API 일관성, 누락 엔드포인트 탐지
 
 # 3. IMPLEMENTING 완료 후 — 코드 리뷰
-/my-review    # 보안 14항목 + LESSON 패턴
+/ha-review    # 보안훅 6 + LESSON 21 + ai-slop 7 + 테스트 분포
 /review       # SQL injection, 레이스 컨디션, 동시성
 
 # 4. 배포

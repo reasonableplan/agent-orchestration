@@ -12,7 +12,7 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
   - ADR-002: Skeleton 섹션 번호 → ID 전환
   - ADR-003: 파이프라인 상태를 `harness-plan.md` 단일 파일로
   - ADR-004: ai-slop 감지를 Reviewer 7번째 훅으로 통합
-  - ADR-005: /my-\* 완전 삭제, /ha-\* single cut-over (Phase 4 예정)
+  - ADR-005: /my-\* 완전 삭제, /ha-\* single cut-over (Phase 4a + 4b 실행 완료)
 - **`scripts/benchmark.py` + `docs/benchmarks/`** (B5 — 측정 가능한 부분) —
   LLM 호출 없이 5가지 핵심 연산 latency 측정. 30 iter 기준:
   profile 감지 **4.7 ms**, skeleton 조립 **0.13 ms**,
@@ -68,11 +68,23 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
 - **`orchestrate.py::_extract_allowed_endpoints`** — 레거시 섹션 번호 7 폴백 제거.
   `interface.http` ID 기반 추출만 유지.
 - **`runner.py`** — `build_context(..., use_section_ids=True)` 호출에서 kwarg 제거.
-- **테스트 수**: 365 → 347 (v1 테스트 18개 삭제, v2 커버리지 유지).
+- **테스트 수 흐름**: 365 → 347 (v1 테스트 18개 삭제) → 357 (v2 테스트 10개 추가).
+  최종 backend pytest **357**.
 
 **마이그레이션 가이드**: 기존 HabitFlow / 금칙어게임 / Personal Jira 는 이미 완료 상태라
 영향 없음. 새 프로젝트는 전부 `/ha-init → /ha-design → /ha-plan → /ha-build → /ha-verify
 → /ha-review` 흐름 사용. `/my-lessons` 회고 흐름은 `/ha-deepinit` + `/ha-review` 조합으로 대체.
+
+### Fixed — 포트폴리오 공개 직전 종합 점검
+- **`Orchestra.verify` 가 프로파일 whitelist 무시 버그** — `_get_security_hooks()` 신설.
+  첫 감지된 프로파일로 `SecurityHooks.from_profile()` 을 지연 생성/캐싱. 이전에는 빈
+  기본 whitelist 만 적용돼 프로파일 선언이 무의미했음.
+- **`pipeline_runner.run(profile_ids=...)` v2 경로 추가** — 기존 인터랙티브 CLI 러너가
+  legacy `materialize_skeleton` 만 호출해 v2 profile 기반 구조가 적용되지 않던 문제.
+  `--profile <id>` CLI 옵션 복수 지정 가능.
+- **`runner.py::run_many` 의 `CancelledError` 취소 전파 회복** — `isinstance(r, BaseException)`
+  가 `CancelledError` 를 `RunResult(success=False)` 로 둔갑시켜 graceful shutdown 시
+  취소 신호가 소실되던 문제. `Exception` 만 캐치 + `BaseException` 은 재발생으로 수정.
 
 ---
 

@@ -56,7 +56,7 @@ export HARNESS_AI_HOME="$(pwd)"       # (설치 스크립트가 안내)
   /ha-verify ─────▶ [1] harness integrity (skeleton ↔ 실재 FS)
                     [2] profile toolchain (pytest/ruff/pyright)
                                          ▼
-  /ha-review ─────▶ 보안훅 6 + LESSON 20 + ai-slop 7 + 테스트 분포
+  /ha-review ─────▶ 보안훅 6 + LESSON 21 + ai-slop 7 + 테스트 분포
                                          ▼
                                APPROVE / REJECT → /ship
 ```
@@ -94,13 +94,14 @@ observability · deployment · tasks · notes
 
 ### 3. Shared Lessons — 집단 기억
 
-`backend/docs/shared-lessons.md` 에 과거 20개 실수 패턴. 한 번 발생한 버그는 시스템에 기록 → 모든 미래 `/ha-review` 가 참조 → 반복 방지.
+`backend/docs/shared-lessons.md` 에 과거 21개 실수 패턴. 한 번 발생한 버그는 시스템에 기록 → 모든 미래 `/ha-review` 가 참조 → 반복 방지.
 
 예시:
 - LESSON-001: FastAPI Query params 반드시 snake_case
 - LESSON-013: 프론트엔드 테스트 전략 사전 정의 필수
 - LESSON-018: 상수 정의 길이 ≤ 실제 소비 범위 (dead 상수)
 - LESSON-020: 진행 표시 `[N/M]` 은 실제 작동해야
+- LESSON-021: 태스크 `done` = toolchain 전체 통과 (test + lint + type)
 
 ---
 
@@ -110,7 +111,7 @@ observability · deployment · tasks · notes
 |---|---|---|---|---|
 | 범위 | 프로젝트 전체 | 파일/함수 단위 | 대화 기반 | diff 기반 |
 | 규칙 강제 | **프로파일 + 게이트 8개** | .cursorrules (선언만) | CLAUDE.md (선언만) | 커밋 스타일만 |
-| 실수 축적 | **LESSON 20** (자동 감지 + 리뷰어 참조) | ❌ | ❌ | ❌ |
+| 실수 축적 | **LESSON 21** (자동 감지 + 리뷰어 참조) | ❌ | ❌ | ❌ |
 | 스택 자동감지 | **5개 기본 + 확장 가능** | ❌ | ❌ | ❌ |
 | 병렬 구현 | **/ha-build --parallel** | ❌ | ❌ | ❌ |
 | 설계-구현 계약 | **skeleton.md + integrity 게이트** | ❌ | ❌ | ❌ |
@@ -177,23 +178,18 @@ observability · deployment · tasks · notes
 
 - **Windows 우선 테스트** — Linux/macOS 지원은 설계됐으나 CI 매트릭스 미정
 - **LLM 자동 학습 X** — 새 LESSON 은 수동 추가 (자동 학습은 TODOS.md)
-- **2차 E2E 대기** — 1차(code-hijack, Python CLI) 완주. 2차(fastapi + react-vite 모노레포) 진행 예정
+- **2차 E2E 진행 중** — 1차(code-hijack, Python CLI) 완주. 2차(fastapi + react-vite 모노레포) Phase 1 완주, Phase 2 진행 중
 - **gstack 의존** — 일부 게이트는 gstack 스킬 연계 전제 (독립 실행 가능하나 full power 는 gstack 있을 때)
-- **/my-\* 스킬 12종 잔존** — Phase 4 에서 삭제 예정 (/ha-\* 로 완전 이관)
 
 ---
 
 ## 🗺 Roadmap
 
-**Phase 1-3 (완료)**: 프로파일 시스템 · 7개 /ha-스킬 · 20 LESSONs · 8개 품질 게이트 · 단일 명령 설치
-
-**Phase 4 (진행 중)**:
-- 2차 E2E (fastapi + react-vite 모노레포)
-- /my-\* 12종 삭제, 레거시 SECTION_MAP 정리
-- 추가 프로파일 (next.js, electron, react-native)
+**Phase 1-4 (완료)**: 프로파일 시스템 · 7개 /ha-스킬 · 21 LESSONs · 8개 품질 게이트 · 단일 명령 설치 · /my-\* 스킬 12종 삭제 · v1 레거시 코드 (SECTION_MAP/extract_section/fill_skeleton_template) 제거 · Orchestra v2 wiring
 
 **Phase 5 (계획)**:
 - Live LESSONS 자동 학습 (ha-review 반복 패턴 → 후보 등록)
+- 추가 프로파일 (next.js, electron, react-native)
 - multi-provider (Gemini/OpenAI backend)
 - 비용 추적 (에이전트별 토큰/달러 누적)
 - Claude Code plugin manifest 로 배포
@@ -207,7 +203,8 @@ observability · deployment · tasks · notes
 - **패키지**: uv
 - **에이전트 실행**: Claude CLI subprocess (Gemini/로컬 LLM 교체 가능)
 - **상태**: `docs/harness-plan.md` (YAML frontmatter) + `.orchestra/` JSON (DB 없음)
-- **테스트**: pytest **359개** backend + **12개** install 스냅샷 (회귀 0건)
+- **테스트**: pytest **357개** backend + **12개** install 스냅샷 (회귀 0건)
+- **타입 체크**: pyright **0 errors** (`src/` 전수)
 - **성능** (30 iter, LLM 제외): profile 감지 **~5 ms**, skeleton 조립 **<1 ms**, `harness validate` **~150 ms**, `harness integrity` **~104 ms**. [docs/benchmarks/](docs/benchmarks/)
 - **v2 인프라**: `profile_loader`, `skeleton_assembler`, `plan_manager`, `harness` 검증 CLI
 
@@ -223,10 +220,10 @@ install.sh/ps1        설치 + manifest           ─┘
 backend/
   agents/<role>/CLAUDE.md     7개 에이전트 시스템 프롬프트 (편집 가능)
   agents.yaml                 provider/model/timeout
-  docs/shared-lessons.md      20 LESSONs
+  docs/shared-lessons.md      21 LESSONs
   src/orchestrator/           profile_loader / skeleton_assembler /
                               plan_manager / security_hooks / runner
-  tests/                      356 pytest + skills/ 회귀 방지
+  tests/                      357 pytest + skills/ 회귀 방지
 
 docs/
   ARCHITECTURE.md             시스템 구조 30분 이해
@@ -240,9 +237,10 @@ docs/
 ```bash
 cd backend
 uv sync
-uv run pytest tests/ --rootdir=.      # 356 tests
-uv run ruff check src/
-uv run python -m src.main             # dashboard 서버 (포트 3002)
+uv run pytest tests/ --rootdir=.      # 357 tests
+uv run ruff check src/                 # 0 errors
+uv run pyright src/                    # 0 errors (타입 체크)
+uv run python -m src.main              # dashboard 서버 (포트 3002)
 ```
 
 install 스크립트 회귀 테스트:
@@ -270,7 +268,7 @@ python harness/bin/harness integrity --project .   # skeleton ↔ FS 정합성
 | [CHANGELOG.md](CHANGELOG.md) | 버전별 변경 이력 |
 | [SETUP.md](SETUP.md) | 처음부터 끝까지 설치/실행 가이드 |
 | [TODOS.md](TODOS.md) | 향후 개선 항목 |
-| [backend/docs/shared-lessons.md](backend/docs/shared-lessons.md) | 20개 과거 실수 패턴 |
+| [backend/docs/shared-lessons.md](backend/docs/shared-lessons.md) | 21개 과거 실수 패턴 |
 | [CLAUDE.md](CLAUDE.md) | 구현 시 엄격 규칙 (현업 시니어 수준) |
 | [docs/harness-v2-design.md](docs/harness-v2-design.md) | v2 재설계 상세 작업 로그 |
 
@@ -282,4 +280,4 @@ MIT
 
 ---
 
-**포트폴리오 목표**: 현업 시니어 수준의 코드 품질 기준으로 포트폴리오의 정점을 찍기. 현재 Phase 3 후반 + 2차 E2E 대기 중.
+**포트폴리오 목표**: 현업 시니어 수준의 코드 품질 기준으로 포트폴리오의 정점을 찍기. Phase 1–4 완료, 2차 E2E Phase 1 완주, Phase 2 진행 중.

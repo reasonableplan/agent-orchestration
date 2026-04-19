@@ -31,8 +31,9 @@ cd backend
 uv sync
 
 # 4) 검증
-uv run pytest tests/ --rootdir=.   # 359 tests
-uv run ruff check src/
+uv run pytest tests/ --rootdir=.   # 357 tests
+uv run ruff check src/             # 0 errors
+uv run pyright src/                # 0 errors (타입 체크)
 python ../harness/bin/harness validate  # 프로파일 스키마 검증
 ```
 
@@ -61,7 +62,7 @@ python ../harness/bin/harness validate  # 프로파일 스키마 검증
 
 1. `backend/docs/shared-lessons.md` 파일 끝에 `## LESSON-<NNN>: <title>` 추가
 2. 구조: **문제 → 규칙 → bad/good 코드 예시 → 자동 검출 가능 여부**
-3. 번호 중복 확인: 현재 018/019/020 까지 사용 중
+3. 번호 중복 확인: 현재 021 까지 사용 중 (다음 신규 = 022)
 4. 적용 대상 프로파일의 `lessons_applied` 필드에 LESSON ID 추가
 5. (선택) ai-slop 정규식으로 자동 감지 가능하면 `skills/ha-review/run.py::_AI_SLOP_PATTERNS` 에 패턴 추가
 
@@ -106,8 +107,9 @@ python ../harness/bin/harness validate  # 프로파일 스키마 검증
 
 제출 전 확인:
 
-- [ ] `cd backend && uv run pytest tests/` — 모두 통과 (현재 359개)
+- [ ] `cd backend && uv run pytest tests/` — 모두 통과 (현재 357개)
 - [ ] `uv run ruff check src/` — 0 errors
+- [ ] `uv run pyright src/` — 0 errors
 - [ ] `python harness/bin/harness validate` — 0 errors
 - [ ] 신규 코드에 테스트 동반 (구현 1 = 테스트 최소 1)
 - [ ] `./tests/install/test_install_snapshot.sh` — install 수정 시
@@ -152,7 +154,7 @@ react-vite) 초기 integrity 4개 false positive → 0.
 
 | 레벨 | 명령 | 역할 |
 |---|---|---|
-| pytest | `uv run pytest tests/` | 359개 단위/통합 테스트 |
+| pytest | `uv run pytest tests/` | 357개 단위/통합 테스트 |
 | ruff | `uv run ruff check src/` | 코드 스타일 |
 | pyright | `uv run pyright src/` | 타입 체크 |
 | harness validate | `python harness/bin/harness validate` | 프로파일/스킬 스키마 |
