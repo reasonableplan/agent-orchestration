@@ -1,7 +1,7 @@
 # ADR-005: /my-\* 스킬 완전 삭제, /ha-\* 로 single cut-over
 
-- **Status**: Proposed (Phase 4 에서 실행 예정)
-- **Date**: 2026-04-10 (결정), 2026-04-?? (실행 예정)
+- **Status**: Accepted — Phase 4a 실행 (스킬 12종 삭제 완료 2026-04-19), Phase 4b 대기 (backend production 레거시 코드 제거)
+- **Date**: 2026-04-10 (결정), 2026-04-19 (Phase 4a 실행)
 - **Depends on**: [ADR-001 프로파일 기반 아키텍처](001-profile-based-architecture.md)
 
 ## Context
@@ -76,18 +76,22 @@ v1 의 `/my-*` 스킬 12종 과 v2 의 `/ha-*` 스킬 7종 이 **현재 병행**
 
 ## Implementation
 
-**Phase 4 실행 체크리스트** (예정):
+**Phase 4a** — 스킬 + 문서 정리 (2026-04-19 완료):
 
-- [ ] 2차 E2E (ui-assistant) 완주 확인
-- [ ] `~/.claude/skills/my-*` 12 디렉토리 삭제
-- [ ] 레포 내 `skills/my-*` 참조 grep 후 제거
+- [x] 2차 E2E (ui-assistant) Phase 1 완주 확인
+- [x] `~/.claude/skills/my-*` 12 디렉토리 삭제 (backup: `~/.claude/.my-skills-backup-20260419-062118/`)
+- [x] `README.md` "v1 (레거시)" 섹션 제거
+- [x] `CHANGELOG.md` Breaking Change 섹션 기록
+- [x] ADR-005 status 갱신 (Proposed → Accepted 부분)
+
+**Phase 4b** — backend production 레거시 제거 (대기):
+
 - [ ] `backend/src/orchestrator/context.py` 의 `SECTION_MAP` / `fill_skeleton_template` / `extract_section` 제거
 - [ ] `backend/src/orchestrator/orchestrate.py` 의 `materialize_skeleton` v1 경로 제거 (assemble_skeleton_for_profiles 로 완전 전환)
 - [ ] `backend/tests/` 에서 v1 테스트 삭제 (v2 로 이미 커버되는지 먼저 확인)
-- [ ] `README.md` "v1 (레거시)" 섹션 제거
 - [ ] `docs/workflow-unified.md` 등 v1 워크플로우 문서 `docs/archive/` 로 이동
-- [ ] `CHANGELOG.md` 에 Breaking Change 섹션 기록
-- [ ] install.sh / install.ps1 — my-\* 관련 제거 불필요 (원래 복사 대상 아님)
+
+**참고**: install.sh / install.ps1 — my-\* 관련 제거 불필요 (원래 복사 대상 아님)
 
 ## References
 

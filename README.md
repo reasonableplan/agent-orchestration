@@ -276,20 +276,6 @@ python harness/bin/harness integrity --project .   # skeleton ↔ FS 정합성
 
 ---
 
-## 🗂 v1 (레거시) — `/my-*` 스킬 12종
-
-v1 은 `fastapi / nextjs / react-native / electron` 4개 스택 하드코딩. 여전히 동작하지만 새 프로젝트는 v2 (`/ha-*`) 권장. Phase 4 에서 삭제 예정.
-
-```
-/my-db-design → /my-architect → /my-designer → /my-skeleton-check →
-/my-tasks → /my-db → /my-api → /my-ui → /my-logic →
-/my-type-check → /my-review → /my-lessons
-```
-
-상세: [docs/workflow-unified.md](docs/workflow-unified.md)
-
----
-
 ## License
 
 MIT

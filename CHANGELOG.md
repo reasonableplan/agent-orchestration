@@ -40,6 +40,23 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
 ### Fixed
 - (항목 추가되는대로)
 
+### Removed — **BREAKING** (Phase 4a)
+
+- **`/my-*` 스킬 12종 전체 삭제** — `~/.claude/skills/my-db-design/`, `my-architect/`,
+  `my-designer/`, `my-skeleton-check/`, `my-tasks/`, `my-db/`, `my-api/`, `my-ui/`,
+  `my-logic/`, `my-type-check/`, `my-review/`, `my-lessons/`. v1 의 4-스택 하드코딩
+  (fastapi/nextjs/react-native/electron) 파이프라인이 v2 프로파일 기반 (`/ha-*` 7종) 으로
+  완전 대체됨. [ADR-005](docs/decisions/005-ha-skills-cut-over.md) 참조.
+- **README `v1 (레거시)` 섹션 제거** — 신규 사용자의 혼란 제거.
+
+**마이그레이션 가이드**: 기존 HabitFlow / 금칙어게임 / Personal Jira 는 이미 완료 상태라
+영향 없음. 새 프로젝트는 전부 `/ha-init → /ha-design → /ha-plan → /ha-build → /ha-verify
+→ /ha-review` 흐름 사용. `/my-lessons` 회고 흐름은 `/ha-deepinit` + `/ha-review` 조합으로 대체.
+
+**Phase 4b (대기)** — `backend/src/orchestrator/context.py` 의 `SECTION_MAP` /
+`fill_skeleton_template` / `extract_section` + `orchestrate.py::materialize_skeleton` v1 경로
+제거는 별도 커밋으로 분리 (2-3h 소요, 테스트 영향 확인 필요).
+
 ---
 
 ## [0.3.0] — 2026-04-18 — "포트폴리오 정점 업그레이드"
