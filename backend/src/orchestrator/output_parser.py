@@ -1,4 +1,4 @@
-"""에이전트 출력 파서 — raw 문자열에서 구조화된 결과를 추출한다."""
+"""Agent output parser — extract structured results from raw text."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class DesignVerdict(StrEnum):
 
 @dataclass
 class DesignNegotiationResult:
-    """Designer의 설계 협의 결과."""
+    """Result of a Designer design negotiation."""
 
     verdict: DesignVerdict
     api_requests: list[str] = field(default_factory=list)
@@ -28,7 +28,7 @@ class DesignNegotiationResult:
 
 @dataclass
 class PRReviewResult:
-    """Reviewer의 PR 리뷰 결과."""
+    """Reviewer PR review result."""
 
     verdict: ReviewVerdict
     violations: list[str] = field(default_factory=list)
@@ -38,7 +38,7 @@ class PRReviewResult:
 
 @dataclass
 class PhaseReviewResult:
-    """Reviewer의 Phase 리뷰 결과."""
+    """Reviewer phase-level review result."""
 
     phase: int
     verdict: ReviewVerdict
@@ -51,7 +51,7 @@ class PhaseReviewResult:
 
 @dataclass
 class TaskItem:
-    """Orchestrator가 분해한 태스크 하나."""
+    """A single task item from Orchestrator breakdown."""
 
     id: str
     agent: str
@@ -62,12 +62,11 @@ class TaskItem:
 
 @dataclass
 class SkeletonSection:
-    """에이전트가 채운 skeleton 섹션.
+    """A filled skeleton section extracted from agent output.
 
-    section_num — 에이전트 출력의 `## N.` 헤딩에서 추출한 번호 ("6", "7", "17" 등).
-                  materialize_skeleton 의 dedup 키로 사용.
-    section_id  — 헤딩 제목이 SECTION_TITLES 와 매칭되면 자동 채워짐 (Harness v2).
-                  None 이면 매칭 안 된 것.
+    section_num: heading number from `## N.` (e.g. "6", "17"). Dedup key.
+    section_id:  auto-populated when heading title matches SECTION_TITLES (v2).
+                 None if no match.
     """
 
     section_num: str
@@ -75,9 +74,7 @@ class SkeletonSection:
     section_id: str | None = None
 
 
-# ---------------------------------------------------------------------------
-# PR 리뷰 파싱
-# ---------------------------------------------------------------------------
+# PR review parsing
 
 _VERDICT_PATTERN = re.compile(
     r"##\s+Review\s+Result\s*:\s*(APPROVE|REJECT)",
@@ -95,10 +92,10 @@ _NUMBERED_LINE = re.compile(r"^\s*\d+\.\s+(.+)$", re.MULTILINE)
 
 
 def parse_pr_review(output: str) -> PRReviewResult | None:
-    """Reviewer PR 리뷰 출력을 파싱한다.
+    """Parse Reviewer PR review output.
 
     Returns:
-        PRReviewResult, 또는 리뷰 결과를 찾을 수 없으면 None.
+        PRReviewResult, or None if no review result marker found.
     """
     verdict_match = _VERDICT_PATTERN.search(output)
     if not verdict_match:
@@ -124,9 +121,7 @@ def parse_pr_review(output: str) -> PRReviewResult | None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Phase 리뷰 파싱
-# ---------------------------------------------------------------------------
+# Phase review parsing
 
 _PHASE_VERDICT_PATTERN = re.compile(
     r"##\s+Phase\s+(\d+)\s+Review\s+Result\s*:\s*(APPROVE|REJECT)",
@@ -152,10 +147,10 @@ _BULLET_LINE = re.compile(r"^\s*[-*]\s+(.+)$", re.MULTILINE)
 
 
 def parse_phase_review(output: str) -> PhaseReviewResult | None:
-    """Reviewer Phase 리뷰 출력을 파싱한다.
+    """Parse Reviewer phase review output.
 
     Returns:
-        PhaseReviewResult, 또는 Phase 리뷰 결과를 찾을 수 없으면 None.
+        PhaseReviewResult, or None if no phase review marker found.
     """
     verdict_match = _PHASE_VERDICT_PATTERN.search(output)
     if not verdict_match:
@@ -195,27 +190,21 @@ def parse_phase_review(output: str) -> PhaseReviewResult | None:
     )
 
 
-# ---------------------------------------------------------------------------
-# 태스크 목록 파싱
-# ---------------------------------------------------------------------------
+# Task list parsing
 
-# 마크다운 테이블 행 파싱 — | T-001 | backend_coder | T-000 | 설명 | 대기 |
+# Markdown table row — | T-001 | backend_coder | T-000 | description | status |
 _TASK_TABLE_ROW = re.compile(
     r"^\|\s*([A-Z0-9\-]+)\s*\|\s*(\w+)\s*\|\s*([^|]*?)\s*\|\s*(.+?)\s*\|\s*(\S+)\s*\|",
     re.MULTILINE,
 )
 _TASK_HEADER_ROW = re.compile(r"^\|\s*ID\s*\|", re.MULTILINE | re.IGNORECASE)
-# Phase 헤더 — "### Phase 1", "## Phase 2 — 확장" 등
+# Phase header — "### Phase 1", "## Phase 2 — extended" etc.
 _PHASE_HEADER = re.compile(r"^#{1,4}\s+Phase\s+(\d+)", re.MULTILINE | re.IGNORECASE)
 _TASK_SEPARATOR_ROW = re.compile(r"^\|[-| ]+\|", re.MULTILINE)
 
 
 def parse_task_list(output: str) -> list[TaskItem]:
-    """Orchestrator 출력에서 태스크 목록을 파싱한다.
-
-    Returns:
-        TaskItem 리스트. 없으면 빈 리스트.
-    """
+    """Parse task list from Orchestrator output."""
     tasks: list[TaskItem] = []
 
     for match in _TASK_TABLE_ROW.finditer(output):
@@ -225,7 +214,7 @@ def parse_task_list(output: str) -> list[TaskItem]:
         description = match.group(4).strip()
         status = match.group(5).strip()
 
-        # 헤더/구분자 행 제외
+        # Skip header/separator rows
         if task_id.upper() in ("ID", "----", "---"):
             continue
         if re.match(r"^-+$", task_id):
@@ -249,13 +238,10 @@ def parse_task_list(output: str) -> list[TaskItem]:
 
 
 def parse_phases(output: str) -> list[list[TaskItem]]:
-    """Orchestrator 출력에서 Phase별 태스크 목록을 파싱한다.
+    """Parse per-phase task lists from Orchestrator output.
 
-    ``### Phase N`` 헤딩 아래 마크다운 테이블로 구성된 태스크를 읽는다.
-    Phase 헤딩이 없으면 전체를 단일 Phase로 처리한다.
-
-    Returns:
-        Phase별 TaskItem 리스트. 태스크가 하나도 없으면 빈 리스트.
+    Reads markdown tables under ``### Phase N`` headings. If no phase
+    headings are found, treats the entire output as a single phase.
     """
     headers = list(_PHASE_HEADER.finditer(output))
 
@@ -268,14 +254,12 @@ def parse_phases(output: str) -> list[list[TaskItem]]:
         start = header.end()
         end = headers[i + 1].start() if i + 1 < len(headers) else len(output)
         tasks = parse_task_list(output[start:end])
-        phases.append(tasks)  # 빈 Phase도 포함 — Phase 번호 일관성 유지
+        phases.append(tasks)  # include empty phases for phase-number consistency
 
     return phases
 
 
-# ---------------------------------------------------------------------------
-# QA 리포트 파싱
-# ---------------------------------------------------------------------------
+# QA report parsing
 
 _QA_HEALTH_SCORE = re.compile(
     r"###\s+Health\s+Score\s*:\s*(\d+)\s*/\s*10",
@@ -286,13 +270,13 @@ _QA_ISSUE_BLOCK = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
-# QA 통과 기준 — health score 이 값 이상이면 통과
+# QA pass threshold — health score must be >= this value
 QA_PASS_THRESHOLD = 7
 
 
 @dataclass
 class QaResult:
-    """QA 에이전트 리포트 결과."""
+    """QA agent report result."""
 
     health_score: int  # 0-10
     passed: bool       # health_score >= QA_PASS_THRESHOLD
@@ -301,10 +285,10 @@ class QaResult:
 
 
 def parse_qa_report(output: str) -> QaResult | None:
-    """QA 에이전트 리포트 출력을 파싱한다.
+    """Parse QA agent report output.
 
     Returns:
-        QaResult, 또는 Health Score 헤딩을 찾을 수 없으면 None.
+        QaResult, or None if the Health Score heading is not found.
     """
     score_match = _QA_HEALTH_SCORE.search(output)
     if not score_match:
@@ -325,9 +309,7 @@ def parse_qa_report(output: str) -> QaResult | None:
     )
 
 
-# ---------------------------------------------------------------------------
-# 설계 협의 파싱
-# ---------------------------------------------------------------------------
+# Design negotiation parsing
 
 _DESIGN_VERDICT_PATTERN = re.compile(
     r"##\s+Design\s+Verdict\s*:\s*(ACCEPT|CONFLICT)",
@@ -340,10 +322,10 @@ _DESIGN_API_REQUEST_BLOCK = re.compile(
 
 
 def parse_design_verdict(output: str) -> DesignNegotiationResult | None:
-    """Designer 출력에서 설계 협의 결과를 파싱한다.
+    """Parse design negotiation verdict from Designer output.
 
     Returns:
-        DesignNegotiationResult, 또는 Verdict 마커가 없으면 None (ACCEPT로 처리).
+        DesignNegotiationResult, or None if no Verdict marker (treated as ACCEPT).
     """
     verdict_match = _DESIGN_VERDICT_PATTERN.search(output)
     if not verdict_match:
@@ -359,32 +341,25 @@ def parse_design_verdict(output: str) -> DesignNegotiationResult | None:
     return DesignNegotiationResult(verdict=verdict, api_requests=api_requests, raw=output)
 
 
-# ---------------------------------------------------------------------------
-# Skeleton 섹션 파싱
-# ---------------------------------------------------------------------------
+# Skeleton section parsing
 
 _SECTION_HEADING = re.compile(
     r"^#{2,4}\s+(\d+(?:-\d+)?)[.\s]",
     re.MULTILINE,
 )
-# `## N. <Title>` 에서 제목 추출 (id 매핑용)
+# Extract title from `## N. <Title>` (for id mapping)
 _SECTION_HEADING_WITH_TITLE = re.compile(
     r"^#{2,4}\s+\d+(?:-\d+)?\.\s+(.+?)\s*$",
 )
 
 
 def extract_filled_sections(output: str) -> list[SkeletonSection]:
-    """에이전트 출력에서 skeleton 섹션 마크다운 블록을 추출한다.
+    """Extract skeleton section markdown blocks from agent output.
 
-    에이전트가 "## 6. DB 스키마" 같은 섹션 헤딩을 포함해서 출력하면
-    해당 섹션 내용을 추출한다.
-
-    Harness v2: 헤딩 제목이 SECTION_TITLES 와 매칭되면 section_id 자동 채움.
-
-    Returns:
-        SkeletonSection 리스트. 없으면 빈 리스트.
+    Sections with `## N. <Title>` headings are collected. If the title
+    matches SECTION_TITLES, section_id is auto-populated (Harness v2).
     """
-    # 순환 import 방지 — 함수 내 import
+    # Deferred import to avoid circular dependency
     from src.orchestrator.context import SECTION_TITLES
 
     title_to_id = {v: k for k, v in SECTION_TITLES.items()}
@@ -403,7 +378,7 @@ def extract_filled_sections(output: str) -> list[SkeletonSection]:
                 continue
             heading_level = len(heading_m.group(1))
 
-            # 제목으로 section_id 추론
+            # Infer section_id from title
             title_match = _SECTION_HEADING_WITH_TITLE.match(lines[i].rstrip())
             section_id: str | None = None
             if title_match:
@@ -412,7 +387,7 @@ def extract_filled_sections(output: str) -> list[SkeletonSection]:
             start = i
             i += 1
 
-            # 같은 레벨 이상의 다음 헤딩까지 수집
+            # Collect until next heading at same level or higher
             while i < len(lines):
                 next_heading = re.match(r"^(#+)\s+\d", lines[i])
                 if next_heading and len(next_heading.group(1)) <= heading_level:
@@ -433,12 +408,9 @@ def extract_filled_sections(output: str) -> list[SkeletonSection]:
 
 
 def extract_filled_sections_by_id(output: str) -> dict[str, str]:
-    """에이전트 출력에서 섹션을 ID 기반으로 추출 (Harness v2).
+    """Extract sections by ID from agent output (Harness v2).
 
-    SECTION_TITLES 와 매칭되는 헤딩만 포함. ID 가 없는 섹션은 무시.
-
-    Returns:
-        {section_id: content} dict. 매칭 없으면 빈 dict.
+    Only includes headings matching SECTION_TITLES. Unmatched sections are ignored.
     """
     return {
         s.section_id: s.content

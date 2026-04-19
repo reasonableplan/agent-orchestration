@@ -1,4 +1,4 @@
-"""에이전트 행동 로깅 — JSON 구조화 로그."""
+"""Agent action logging — structured JSON log lines."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 
 
 class AgentLogger:
-    """에이전트별 JSON 로그 기록기."""
+    """Per-agent JSON log writer."""
 
     def __init__(self, log_dir: str | Path = "logs/agents") -> None:
         self._log_dir = Path(log_dir)
@@ -31,7 +31,7 @@ class AgentLogger:
         error: str | None = None,
         extra: dict[str, Any] | None = None,
     ) -> None:
-        """에이전트 행동을 JSON 한 줄로 기록."""
+        """Write a single JSON log line for an agent action."""
         entry = {
             "timestamp": datetime.now(UTC).isoformat(),
             "agent": agent,
@@ -59,12 +59,12 @@ class AgentLogger:
         token_usage: dict[str, int] | None = None,
         error: str | None = None,
     ) -> None:
-        """에이전트 실행(run) 로그 편의 메서드."""
+        """Convenience method to log an agent run."""
         self.log(
             agent=agent,
             action="run",
             status=status,
-            target=prompt[:100],  # 프롬프트 앞 100자만
+            target=prompt[:100],  # first 100 chars of prompt
             duration_ms=duration_ms,
             token_usage=token_usage,
             error=error,
@@ -76,7 +76,7 @@ class AgentLogger:
         reason: str,
         escalated_to: str,
     ) -> None:
-        """에스컬레이션 로그."""
+        """Log an escalation event."""
         self.log(
             agent=agent,
             action="escalation",

@@ -1,4 +1,4 @@
-"""agents.yaml 로더 — 에이전트 운영 설정 파싱 및 검증."""
+"""agents.yaml loader — parse and validate agent runtime configuration."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class OnTimeout(StrEnum):
 
 
 class AgentConfig(BaseModel):
-    """단일 에이전트의 운영 설정."""
+    """Runtime configuration for a single agent."""
 
     provider: Provider
     model: str
@@ -34,24 +34,24 @@ class AgentConfig(BaseModel):
     on_timeout: OnTimeout = OnTimeout.ESCALATE
     max_retries_on_timeout: int = 1
     max_tokens: int = 8192
-    api_base: str | None = None  # local provider용
+    api_base: str | None = None  # required for local provider
 
     @model_validator(mode="after")
     def validate_retry_with_timeout_policy(self) -> Self:
         if self.on_timeout != OnTimeout.RETRY and self.max_retries_on_timeout > 0:
-            # retry가 아닌데 max_retries > 0이면 무시되므로 0으로 보정
+            # max_retries is meaningless without RETRY policy — reset to 0
             self.max_retries_on_timeout = 0
         return self
 
     @model_validator(mode="after")
     def validate_local_needs_api_base(self) -> Self:
         if self.provider == Provider.LOCAL and not self.api_base:
-            raise ValueError("local provider는 api_base가 필수입니다.")
+            raise ValueError("local provider requires api_base")
         return self
 
 
 class OrchestratorConfig(BaseModel):
-    """전체 에이전트 설정."""
+    """Top-level orchestrator configuration holding all agent configs."""
 
     architect: AgentConfig
     designer: AgentConfig
@@ -60,16 +60,16 @@ class OrchestratorConfig(BaseModel):
     frontend_coder: AgentConfig
     reviewer: AgentConfig
     qa: AgentConfig
-    max_concurrent: int = 2  # 동시 실행 에이전트 수 제한
+    max_concurrent: int = 2  # max parallel agent executions
 
     def get_agent(self, name: str) -> AgentConfig:
-        """에이전트 이름으로 설정 조회."""
+        """Look up agent config by name."""
         if name not in type(self).model_fields:
-            raise ValueError(f"알 수 없는 에이전트: {name}")
+            raise ValueError(f"unknown agent: {name}")
         return getattr(self, name)
 
     def all_agents(self) -> dict[str, AgentConfig]:
-        """전체 에이전트 설정을 dict로 반환."""
+        """Return all agent configs as a dict."""
         return {
             field: getattr(self, field)
             for field, info in type(self).model_fields.items()
@@ -78,15 +78,15 @@ class OrchestratorConfig(BaseModel):
 
 
 def load_agents_config(path: str | Path) -> OrchestratorConfig:
-    """agents.yaml 파일을 읽어 OrchestratorConfig로 파싱."""
+    """Read agents.yaml and parse into OrchestratorConfig."""
     path = Path(path)
     if not path.exists():
-        raise FileNotFoundError(f"agents.yaml을 찾을 수 없습니다: {path}")
+        raise FileNotFoundError(f"agents.yaml not found: {path}")
 
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
     if not isinstance(raw, dict):
-        raise ValueError(f"agents.yaml 형식이 올바르지 않습니다: dict 예상, {type(raw).__name__} 받음")
+        raise ValueError(f"invalid agents.yaml format: expected dict, got {type(raw).__name__}")
 
     return OrchestratorConfig(**raw)

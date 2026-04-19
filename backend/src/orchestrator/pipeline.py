@@ -1,4 +1,4 @@
-"""검증 파이프라인 — 린터/테스트/skeleton 대조 자동 검증."""
+"""Validation pipeline — automated linter, type-check, and test execution."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ class CheckStatus(StrEnum):
 
 @dataclass
 class CheckResult:
-    """개별 검증 항목 결과."""
+    """Result of a single validation check."""
 
     name: str
     status: CheckStatus
@@ -26,7 +26,7 @@ class CheckResult:
 
 @dataclass
 class ValidationResult:
-    """전체 검증 결과."""
+    """Aggregated validation result across all checks."""
 
     checks: list[CheckResult] = field(default_factory=list)
 
@@ -43,16 +43,16 @@ class ValidationResult:
 
 
 class ValidationPipeline:
-    """린터/테스트/skeleton 대조 자동 검증 파이프라인."""
+    """Automated linter, type-check, and test validation pipeline."""
 
     def __init__(self, project_dir: str | Path) -> None:
         self._project_dir = Path(project_dir).resolve()
 
     async def run_all(self) -> ValidationResult:
-        """모든 검증을 순차 실행하고 결과를 반환.
+        """Run all checks sequentially and return aggregated results.
 
-        순차 실행 이유: 린트 실패 시에도 테스트까지 전부 실행해 전체 상태를 파악하되,
-        각 단계가 독립적으로 결과를 수집할 수 있어야 함.
+        Sequential so that each step collects results independently, even if
+        an earlier step fails — gives a full picture of project health.
         """
         result = ValidationResult()
         result.checks.append(await self._run_lint())
@@ -61,28 +61,28 @@ class ValidationPipeline:
         return result
 
     async def _run_lint(self) -> CheckResult:
-        """린터 실행 (Python: ruff, TypeScript: eslint)."""
+        """Run linter (Python: ruff, TypeScript: eslint)."""
         if (self._project_dir / "pyproject.toml").exists():
             return await self._exec_check("lint:python", ["ruff", "check", "."])
         if (self._project_dir / "package.json").exists():
             return await self._exec_check("lint:typescript", ["npx", "eslint", "."])
-        return CheckResult(name="lint", status=CheckStatus.SKIPPED, output="린터 설정 없음")
+        return CheckResult(name="lint", status=CheckStatus.SKIPPED, output="no linter config found")
 
     async def _run_typecheck(self) -> CheckResult:
-        """타입 체크 (Python: mypy, TypeScript: tsc)."""
+        """Run type checker (Python: mypy, TypeScript: tsc)."""
         if (self._project_dir / "pyproject.toml").exists():
             return await self._exec_check("typecheck:python", ["mypy", "."])
         if (self._project_dir / "tsconfig.json").exists():
             return await self._exec_check("typecheck:typescript", ["npx", "tsc", "--noEmit"])
-        return CheckResult(name="typecheck", status=CheckStatus.SKIPPED, output="타입 체크 설정 없음")
+        return CheckResult(name="typecheck", status=CheckStatus.SKIPPED, output="no type-check config found")
 
     async def _run_tests(self) -> CheckResult:
-        """테스트 실행 (Python: pytest, TypeScript: vitest)."""
+        """Run tests (Python: pytest, TypeScript: vitest)."""
         if (self._project_dir / "pyproject.toml").exists():
             return await self._exec_check("test:python", ["pytest", "--rootdir=.", "-q"])
         if (self._project_dir / "package.json").exists():
             return await self._exec_check("test:typescript", ["npx", "vitest", "run"])
-        return CheckResult(name="test", status=CheckStatus.SKIPPED, output="테스트 설정 없음")
+        return CheckResult(name="test", status=CheckStatus.SKIPPED, output="no test config found")
 
     async def _exec_check(
         self,
@@ -91,7 +91,7 @@ class ValidationPipeline:
         *,
         timeout: int = 120,
     ) -> CheckResult:
-        """subprocess로 명령어를 실행하고 CheckResult를 반환."""
+        """Execute a command via subprocess and return a CheckResult."""
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,

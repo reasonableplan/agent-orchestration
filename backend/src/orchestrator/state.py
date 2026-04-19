@@ -1,4 +1,4 @@
-"""프로젝트 상태 저장/로드 — .orchestra/ JSON 파일 기반."""
+"""Project state persistence — JSON files under .orchestra/ directory."""
 
 from __future__ import annotations
 

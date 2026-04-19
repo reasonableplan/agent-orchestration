@@ -1,4 +1,4 @@
-"""메인 오케스트레이터 — 전체 워크플로우를 조율하는 진입점."""
+"""Main orchestrator — entry point that coordinates the full agent workflow."""
 
 from __future__ import annotations
 
@@ -35,15 +35,15 @@ from src.orchestrator.state import StateManager
 
 logger = logging.getLogger(__name__)
 
-# Phase별 에이전트 매핑 (순서가 있는 경우 tuple) — 파이프라인 내부용
+# Phase-to-agent mapping (ordered tuples) — internal pipeline use
 _PHASE_AGENTS: dict[Phase, tuple[str, ...]] = {
     Phase.DESIGNING: ("architect", "designer"),
     Phase.TASK_BREAKDOWN: ("orchestrator",),
     Phase.VERIFYING: ("reviewer",),
 }
 
-# Phase → 단일 에이전트 매핑 — 대시보드 REST/WS 명령 디스패치용
-# None이면 해당 Phase에서 에이전트 직접 실행 안 함
+# Phase → single agent mapping — for dashboard REST/WS command dispatch.
+# None means no direct agent execution in that phase.
 PHASE_AGENT_MAP: dict[str, str | None] = {
     "planning": None,
     "designing": "architect",
@@ -56,7 +56,7 @@ PHASE_AGENT_MAP: dict[str, str | None] = {
 
 
 def _extract_section_body(section_text: str) -> str:
-    """섹션 전체 텍스트에서 헤딩 라인을 제외한 body 만 반환."""
+    """Return section body text with the heading line stripped."""
     parts = section_text.split("\n", 1)
     if len(parts) < 2:
         return ""
@@ -66,19 +66,13 @@ def _extract_section_body(section_text: str) -> str:
 def _replace_section_body_in_skeleton(
     skeleton_text: str, section_id: str, new_body: str
 ) -> str:
-    """skeleton 에서 section_id 에 해당하는 섹션의 body 만 교체.
+    """Replace the body of a section in the skeleton while preserving the heading.
 
-    헤딩 라인 (`## N. <title>`) 은 유지 — skeleton 의 번호 체계 보존.
-    body 는 `_extract_section_body` 로 잘라낸 agent 출력으로 교체.
-    같은 레벨의 다음 헤딩 직전까지가 body 범위.
-
-    Args:
-        skeleton_text: 대상 skeleton 전체
-        section_id: 섹션 ID (SECTION_TITLES 의 key)
-        new_body: 새 body (헤딩 제외)
+    The heading line (`## N. <title>`) is kept intact to preserve the numbering
+    scheme. Body is replaced up to the next same-level heading.
 
     Returns:
-        body 가 교체된 skeleton. section_id 를 찾지 못하면 원본 그대로.
+        Updated skeleton text, or the original if section_id is not found.
     """
     title = SECTION_TITLES.get(section_id)
     if not title:
@@ -115,7 +109,7 @@ def _replace_section_body_in_skeleton(
 
 @dataclass
 class Orchestra:
-    """전체 에이전트 워크플로우를 조율하는 오케스트레이터."""
+    """Orchestrator that coordinates the full agent workflow."""
 
     project_dir: Path
     config: OrchestratorConfig = field(init=False)
@@ -124,9 +118,9 @@ class Orchestra:
     runner: AgentRunner = field(init=False)
     pipeline: ValidationPipeline = field(init=False)
     agent_logger: AgentLogger = field(init=False)
-    # implement_with_retry per-task Lock — task_id별 직렬화, 병렬 태스크 간 간섭 방지
+    # Per-task lock — serializes retries within a task, no interference between tasks
     _task_locks: dict[str, asyncio.Lock] = field(init=False)
-    # SecurityHooks 지연 캐시 — 첫 verify() 호출 시 프로파일 감지 후 주입.
+    # Lazy-cached SecurityHooks — profile detected and injected on first verify() call.
     _security_hooks: SecurityHooks | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
@@ -145,11 +139,11 @@ class Orchestra:
         self._security_hooks = None
 
     def _get_security_hooks(self) -> SecurityHooks:
-        """프로파일 기반 SecurityHooks 를 지연 생성/캐싱 (v2).
+        """Lazily create and cache profile-based SecurityHooks (v2).
 
-        첫 감지된 프로파일의 whitelist.runtime + whitelist.dev 합집합을 주입한
-        SecurityHooks 인스턴스를 반환. 프로파일 감지 실패 시 기본 모듈 whitelist
-        사용 (legacy 호환). 프로젝트당 1회 빌드 후 캐시.
+        Injects whitelist.runtime + whitelist.dev union from the first detected
+        profile. Falls back to default module whitelist on detection failure
+        (legacy compat). Built once per project and cached.
         """
         if self._security_hooks is not None:
             return self._security_hooks
@@ -157,8 +151,8 @@ class Orchestra:
             loader = ProfileLoader(project_dir=self.project_dir)
             matches = loader.detect()
         except (FileNotFoundError, ProfileNotFoundError, OSError) as exc:
-            # 프로파일 파일/디렉토리 부재, registry 로드 실패 — fallback 하되 로그 남김.
-            # 프로그래밍 에러 (TypeError/AttributeError) 는 catch 안 하고 상위로 전파.
+            # File/dir absence or registry load failure — fallback with logging.
+            # Programming errors (TypeError/AttributeError) propagate to caller.
             logger.info("프로파일 감지 실패 — 기본 SecurityHooks 사용: %s", exc)
             self._security_hooks = SecurityHooks()
             return self._security_hooks
@@ -168,7 +162,7 @@ class Orchestra:
             self._security_hooks = SecurityHooks()
             return self._security_hooks
 
-        # 첫 매칭 프로파일 사용 (모노레포는 상위 루트 기준)
+        # Use first matching profile (monorepo uses top-level root)
         profile = matches[0].profile
         logger.info(
             "SecurityHooks v2 — 프로파일 '%s' whitelist 주입 (runtime=%d, dev=%d)",
@@ -180,14 +174,14 @@ class Orchestra:
         return self._security_hooks
 
     def _get_task_lock(self, task_id: str) -> asyncio.Lock:
-        """task_id별 Lock을 반환한다. 없으면 새로 생성."""
+        """Return a per-task lock, creating one if needed."""
         if task_id not in self._task_locks:
             self._task_locks[task_id] = asyncio.Lock()
         return self._task_locks[task_id]
 
     @classmethod
     def from_project_dir(cls, project_dir: str | Path) -> Orchestra:
-        """팩토리 메서드 — project_dir로 Orchestra 인스턴스 생성."""
+        """Factory method — create an Orchestra instance from a project directory."""
         return cls(project_dir=Path(project_dir))
 
     async def design(
@@ -195,17 +189,14 @@ class Orchestra:
         requirements: str,
         max_negotiation_rounds: int = 3,
     ) -> dict[str, RunResult]:
-        """설계 Phase — Architect ↔ Designer 협의 루프 (최대 max_negotiation_rounds회).
+        """Design phase — Architect / Designer negotiation loop.
 
-        Designer가 ``## Design Verdict: CONFLICT``를 출력하면 API 요청사항을
-        Architect에 전달해 재설계를 요청한다. ACCEPT 또는 마커 없음이면 합의로 처리.
-
-        Args:
-            requirements: PM 요구사항 프롬프트
-            max_negotiation_rounds: 최대 협의 라운드 수 (기본 3)
+        If the Designer outputs ``## Design Verdict: CONFLICT``, the API
+        requests are forwarded to the Architect for redesign. ACCEPT or
+        no marker is treated as agreement.
 
         Returns:
-            {"architect": RunResult, "designer": RunResult} — 마지막 라운드 결과
+            {"architect": RunResult, "designer": RunResult} from the last round.
         """
         self.phase_manager.transition(Phase.DESIGNING)
 
@@ -279,24 +270,17 @@ class Orchestra:
         architect_output: str,
         designer_output: str,
     ) -> Path:
-        """Architect + Designer 출력을 파싱해 docs/skeleton.md에 기록한다.
+        """Parse Architect + Designer output and write docs/skeleton.md.
 
-        v2 (Phase 4b, 2026-04-19): skeleton_template.md 삭제 후 템플릿 치환 경로
-        제거. Architect/Designer 출력에서 추출한 섹션을 그대로 이어붙인다.
-
-        runner.py가 에이전트 실행 시 docs/skeleton.md를 자동으로 읽으므로,
-        이 파일이 생성되면 이후 모든 에이전트가 채워진 계약서를 받는다.
-
-        Args:
-            architect_output: Architect 에이전트 출력 텍스트
-            designer_output: Designer 에이전트 출력 텍스트
+        Extracts sections from agent output and concatenates them. Once this
+        file exists, runner.py auto-injects it into all subsequent agents.
 
         Returns:
-            생성된 skeleton.md 경로
+            Path to the generated skeleton.md.
         """
         skeleton_path = self.project_dir / "docs" / "skeleton.md"
 
-        # 두 에이전트 출력에서 섹션 추출. Architect 먼저, Designer 뒤.
+        # Extract sections from both outputs. Architect first, then Designer.
         raw_sections = extract_filled_sections(architect_output)
         raw_sections += extract_filled_sections(designer_output)
         if not raw_sections:
@@ -304,9 +288,8 @@ class Orchestra:
                 "skeleton 섹션 추출 실패 — Architect/Designer 출력에서 유효한 섹션을 찾을 수 없음"
             )
 
-        # 같은 section_num 이면 Designer 가 Architect 를 덮어씀 (Python dict: 같은 key
-        # 재할당 시 값만 갱신, 최초 삽입 순서는 유지). 결과 섹션 순서는 Architect 가
-        # 먼저 선언한 순서 + Designer 만 선언한 섹션이 뒤에 오는 구조.
+        # Same section_num → Designer overwrites Architect (Python dict preserves
+        # first-insertion order, so Architect-declared sections come first).
         deduped: dict[str, str] = {s.section_num: s.content for s in raw_sections}
         filled_text = "\n\n".join(deduped.values())
 
@@ -329,28 +312,13 @@ class Orchestra:
         harness_dir: Path | None = None,
         included_overrides: list[str] | None = None,
     ) -> Path:
-        """v2 — 프로파일 기반 empty skeleton 생성 후 section_id 로 agent 출력 merge.
+        """v2 — assemble empty skeleton from profiles, then merge agent output by section_id.
 
-        v1 (`materialize_skeleton`) 은 에이전트 출력을 그대로 concat — skeleton 구조가
-        에이전트 출력에 종속. v2 는 프로파일 템플릿이 구조를 먼저 정의하고, 에이전트는
-        SECTION_TITLES 매칭 헤딩으로 섹션 body 만 채운다 (/ha-* 스킬 경로와 동일 계약).
-
-        절차:
-        1. `assemble_skeleton_for_profiles(profile_ids)` 로 빈 skeleton 생성
-        2. Architect/Designer 출력에서 `section_id` 추출 (Designer 가 Architect 덮어씀)
-        3. 각 섹션의 body 만 skeleton 에 merge (헤딩 라인 보존)
-
-        Args:
-            architect_output: Architect 에이전트 출력 텍스트
-            designer_output: Designer 에이전트 출력 텍스트
-            profile_ids: 사용할 프로파일 ID 목록 (모노레포 가능)
-            included_overrides: required 합집합 대신 섹션 목록 직접 지정
-
-        Returns:
-            생성된 skeleton.md 경로.
+        Unlike v1 which concatenates raw agent output, v2 lets the profile
+        template define structure first; agents fill section bodies only.
 
         Raises:
-            ValueError: 두 에이전트 출력 모두 section_id 매칭 섹션이 0개일 때.
+            ValueError: No section_id matches found in either agent output.
         """
         skeleton_path = self.assemble_skeleton_for_profiles(
             profile_ids,
@@ -359,7 +327,7 @@ class Orchestra:
         )
         skeleton_text = skeleton_path.read_text(encoding="utf-8")
 
-        # Architect 먼저, Designer 뒤 — 같은 section_id 면 Designer 가 덮어씀.
+        # Architect first, then Designer — same section_id means Designer wins.
         raw = extract_filled_sections(architect_output) + extract_filled_sections(
             designer_output
         )
@@ -398,21 +366,14 @@ class Orchestra:
         harness_dir: Path | None = None,
         included_overrides: list[str] | None = None,
     ) -> Path:
-        """프로파일 기반 빈 skeleton 생성 (Harness v2).
+        """Assemble an empty skeleton from profile templates (Harness v2).
 
-        - 각 profile_id 의 skeleton_sections.required 합집합을 included 로 사용
-          (또는 included_overrides 우선)
-        - 첫 프로파일의 skeleton_sections.order 를 따라 정렬
-        - SkeletonAssembler 로 조각 → docs/skeleton.md 작성
-
-        Args:
-            profile_ids: 사용할 프로파일 ID 목록 (모노레포 가능)
-            title: skeleton 최상위 제목. 기본값은 project_dir 이름.
-            harness_dir: 글로벌 harness 디렉토리. 기본 ~/.claude/harness/
-            included_overrides: required 합집합 대신 직접 지정 (ha-init 결과)
+        Uses the union of each profile's skeleton_sections.required
+        (or included_overrides if given), ordered by the first profile's
+        skeleton_sections.order.
 
         Returns:
-            생성된 skeleton.md 경로
+            Path to the generated skeleton.md.
         """
         if not profile_ids:
             raise ValueError("profile_ids 비어 있음")
@@ -437,7 +398,7 @@ class Orchestra:
                         seen.add(sid)
                         included.append(sid)
 
-        # 첫 프로파일의 order 우선 — 나머지 ID는 끝에 append
+        # Primary profile's order first — remaining IDs appended at end
         primary_order = list(profiles[0].skeleton_sections.order)
         ordered: list[str] = []
         seen_o: set[str] = set()
@@ -476,16 +437,7 @@ class Orchestra:
         return skeleton_path
 
     async def implement(self, task_id: str, agent: str, prompt: str) -> RunResult:
-        """구현 Phase — 지정된 에이전트로 태스크를 실행한다.
-
-        Args:
-            task_id: 태스크 식별자 (결과 저장 키)
-            agent: 실행할 에이전트 (backend_coder / frontend_coder)
-            prompt: 태스크 프롬프트
-
-        Returns:
-            RunResult
-        """
+        """Implementation phase — run a single task with the given agent."""
         current = self.phase_manager.current_phase
         if current != Phase.IMPLEMENTING:
             self.phase_manager.transition(Phase.IMPLEMENTING)
@@ -502,25 +454,20 @@ class Orchestra:
         is_frontend: bool = False,
         allowed_endpoints: list[str] | None = None,
     ) -> dict[str, Any]:
-        """검증 Phase — SecurityHooks + ValidationPipeline + Reviewer 에이전트 실행.
-
-        Args:
-            task_id: 검증할 태스크 식별자
-            is_frontend: 프론트엔드 코드면 True (의존성/스타일 규칙 적용)
-            allowed_endpoints: skeleton에서 추출한 허용 엔드포인트 목록
+        """Verification phase — SecurityHooks + ValidationPipeline + Reviewer agent.
 
         Returns:
-            {"security": SecurityResult, "pipeline": ValidationResult, "reviewer": RunResult, "passed": bool}
-            security BLOCK 또는 pipeline 실패 또는 reviewer reject → IMPLEMENTING으로 전이
+            {"security", "pipeline", "reviewer", "passed"}.
+            On failure, transitions back to IMPLEMENTING.
         """
         if self.phase_manager.current_phase != Phase.VERIFYING:
             try:
                 self.phase_manager.transition(Phase.VERIFYING)
             except InvalidTransitionError:
-                # 병렬 태스크에서 다른 태스크가 이미 VERIFYING으로 전이한 경우 — 무시
+                # Another parallel task already transitioned to VERIFYING — ignore
                 logger.debug("VERIFYING 전이 생략 — 현재 Phase: %s", self.phase_manager.current_phase)
 
-        # 1. 보안 훅 — 에이전트 출력 코드 분석
+        # 1. Security hooks — analyze agent output code
         task_result = self.state.load_task_result(task_id)
         agent_output = (task_result or {}).get("output", "") if isinstance(task_result, dict) else ""
         security_result: SecurityResult = self._get_security_hooks().run_all(
@@ -536,10 +483,10 @@ class Orchestra:
                 block_msgs,
             )
 
-        # 2. 린트/타입체크/테스트 파이프라인
+        # 2. Lint / type-check / test pipeline
         pipeline_result: ValidationResult = await self.pipeline.run_all()
 
-        # 3. Reviewer 에이전트
+        # 3. Reviewer agent
         reviewer_prompt = (
             f"태스크 ID: {task_id}\n\n"
             f"<security_summary>\n{security_result.summary}\n</security_summary>\n\n"
@@ -600,25 +547,17 @@ class Orchestra:
         is_frontend: bool = False,
         allowed_endpoints: list[str] | None = None,
     ) -> dict[str, Any]:
-        """구현 + 검증을 Reviewer APPROVE까지 재시도한다.
-
-        Args:
-            task_id: 태스크 식별자
-            agent: 실행할 에이전트 (backend_coder / frontend_coder)
-            prompt: 태스크 프롬프트
-            max_retries: 최대 재시도 횟수 (기본 3)
-            is_frontend: 프론트엔드 코드면 True (의존성/스타일 규칙 적용)
-            allowed_endpoints: skeleton `interface.http` 섹션에서 추출한 허용 엔드포인트 목록
+        """Implement + verify in a retry loop until Reviewer APPROVE.
 
         Returns:
             {"implement": RunResult, "verify": dict, "attempts": int, "passed": bool}
         """
         last_impl: RunResult | None = None
         last_verify: dict[str, Any] = {}
-        original_prompt = prompt  # 원본 보존 — 재시도마다 중첩 방지
+        original_prompt = prompt  # preserve original — avoid nesting on retries
 
-        # per-task-id Lock: 동일 태스크의 재시도 사이클을 직렬화.
-        # 서로 다른 task_id는 병렬 실행 가능 — PhaseManager 전이는 각자 best-effort.
+        # Per-task-id lock: serializes retry cycles within a task.
+        # Different task_ids run in parallel — phase transitions are best-effort.
         async with self._get_task_lock(task_id):
             for attempt in range(1, max_retries + 1):
                 impl_result = await self.implement(task_id, agent, prompt)
@@ -647,7 +586,7 @@ class Orchestra:
                         violations = parsed_review.violations if parsed_review else []
                         if not violations and raw_reviewer.output:
                             violations = [raw_reviewer.output[:500]]
-                    # 항상 원본 프롬프트 기준으로 피드백 추가 — 중첩 방지
+                    # Always append feedback to original prompt — prevent nesting
                     prompt = (
                         f"{original_prompt}\n\n"
                         f"<review_feedback>\n"
@@ -680,20 +619,16 @@ class Orchestra:
         phase_num: int,
         task_ids: list[str],
     ) -> PhaseReviewResult | None:
-        """Phase 전체 리뷰 — 해당 Phase의 모든 태스크 완료 후 호출한다.
-
-        Args:
-            phase_num: Phase 번호 (1, 2, ...)
-            task_ids: 해당 Phase에 속한 태스크 ID 목록
+        """Review an entire phase after all its tasks are complete.
 
         Returns:
-            PhaseReviewResult. 파싱 실패 시 None.
+            PhaseReviewResult, or None if parsing fails.
         """
         task_summaries: list[str] = []
         for tid in task_ids:
             result = self.state.load_task_result(tid)
             if result:
-                output = result.get("output", "")[:500]  # 요약본만
+                output = result.get("output", "")[:500]  # summary only
                 task_summaries.append(f"[{tid}]\n{output}")
 
         phase_prompt = (
@@ -724,17 +659,13 @@ class Orchestra:
         phase_num: int,
         task_ids: list[str],
     ) -> QaResult | None:
-        """Phase QA — 구현 코드의 API 계약·상태 흐름·문서 일치를 검증한다.
+        """Phase QA — verify API contract, state flow, and doc consistency.
 
-        review_phase() APPROVE 이후에 호출한다. QA 에이전트는 기능 코드를 수정하지 않고
-        테스트만 작성하며, health score(0-10)와 이슈 목록을 반환한다.
-
-        Args:
-            phase_num: Phase 번호
-            task_ids: 해당 Phase에 속한 태스크 ID 목록
+        Called after review_phase() APPROVE. The QA agent writes tests only
+        (no functional code changes) and returns a health score (0-10).
 
         Returns:
-            QaResult. 파싱 실패 시 None (통과로 처리).
+            QaResult, or None on parse failure (treated as pass).
         """
         task_summaries: list[str] = []
         for tid in task_ids:
@@ -779,16 +710,11 @@ class Orchestra:
         requirements: str,
         design_results: dict[str, RunResult],
     ) -> tuple[list[list[TaskItem]], dict[str, Any]]:
-        """태스크 분해 단계 — Orchestrator 에이전트 실행 + parse_phases.
-
-        Args:
-            requirements: PM 요구사항
-            design_results: design()의 반환값 (architect, designer RunResult)
+        """Task breakdown — run the Orchestrator agent and parse phases.
 
         Returns:
-            (phases, breakdown_dict)
-            phases: Phase별 TaskItem 리스트 (파싱 실패 시 빈 리스트)
-            breakdown_dict: Orchestrator RunResult의 dict 표현
+            (phases, breakdown_dict) where phases is a list of TaskItem lists
+            per phase (empty list on parse failure).
         """
         self.phase_manager.transition(Phase.TASK_BREAKDOWN)
         breakdown_prompt = (
@@ -814,18 +740,10 @@ class Orchestra:
         max_task_retries: int = 3,
         max_phase_retries: int = 2,
     ) -> dict[str, Any]:
-        """Phase별 태스크 실행 + Phase 리뷰.
-
-        Args:
-            phases: run_breakdown()이 반환한 Phase별 TaskItem 리스트
-            max_task_retries: 태스크당 최대 재시도 횟수
-            max_phase_retries: Phase 리뷰 reject 시 최대 재시도 횟수
+        """Execute tasks per phase with review and QA gates.
 
         Returns:
-            {
-                "phases": [{"phase_num", "tasks", "review", "passed"}],
-                "success": bool,
-            }
+            {"phases": [{"phase_num", "tasks", "review", "passed"}], "success": bool}
         """
         results: list[dict[str, Any]] = []
         all_passed = True
@@ -844,7 +762,7 @@ class Orchestra:
                 "qa": None,
                 "passed": False,
             }
-            # Phase 재시도 시 이미 통과한 태스크는 재실행하지 않음
+            # Skip already-passed tasks on phase retry
             passed_task_ids: set[str] = set()
 
             for phase_attempt in range(1, max_phase_retries + 1):
@@ -876,8 +794,8 @@ class Orchestra:
                         return_exceptions=True,
                     )
                     for item in batch:
-                        # Exception 만 삼키고 BaseException (CancelledError 등) 은 재발생 —
-                        # runner.py::run_many 와 동일한 전파 보존 패턴.
+                        # Swallow Exception only; re-raise BaseException (CancelledError etc.)
+                        # — same propagation pattern as runner.py::run_many.
                         if isinstance(item, Exception):
                             logger.error("병렬 태스크 예외 (gather): %s", item)
                             continue
@@ -892,10 +810,10 @@ class Orchestra:
                 phase_result["review"] = review
 
                 if review is not None and review.verdict == ReviewVerdict.APPROVE:
-                    # Reviewer APPROVE → QA 검증 (API 계약·상태 흐름·문서 일치)
+                    # Reviewer APPROVE → QA verification (API contract / state flow / docs)
                     qa = await self.qa_phase(phase_num, task_ids)
                     phase_result["qa"] = qa
-                    qa_passed = qa is None or qa.passed  # 파싱 실패 시 통과 처리
+                    qa_passed = qa is None or qa.passed  # treat parse failure as pass
                     if qa_passed:
                         phase_result["passed"] = True
                         logger.info("Phase %d APPROVE + QA PASS (시도 %d/%d)", phase_num, phase_attempt, max_phase_retries)
@@ -930,22 +848,15 @@ class Orchestra:
         *,
         profile_ids: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Phase 분리 전체 파이프라인 (단일 호출 버전).
+        """Full pipeline in a single call (non-interactive).
 
-        인터랙티브 게이트가 필요하면 pipeline_runner.run()을 사용한다.
-
-        Args:
-            requirements: PM 요구사항
-            max_task_retries: 태스크당 최대 재시도 횟수
-            max_phase_retries: Phase 리뷰 reject 시 최대 재시도 횟수
-            profile_ids: 지정 시 v2 경로 (`materialize_skeleton_v2`) 사용 — 프로파일
-                         템플릿으로 빈 skeleton 조립 후 에이전트 출력을 section_id 로
-                         merge. 미지정이면 legacy `materialize_skeleton` 사용.
+        For interactive gates, use pipeline_runner.run() instead.
+        When profile_ids is set, uses v2 path (materialize_skeleton_v2).
 
         Returns:
             {"design", "breakdown", "phases", "success"}
         """
-        # 1. 설계
+        # 1. Design
         design_results = await self.design(requirements)
         if not design_results["architect"].success:
             logger.error("Architect 실패 — run_pipeline_with_phases() 중단")
@@ -966,12 +877,12 @@ class Orchestra:
             logger.error("skeleton 생성 실패 — run_pipeline_with_phases() 중단: %s", exc)
             return {"design": design_results, "breakdown": {}, "phases": [], "success": False}
 
-        # 2. 태스크 분해
+        # 2. Task breakdown
         phases, breakdown_dict = await self.run_breakdown(requirements, design_results)
         if not phases:
             return {"design": design_results, "breakdown": breakdown_dict, "phases": [], "success": False}
 
-        # 3. Phase별 실행
+        # 3. Phase execution
         phase_results = await self.run_phases(
             phases,
             max_task_retries=max_task_retries,
@@ -990,21 +901,19 @@ class Orchestra:
             "success": phase_results["success"],
         }
 
-    # ── 내부 헬퍼 ──────────────────────────────────────────────────────────────
-
     def _is_reviewer_approved(self, result: RunResult) -> bool:
-        """Reviewer 출력에서 APPROVE/REJECT를 파싱한다.
+        """Parse APPROVE/REJECT from Reviewer output.
 
-        APPROVE/REJECT 마커가 없으면 subprocess 성공 여부로 폴백.
+        Falls back to subprocess success if no marker is found.
         """
         parsed = parse_pr_review(result.output)
         if parsed is not None:
             return parsed.verdict == ReviewVerdict.APPROVE
-        # 파싱 실패 폴백 — subprocess 성공 여부 사용
+        # Parse failure fallback — use subprocess success
         return result.success and not result.escalated
 
     def _log_result(self, agent: str, result: RunResult) -> None:
-        """실행 결과에 따라 적절한 로그를 남긴다."""
+        """Log the run result at the appropriate level."""
         if result.escalated:
             logger.warning(
                 "에이전트 에스컬레이션 — agent=%s error=%s",
@@ -1020,7 +929,7 @@ class Orchestra:
 
     @staticmethod
     def _result_to_dict(result: RunResult) -> dict[str, Any]:
-        """RunResult를 JSON 직렬화 가능한 dict로 변환."""
+        """Convert a RunResult into a JSON-serializable dict."""
         return {
             "agent": result.agent,
             "output": result.output,
@@ -1031,7 +940,7 @@ class Orchestra:
             "escalated": result.escalated,
         }
 
-    # interface.http 섹션 마크다운 테이블에서 엔드포인트 행 추출
+    # Extract endpoint rows from interface.http section markdown table
     # | GET | /api/projects | ... |  → "GET /api/projects"
     _ENDPOINT_ROW = re.compile(
         r"^\|\s*(GET|POST|PUT|PATCH|DELETE)\s*\|\s*(/[^|\s]+)",
@@ -1039,11 +948,11 @@ class Orchestra:
     )
 
     def _extract_allowed_endpoints(self) -> list[str]:
-        """skeleton.md `interface.http` 섹션에서 허용된 엔드포인트 목록을 추출한다.
+        """Extract allowed endpoints from skeleton.md `interface.http` section.
 
         Returns:
-            ["GET /api/projects", "POST /api/issues", ...] 형태 리스트.
-            skeleton.md 없거나 섹션 비면 빈 리스트 (contract validator 비활성화됨).
+            List like ["GET /api/projects", ...]. Empty if skeleton.md is
+            missing or the section is empty (disables contract validator).
         """
         skeleton_path = self.project_dir / "docs" / "skeleton.md"
         if not skeleton_path.exists():

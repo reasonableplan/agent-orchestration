@@ -1,4 +1,4 @@
-"""Agent orchestration engine — CLI subprocess 기반 멀티 에이전트 실행."""
+"""Agent orchestration engine — multi-agent execution via CLI subprocesses."""
 
 from src.orchestrator.config import AgentConfig, OrchestratorConfig, load_agents_config
 from src.orchestrator.context import build_context
