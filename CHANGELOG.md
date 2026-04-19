@@ -27,6 +27,12 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
   (test + lint + **type**)". 단위 테스트만 통과시키면 `done` 으로 mark 되는 흐름 때문에
   pyright 15 errors + eslint config 누락이 Phase 1 끝까지 숨어 있었음. 실제 `/ha-verify`
   돌려서 발견 → 수정 → 최초 verify_history 갱신.
+- **LESSON-021 구현** — `skills/ha-build/run.py::_run_toolchain_gate` 신규. `--status done`
+  마킹 전 프로파일 toolchain (test + lint + type) 강제 실행. 실패 시 BLOCK + done 거부.
+  `--skip-toolchain` 으로 문서/설계 태스크 opt-out. 회귀 테스트 5개 추가.
+- **B3 design doc 재구조화** — `docs/harness-v2-design.md` 앞부분에 "이 문서 읽는 법"
+  내비게이션 추가. 다른 문서 (README/ARCHITECTURE/ADR/E2E reports/benchmarks/lessons) 우선
+  권장. D1-D6 결정 테이블을 ADR cross-reference 로 교체.
 
 ### Changed
 - (항목 추가되는대로)

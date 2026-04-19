@@ -1,8 +1,32 @@
-# HarnessAI v2 — 전체 설계 문서
+# HarnessAI v2 — 전체 설계 문서 (작업용 SoT)
 
-**상태**: Draft (리뷰 대기)
-**작성일**: 2026-04-16
-**목적**: 어떤 프로젝트에서도 HarnessAI를 적용할 수 있도록 프로파일 기반 아키텍처로 재설계. `/my-*` 스킬의 4개 스택 하드코딩 제약 제거. Orchestra(자동)와 `/ha-*`(수동) 두 실행 모드가 동일한 프로파일·템플릿을 공유.
+**상태**: Phase 1~3 구현 완료 · Phase 4 (/my-\* 정리) 진행 중 · 2차 E2E (ui-assistant) Phase 1 MVP 완주
+**작성일**: 2026-04-16 · **최근 갱신**: 2026-04-18
+**목적**: 어떤 프로젝트에서도 HarnessAI 를 적용할 수 있도록 프로파일 기반 아키텍처로 재설계. `/my-*` 스킬의 4 스택 하드코딩 제거. Orchestra(자동) 와 `/ha-*`(수동) 두 실행 모드가 동일한 프로파일/템플릿 공유.
+
+---
+
+## 📖 이 문서 읽는 법
+
+이 문서는 **작업용 명세서** — 필드 레벨 스키마, Phase 체크리스트, 실제 본문/YAML 예시. 긴 분량 (1300줄+) 이유.
+
+**다른 문서 먼저 권장**:
+
+| 먼저 읽으세요 | 용도 |
+|---|---|
+| [`README.md`](../README.md) | 30초 개요 + 사용법 |
+| [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) | 시스템 구조 30분 이해 (ASCII 다이어그램, 전체 그림) |
+| [`docs/decisions/`](decisions/) | D1-D6 결정 **이유** — ADR 5개로 분리 |
+| [`docs/e2e-reports/`](e2e-reports/) | 실제 프로젝트 적용 사례 2개 (code-hijack + ui-assistant) |
+| [`docs/benchmarks/`](benchmarks/) | 실측 성능 수치 |
+| [`backend/docs/shared-lessons.md`](../backend/docs/shared-lessons.md) | 21개 과거 실수 패턴 (LESSON-001~021) |
+
+**이 문서를 여는 경우**:
+- 프로파일 YAML 전체 필드 확인 (§3)
+- skeleton 섹션 ID 20개 모두 명세 확인 (§4)
+- `/ha-*` 스킬 입출력 스키마 확인 (§5)
+- `harness-plan.md` frontmatter 전체 스키마 (§6)
+- Phase 체크리스트에서 작업 상태 확인 (§10~)
 
 ---
 
@@ -22,16 +46,17 @@
 - **점진적 확장성** — 새 프로파일 추가 = 파일 1개. 스킬 본체 수정 0.
 - **정확성 > 속도** — CLAUDE.md 대원칙 준수.
 
-### 1.3 잠긴 결정사항 (변경 시 본 문서 개정 필요)
+### 1.3 잠긴 결정사항 (ADR 참조)
 
-| ID | 결정 | 근거 |
-|----|------|------|
-| D1 | 데이터 공유(YAML/MD) + 검증 CLI `harness validate` | 단순함 + 스키마 오류 방지 |
-| D2 | 글로벌(`~/.claude/harness/`) + 프로젝트 로컬 override | 80% 글로벌, 20% 커스텀 |
-| D3 | `/my-*` 스킬 완전 삭제, `/ha-*`만 | 두 이름 혼란 방지 |
-| D4 | `docs/harness-plan.md` 단일 파일 (YAML frontmatter로 상태) | 사람/기계 모두 읽기 쉬움 |
-| D5 | 프로파일이 `gstack_mode: auto/manual/prompt` 선언 (기본 manual) | 프로젝트별 맞춤 |
-| D6 | `~/.claude/harness/templates/skeleton/` 조각이 skeleton SoT | 중복 제거 |
+| ID | 결정 | 상세 ADR |
+|----|------|---------|
+| D1 | 데이터 공유(YAML/MD) + 검증 CLI `harness validate` | (기본 전제, ADR 불필요) |
+| D2 | 글로벌(`~/.claude/harness/`) + 프로젝트 로컬 override | [ADR-001](decisions/001-profile-based-architecture.md) |
+| D3 | `/my-*` 스킬 완전 삭제, `/ha-*`만 (single cut-over, Phase 4) | [ADR-005](decisions/005-ha-skills-cut-over.md) |
+| D4 | `docs/harness-plan.md` 단일 파일 (YAML frontmatter 상태) | [ADR-003](decisions/003-harness-plan-state-machine.md) |
+| D5 | 프로파일이 `gstack_mode: auto/manual/prompt` 선언 | (프로파일 필드 명세 §3) |
+| D6 | `~/.claude/harness/templates/skeleton/` 조각이 skeleton SoT | [ADR-002](decisions/002-skeleton-section-ids.md) |
+| — | ai-slop 감지를 Reviewer 7번째 훅으로 통합 | [ADR-004](decisions/004-ai-slop-as-7th-hook.md) |
 
 ---
 
