@@ -13,7 +13,12 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
   - ADR-003: 파이프라인 상태를 `harness-plan.md` 단일 파일로
   - ADR-004: ai-slop 감지를 Reviewer 7번째 훅으로 통합
   - ADR-005: /my-\* 완전 삭제, /ha-\* single cut-over (Phase 4 예정)
-- README 에 ADR / CONTRIBUTING / CHANGELOG 링크 추가.
+- **`scripts/benchmark.py` + `docs/benchmarks/`** (B5 — 측정 가능한 부분) —
+  LLM 호출 없이 5가지 핵심 연산 latency 측정. 30 iter 기준:
+  profile 감지 **4.7 ms**, skeleton 조립 **0.13 ms**,
+  `harness validate` **149 ms**, `harness integrity` **104 ms**,
+  `find_placeholders` 100KB **0.14 ms** (선형 스케일).
+- README 에 ADR / CONTRIBUTING / CHANGELOG / benchmarks 링크 추가.
 
 ### Changed
 - (항목 추가되는대로)

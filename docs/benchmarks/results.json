@@ -1,0 +1,75 @@
+{
+  "repo": "C:\\Users\\juwon\\OneDrive\\Desktop\\agent",
+  "python": "3.12.12",
+  "iterations": 30,
+  "benchmarks": {
+    "profile_detect": {
+      "iterations": 30,
+      "mean_ms": 4.699490000045141,
+      "median_ms": 4.2645000000902655,
+      "stdev_ms": 1.2435560099460639,
+      "min_ms": 3.882399999838526,
+      "max_ms": 10.347599999931845,
+      "target": "fastapi 프로파일 감지 (샘플 pyproject.toml)"
+    },
+    "skeleton_assemble": {
+      "iterations": 30,
+      "mean_ms": 0.13120333334578999,
+      "median_ms": 0.014449999980570283,
+      "stdev_ms": 0.6321241222003028,
+      "min_ms": 0.013999999737279722,
+      "max_ms": 3.4780000000864675,
+      "target": "20 섹션 전체 조립"
+    },
+    "harness_validate": {
+      "iterations": 30,
+      "mean_ms": 149.19267333330026,
+      "median_ms": 145.99825000004785,
+      "stdev_ms": 7.058625395687522,
+      "min_ms": 139.65019999977812,
+      "max_ms": 174.26330000034795,
+      "target": "27 파일 스키마 검증 (subprocess)"
+    },
+    "harness_integrity": {
+      "iterations": 30,
+      "mean_ms": 104.09353333334366,
+      "median_ms": 104.30135000001428,
+      "stdev_ms": 4.296345571678481,
+      "min_ms": 96.88469999991867,
+      "max_ms": 119.14610000030734,
+      "target": "clean skeleton (5 파일) 대상 integrity"
+    },
+    "find_placeholders": {
+      "target": "find_placeholders 스케일링",
+      "sizes": {
+        "small_100B": {
+          "iterations": 30,
+          "mean_ms": 0.005683333377722496,
+          "median_ms": 0.002499999936844688,
+          "stdev_ms": 0.016544257911382216,
+          "min_ms": 0.0021999999262334313,
+          "max_ms": 0.09319999981016736,
+          "size_bytes": 23
+        },
+        "medium_10KB": {
+          "iterations": 30,
+          "mean_ms": 0.018059999941518374,
+          "median_ms": 0.01810000003388268,
+          "stdev_ms": 0.000522988730692274,
+          "min_ms": 0.01699999984339229,
+          "max_ms": 0.02029999996011611,
+          "size_bytes": 11210
+        },
+        "large_100KB": {
+          "iterations": 30,
+          "mean_ms": 0.1434800000121565,
+          "median_ms": 0.13884999998481362,
+          "stdev_ms": 0.008005618713368357,
+          "min_ms": 0.13690000014321413,
+          "max_ms": 0.17350000007354538,
+          "size_bytes": 112010
+        }
+      }
+    }
+  }
+}
