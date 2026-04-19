@@ -22,6 +22,8 @@ _ANGLE_PLACEHOLDER_RE = re.compile(r"<[a-z_][a-z0-9_]*>")
 # non-filesystem 코드 블록 (예: ```python, ```ts) — 예제용 placeholder 허용.
 _NON_FS_CODE_BLOCK_RE = re.compile(r"```(?!filesystem)\w*\n.*?\n```", re.DOTALL)
 # 표준 HTML/MDX 태그 — 플레이스홀더 오탐 방지.
+# KEEP IN SYNC with harness/bin/harness._HTML_TAGS — drift 는
+# backend/tests/skills/test_html_tags_sync.py 가 감지.
 _HTML_TAGS = frozenset({
     "a", "abbr", "address", "area", "article", "aside", "audio",
     "b", "base", "bdi", "bdo", "blockquote", "body", "br", "button",

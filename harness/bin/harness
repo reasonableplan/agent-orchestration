@@ -480,6 +480,8 @@ _PLACEHOLDER_RE = re.compile(r"<[a-z_][a-z0-9_]*>")
 _FILESYSTEM_BLOCK_RE = re.compile(r"^```filesystem\s*\n(.*?)\n```", re.MULTILINE | re.DOTALL)
 
 # 표준 HTML/SVG 태그 — 플레이스홀더 오탐 방지.
+# KEEP IN SYNC with backend/src/orchestrator/skeleton_assembler.py._HTML_TAGS —
+# drift 감지: backend/tests/skills/test_html_tags_sync.py
 _HTML_TAGS = frozenset({
     "a", "abbr", "address", "area", "article", "aside", "audio",
     "b", "base", "bdi", "bdo", "blockquote", "body", "br", "button",

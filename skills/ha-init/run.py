@@ -6,15 +6,13 @@
 - write --project ... --profiles ... --included ... --description ...
                                 : harness-plan.md + skeleton.md 작성
 
-v2 모듈 import:
-    HARNESS_AI_HOME 환경변수 우선, 없으면 기본값
-    (C:/Users/juwon/OneDrive/Desktop/agent).
+HARNESS_AI_HOME 탐지 로직은 `_ha_shared/utils.py` 에 일원화 (다른 6 스킬과 동일 경로).
+env 우선 → 없으면 레포 루트 자동 탐지 (dev mode) → 실패 시 명확한 에러.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -25,18 +23,10 @@ try:
 except (AttributeError, OSError):
     pass
 
-# v2 모듈 import — HARNESS_AI_HOME 환경변수 우선
-_DEFAULT_HOME = Path("C:/Users/juwon/OneDrive/Desktop/agent")
-_HARNESS_HOME = Path(os.environ.get("HARNESS_AI_HOME", str(_DEFAULT_HOME)))
-_BACKEND = _HARNESS_HOME / "backend"
-if not _BACKEND.exists():
-    print(
-        f"[FAIL] HARNESS_AI_HOME 의 backend/ 가 없음: {_BACKEND}\n"
-        f"       env HARNESS_AI_HOME 설정 또는 기본 경로 확인",
-        file=sys.stderr,
-    )
-    sys.exit(3)
-sys.path.insert(0, str(_BACKEND))
+# _ha_shared/utils.py 의 HARNESS_HOME 탐지 재사용 — 다른 스킬들과 일관성 유지.
+# import 자체가 side effect (sys.path 에 backend 추가) 이므로 이름 안 써도 제거 금지.
+sys.path.insert(0, str(Path(__file__).parent.parent / "_ha_shared"))
+from utils import HARNESS_HOME  # noqa: E402, F401, I001
 
 from src.orchestrator.plan_manager import (  # noqa: E402
     PlanManager,
