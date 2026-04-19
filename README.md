@@ -262,6 +262,9 @@ python harness/bin/harness integrity --project .   # skeleton ↔ FS 정합성
 | 문서 | 내용 |
 |---|---|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 시스템 구조 · 프로파일 · skeleton · 게이트 (**먼저 읽으세요**) |
+| [docs/decisions/](docs/decisions/) | Architecture Decision Records (ADR 5개) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 프로파일/LESSON/게이트/스킬 기여 가이드 |
+| [CHANGELOG.md](CHANGELOG.md) | 버전별 변경 이력 |
 | [SETUP.md](SETUP.md) | 처음부터 끝까지 설치/실행 가이드 |
 | [TODOS.md](TODOS.md) | 향후 개선 항목 |
 | [backend/docs/shared-lessons.md](backend/docs/shared-lessons.md) | 20개 과거 실수 패턴 |

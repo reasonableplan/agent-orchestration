@@ -7,7 +7,13 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
 ## [Unreleased]
 
 ### Added
-- (항목 추가되는대로)
+- **`docs/decisions/` ADR 5개** (B4) — Architecture Decision Records.
+  - ADR-001: 프로파일 기반 아키텍처로의 전환
+  - ADR-002: Skeleton 섹션 번호 → ID 전환
+  - ADR-003: 파이프라인 상태를 `harness-plan.md` 단일 파일로
+  - ADR-004: ai-slop 감지를 Reviewer 7번째 훅으로 통합
+  - ADR-005: /my-\* 완전 삭제, /ha-\* single cut-over (Phase 4 예정)
+- README 에 ADR / CONTRIBUTING / CHANGELOG 링크 추가.
 
 ### Changed
 - (항목 추가되는대로)
