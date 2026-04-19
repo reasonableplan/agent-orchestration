@@ -144,7 +144,7 @@ def test_e2e_detect_assemble_extract(tmp_path: Path) -> None:
     # backend_coder 는 overview/stack/errors 포함
     assert "프로젝트 개요" in context
     assert "에러 핸들링" in context
-    assert "관련 섹션" in context  # 필터링된 버전이라는 마커
+    assert "relevant sections" in context  # filtered marker
 
 
 def test_e2e_security_hooks_from_profile(tmp_path: Path) -> None:

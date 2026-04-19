@@ -159,7 +159,7 @@ def test_transition_skipping_raises() -> None:
     """init → planned 같은 건너뛰기는 불가."""
     pm = PlanManager()
     plan = _sample_plan()
-    with pytest.raises(InvalidStateTransitionError, match="건너뛰기"):
+    with pytest.raises(InvalidStateTransitionError, match="skip"):
         pm.transition(plan, "planned")
 
 
@@ -167,14 +167,14 @@ def test_transition_backward_raises() -> None:
     pm = PlanManager()
     plan = _sample_plan()
     pm.transition(plan, "designed")
-    with pytest.raises(InvalidStateTransitionError, match="역행"):
+    with pytest.raises(InvalidStateTransitionError, match="backward"):
         pm.transition(plan, "init")
 
 
 def test_transition_unknown_state_raises() -> None:
     pm = PlanManager()
     plan = _sample_plan()
-    with pytest.raises(InvalidStateTransitionError, match="미지정"):
+    with pytest.raises(InvalidStateTransitionError, match="unknown"):
         pm.transition(plan, "totally-fake")
 
 

@@ -96,7 +96,7 @@ class TestOrchestratorConfig:
     def test_get_agent_unknown(self) -> None:
         data = _make_valid_yaml()
         cfg = OrchestratorConfig(**data)
-        with pytest.raises(ValueError, match="알 수 없는 에이전트"):
+        with pytest.raises(ValueError, match="unknown agent"):
             cfg.get_agent("unknown_agent")
 
     def test_all_agents(self) -> None:
@@ -125,7 +125,7 @@ class TestLoadAgentsConfig:
         yaml_path = tmp_path / "agents.yaml"
         yaml_path.write_text("just a string", encoding="utf-8")
 
-        with pytest.raises(ValueError, match="dict 예상"):
+        with pytest.raises(ValueError, match="expected dict"):
             load_agents_config(yaml_path)
 
     def test_load_real_agents_yaml(self) -> None:

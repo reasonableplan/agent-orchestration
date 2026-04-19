@@ -1,4 +1,4 @@
-"""인터랙티브 파이프라인 러너 — 게이트 승인 기반 단계별 실행."""
+"""Interactive pipeline runner — gate-approval based step-by-step execution."""
 
 from __future__ import annotations
 
@@ -12,9 +12,7 @@ from src.orchestrator.orchestrate import Orchestra
 from src.orchestrator.phase import Phase
 from src.orchestrator.runner import RunResult
 
-# ---------------------------------------------------------------------------
-# 게이트별 리뷰 에이전트 프롬프트
-# ---------------------------------------------------------------------------
+# Per-gate review agent prompts (intentionally Korean — directed at the agents).
 
 _REQUIREMENTS_REVIEW_PROMPT = """\
 # 요구사항 검토 (office-hours 스타일)
@@ -57,9 +55,7 @@ _ENGINEERING_REVIEW_PROMPT = """\
 """
 
 
-# ---------------------------------------------------------------------------
-# 유틸리티
-# ---------------------------------------------------------------------------
+# Utilities
 
 def _hr(title: str) -> None:
     width = 60
@@ -69,7 +65,7 @@ def _hr(title: str) -> None:
 
 
 async def _ask_approval(question: str) -> bool:
-    """비동기 컨텍스트에서 stdin 블로킹 없이 사용자 승인을 받는다."""
+    """Read a yes/no approval from the user without blocking the event loop."""
     loop = asyncio.get_running_loop()
     while True:
         try:
@@ -85,9 +81,7 @@ async def _ask_approval(question: str) -> bool:
         print("y 또는 n으로 답해주세요.")
 
 
-# ---------------------------------------------------------------------------
-# 메인 러너
-# ---------------------------------------------------------------------------
+# Main runner
 
 async def run(
     requirements: str,
@@ -98,28 +92,27 @@ async def run(
     max_phase_retries: int = 2,
     profile_ids: list[str] | None = None,
 ) -> bool:
-    """인터랙티브 파이프라인 실행.
-
-    각 주요 단계 전후에 사용자 승인을 받고 진행한다.
+    """Run the interactive pipeline with user approval between major steps.
 
     Args:
-        requirements: PM 요구사항 텍스트
-        project_dir: 프로젝트 루트 디렉토리
-        max_task_retries: 태스크당 최대 재시도 횟수
-        max_phase_retries: Phase 리뷰 reject 시 최대 재시도 횟수
-        profile_ids: 지정 시 v2 경로 (`materialize_skeleton_v2`) 사용 — 프로파일
-                     템플릿으로 빈 skeleton 조립 후 에이전트 출력을 section_id 로
-                     merge. 미지정이면 legacy `materialize_skeleton` 사용.
+        requirements: PM requirements text.
+        project_dir: project root directory.
+        max_task_retries: per-task retry cap.
+        max_phase_retries: per-phase retry cap on reviewer REJECT.
+        profile_ids: if given, uses the v2 path (``materialize_skeleton_v2``) —
+                     assemble an empty skeleton from profile templates and merge
+                     agent output by ``section_id``. If omitted, the legacy
+                     ``materialize_skeleton`` is used.
 
     Returns:
-        True: 전체 파이프라인 성공, False: 중단 또는 실패
+        True on full pipeline success, False on abort or failure.
     """
     orchestra = Orchestra(project_dir=project_dir)
-    # 이전 실행 잔여 state 초기화 — 항상 PLANNING에서 시작
+    # Reset any leftover state from a previous run — always start from PLANNING
     orchestra.state.save(Phase.PLANNING)
     orchestra.phase_manager._current = Phase.PLANNING
 
-    # ── FROM SKELETON 모드: 설계 단계 건너뜀 ────────────────────────────────
+    # FROM SKELETON mode: skip the design phase
     if from_skeleton:
         skeleton_path = project_dir / "docs" / "skeleton.md"
         if not skeleton_path.exists():
@@ -132,7 +125,7 @@ async def run(
         print(f"✅ skeleton.md 로드: {skeleton_path}")
         print(f"   ({len(skeleton_text)}자)")
 
-        # skeleton 내용을 architect/designer 출력으로 사용
+        # Reuse the skeleton as both architect and designer output
         mock_result = RunResult(
             agent="skeleton",
             output=skeleton_text,
@@ -150,7 +143,7 @@ async def run(
             print("\n파이프라인 중단.")
             return False
 
-        # PHASE 2로 바로 이동
+        # Jump straight to PHASE 2
         _hr("PHASE 2 — 태스크 분해")
         print("Orchestrator 에이전트가 태스크를 분해 중입니다...\n")
 
@@ -193,7 +186,7 @@ async def run(
         print(f"  실패한 Phase: {[r['phase_num'] for r in failed]}")
         return False
 
-    # ── GATE 1: 요구사항 검토 ─────────────────────────────────────────────────
+    # GATE 1: requirements review
     _hr("GATE 1 — 요구사항 검토")
     print("요구사항을 분석 중입니다...\n")
 
@@ -208,7 +201,7 @@ async def run(
         print("\n파이프라인 중단 — 요구사항을 수정 후 다시 시작하세요.")
         return False
 
-    # ── PHASE 1: 설계 (Architect + Designer) ─────────────────────────────────
+    # PHASE 1: design (Architect + Designer)
     _hr("PHASE 1 — 설계")
     print("Architect + Designer 에이전트를 실행 중입니다...\n")
 
@@ -238,7 +231,7 @@ async def run(
     skeleton_path = project_dir / "docs" / "skeleton.md"
     print(f"\n✅ skeleton.md 생성 완료: {skeleton_path}")
 
-    # ── GATE 2: 엔지니어링 리뷰 ──────────────────────────────────────────────
+    # GATE 2: engineering review
     _hr("GATE 2 — 엔지니어링 리뷰")
     print("skeleton 설계를 리뷰 중입니다...\n")
 
@@ -259,7 +252,7 @@ async def run(
         )
         return False
 
-    # ── PHASE 2: 태스크 분해 ─────────────────────────────────────────────────
+    # PHASE 2: task breakdown
     _hr("PHASE 2 — 태스크 분해")
     print("Orchestrator 에이전트가 태스크를 분해 중입니다...\n")
 
@@ -281,7 +274,7 @@ async def run(
         print("\n파이프라인 중단 — skeleton.md의 섹션 17을 수정 후 재시작하세요.")
         return False
 
-    # ── PHASE 3: 구현 ────────────────────────────────────────────────────────
+    # PHASE 3: implementation
     _hr("PHASE 3 — 구현")
     print("구현을 시작합니다...\n")
 
@@ -305,7 +298,7 @@ async def run(
 
 
 def main() -> None:
-    """CLI 진입점 — 요구사항을 stdin 또는 인자로 받는다."""
+    """CLI entry point — read requirements from stdin or args."""
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]  # Windows cp949 대비
 
     parser = argparse.ArgumentParser(description="오케스트라 파이프라인 러너")
@@ -354,8 +347,8 @@ def main() -> None:
         sys.exit(1)
 
     env_project_dir = os.environ.get("PROJECT_DIR")
-    # Path("") == Path(".") 라서 falsy 가 아님 — 환경변수 부재 시 `or` 체인 건너뛰기 위해
-    # 명시적으로 값이 있을 때만 Path 생성.
+    # Path("") == Path(".") so it is not falsy — only build Path when the env
+    # var is actually set, to let the `or` chain fall through when it is absent.
     project_dir: Path = (
         args.project_dir
         or (Path(env_project_dir) if env_project_dir else None)

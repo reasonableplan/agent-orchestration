@@ -1,13 +1,13 @@
-"""Plan manager — harness-plan.md frontmatter 읽기/쓰기, 상태 전이 검증.
+"""Plan manager — read/write harness-plan.md frontmatter and validate state transitions.
 
-설계 문서 §6 (파이프라인 상태 추적) 참조.
+See design doc §6 (pipeline state tracking).
 
-상태 머신 (§6.2):
+State machine (§6.2):
     init → designed → planned → building → built → verified → reviewed → shipped
 
-전이 규칙:
-- 앞 단계로만 (뒤로는 명시적 롤백)
-- 한 단계씩 (건너뛰기 금지)
+Transition rules:
+- Forward only (rollback requires explicit backup)
+- One step at a time (no skipping)
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import yaml
 
 _FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
 
-# 상태 머신 — 순서대로 진행만 가능
+# State machine — forward progression only
 STATE_ORDER: tuple[str, ...] = (
     "init",
     "designed",
@@ -36,12 +36,12 @@ STATE_ORDER: tuple[str, ...] = (
 ALLOWED_GSTACK_MODES = {"auto", "manual", "prompt"}
 
 
-# ── 데이터 모델 ──────────────────────────────────────────────────────────
+# Data models
 
 
 @dataclass(frozen=True)
 class ProfileRef:
-    """harness-plan에서 참조하는 프로파일 (id + 적용 경로)."""
+    """Profile reference in harness-plan (id + applied path)."""
 
     id: str
     path: str
@@ -50,7 +50,7 @@ class ProfileRef:
 
 @dataclass(frozen=True)
 class VerifyRecord:
-    """단일 /ha-verify 실행 결과."""
+    """Single /ha-verify execution record."""
 
     step: str
     at: str  # ISO 8601 UTC
@@ -60,7 +60,7 @@ class VerifyRecord:
 
 @dataclass(frozen=True)
 class SkeletonSpec:
-    """harness-plan의 skeleton 섹션 결정사항."""
+    """Skeleton section decisions from harness-plan."""
 
     required: tuple[str, ...]
     optional: tuple[str, ...]
@@ -69,18 +69,18 @@ class SkeletonSpec:
 
 @dataclass(frozen=True)
 class Pipeline:
-    """파이프라인 진행 상태."""
+    """Pipeline progress state."""
 
-    steps: tuple[str, ...]  # ha-init이 제안한 순서 (gstack 포함)
-    current_step: str  # 추상 상태 (STATE_ORDER 중 하나)
-    completed_steps: tuple[str, ...]  # 실제 실행된 step 이름들
+    steps: tuple[str, ...]  # order proposed by ha-init (gstack steps included)
+    current_step: str  # abstract state (one of STATE_ORDER)
+    completed_steps: tuple[str, ...]  # step names that actually ran
     skipped_steps: tuple[str, ...] = ()
     gstack_mode: str = "manual"
 
 
 @dataclass
 class HarnessPlan:
-    """파싱된 harness-plan.md 전체."""
+    """Parsed harness-plan.md contents."""
 
     project_name: str
     project_type: str
@@ -96,63 +96,56 @@ class HarnessPlan:
     last_activity: str = ""
     harness_version: int = 2
     schema_version: int = 1
-    body: str = ""  # frontmatter 이외 Markdown 본문
+    body: str = ""  # markdown body outside the frontmatter
 
 
-# ── 예외 ────────────────────────────────────────────────────────────────
+# Exceptions
 
 
 class PlanNotFoundError(FileNotFoundError):
-    """harness-plan.md 파일이 존재하지 않음."""
+    """harness-plan.md file does not exist."""
 
 
 class InvalidStateTransitionError(ValueError):
-    """잘못된 상태 전이 시도 (역행, 건너뛰기, 미지정 상태)."""
+    """Invalid state transition attempt (backward, skip, or unknown state)."""
 
 
 class PlanSchemaError(ValueError):
-    """harness-plan.md frontmatter 스키마 위반."""
+    """harness-plan.md frontmatter schema violation."""
 
 
-# ── 매니저 ──────────────────────────────────────────────────────────────
+# Manager
 
 
 class PlanManager:
-    """harness-plan.md 읽기/쓰기 + 상태 전이.
-
-    - load(path): 파일 → HarnessPlan 객체
-    - save(plan, path): HarnessPlan → 파일 (frontmatter + body 직렬화)
-    - transition(plan, target_state, completed_step): 상태 전이 검증 + 적용
-    - record_verify(plan, step, passed, summary): 검증 이력 추가
-    - mark_skipped(plan, step): step 스킵 처리
-    """
+    """Read/write harness-plan.md with state transition validation."""
 
     def load(self, path: Path) -> HarnessPlan:
-        """harness-plan.md 로드.
+        """Load harness-plan.md.
 
         Raises:
-            PlanNotFoundError: 파일 없음
-            PlanSchemaError: frontmatter 형식 위반
+            PlanNotFoundError: File does not exist.
+            PlanSchemaError: Frontmatter schema violation.
         """
         if not path.exists():
-            raise PlanNotFoundError(f"harness-plan.md 없음: {path}")
+            raise PlanNotFoundError(f"harness-plan.md not found: {path}")
 
         text = path.read_text(encoding="utf-8")
         m = _FRONTMATTER_RE.match(text)
         if not m:
-            raise PlanSchemaError(f"{path.name}: YAML frontmatter 없음")
+            raise PlanSchemaError(f"{path.name}: missing YAML frontmatter")
         try:
             data = yaml.safe_load(m.group(1))
         except yaml.YAMLError as exc:
-            raise PlanSchemaError(f"{path.name}: YAML 파싱 실패: {exc}") from exc
+            raise PlanSchemaError(f"{path.name}: YAML parse failed: {exc}") from exc
         if not isinstance(data, dict):
-            raise PlanSchemaError(f"{path.name}: frontmatter 는 dict 여야 함")
+            raise PlanSchemaError(f"{path.name}: frontmatter must be a dict")
 
         body = text[m.end() :].lstrip()
         return _dict_to_plan(data, body)
 
     def save(self, plan: HarnessPlan, path: Path) -> None:
-        """HarnessPlan → 파일 (frontmatter + body)."""
+        """Serialize HarnessPlan to file (frontmatter + body)."""
         plan.updated_at = _now_iso()
         plan.last_activity = plan.updated_at
         data = _plan_to_dict(plan)
@@ -173,13 +166,13 @@ class PlanManager:
         gstack_mode: str = "manual",
         body: str = "",
     ) -> HarnessPlan:
-        """새 plan 생성. current_step="init", completed_steps=()."""
+        """Create a new plan. Starts at current_step="init"."""
         if gstack_mode not in ALLOWED_GSTACK_MODES:
             raise PlanSchemaError(
-                f"gstack_mode: {sorted(ALLOWED_GSTACK_MODES)} 중 하나여야 함, 현재 '{gstack_mode}'"
+                f"gstack_mode must be one of {sorted(ALLOWED_GSTACK_MODES)}, got '{gstack_mode}'"
             )
         if scale not in {"tiny", "small", "medium", "large"}:
-            raise PlanSchemaError(f"scale: tiny|small|medium|large, 현재 '{scale}'")
+            raise PlanSchemaError(f"scale must be tiny|small|medium|large, got '{scale}'")
 
         now = _now_iso()
         return HarnessPlan(
@@ -209,37 +202,32 @@ class PlanManager:
         *,
         completed_step: str | None = None,
     ) -> HarnessPlan:
-        """current_step 을 target_state 로 전이.
-
-        Args:
-            target_state: STATE_ORDER 중 하나
-            completed_step: 이번 전이를 일으킨 step 이름 (예: "ha-design").
-                            지정되면 completed_steps에 append.
+        """Transition current_step to target_state.
 
         Raises:
-            InvalidStateTransitionError: 역행/건너뛰기/미지정 상태
+            InvalidStateTransitionError: Backward, skip, or unknown state.
         """
         if target_state not in STATE_ORDER:
             raise InvalidStateTransitionError(
-                f"미지정 상태 '{target_state}'. 허용: {STATE_ORDER}"
+                f"unknown state '{target_state}'. allowed: {STATE_ORDER}"
             )
 
         current_idx = STATE_ORDER.index(plan.pipeline.current_step)
         target_idx = STATE_ORDER.index(target_state)
 
         if target_idx == current_idx:
-            # 같은 상태 (idempotent) — 새 step 추가만 처리
+            # Same state (idempotent) — only append the new step if given
             pass
         elif target_idx < current_idx:
             raise InvalidStateTransitionError(
-                f"역행 전이 불가: {plan.pipeline.current_step} → {target_state}. "
-                "롤백은 명시적 backup() 사용."
+                f"cannot move backward: {plan.pipeline.current_step} -> {target_state}. "
+                "use explicit backup() for rollback."
             )
         elif target_idx - current_idx > 1:
-            # 'building' → 'verified' (built 건너뜀) 같은 경우
+            # e.g. 'building' → 'verified' (skips 'built')
             raise InvalidStateTransitionError(
-                f"건너뛰기 불가: {plan.pipeline.current_step} → {target_state}. "
-                f"중간 상태 {STATE_ORDER[current_idx + 1 : target_idx]} 누락."
+                f"cannot skip states: {plan.pipeline.current_step} -> {target_state}. "
+                f"missing intermediate {STATE_ORDER[current_idx + 1 : target_idx]}."
             )
 
         completed = list(plan.pipeline.completed_steps)
@@ -264,7 +252,7 @@ class PlanManager:
         passed: bool,
         summary: str,
     ) -> HarnessPlan:
-        """verify 결과를 verify_history에 추가."""
+        """Append a verification result to verify_history."""
         plan.verify_history.append(
             VerifyRecord(step=step, at=_now_iso(), passed=passed, summary=summary)
         )
@@ -272,7 +260,7 @@ class PlanManager:
         return plan
 
     def mark_skipped(self, plan: HarnessPlan, step: str) -> HarnessPlan:
-        """step 을 skipped_steps 에 추가."""
+        """Add step to skipped_steps."""
         if step in plan.pipeline.skipped_steps:
             return plan
         plan.pipeline = Pipeline(
@@ -292,7 +280,7 @@ class PlanManager:
         path: str,
         reason: str,
     ) -> HarnessPlan:
-        """롤백 백업 기록 추가 (실제 파일 복사는 호출자 책임)."""
+        """Record a rollback backup entry (actual file copy is caller's responsibility)."""
         plan.backups.append(
             {"path": path, "at": _now_iso(), "reason": reason}
         )
@@ -300,16 +288,16 @@ class PlanManager:
         return plan
 
 
-# ── 직렬화/역직렬화 헬퍼 ────────────────────────────────────────────────
+# Serialization helpers
 
 
 def _now_iso() -> str:
-    """현재 UTC 시각 ISO 8601 (마이크로초 절단)."""
+    """Current UTC time as ISO 8601 (microseconds truncated)."""
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _dict_to_plan(data: dict[str, Any], body: str) -> HarnessPlan:
-    """frontmatter dict → HarnessPlan."""
+    """Convert frontmatter dict to HarnessPlan."""
     try:
         pipeline_raw = data.get("pipeline") or {}
         skeleton_raw = data.get("skeleton_sections") or {}
@@ -361,11 +349,11 @@ def _dict_to_plan(data: dict[str, Any], body: str) -> HarnessPlan:
             body=body,
         )
     except KeyError as exc:
-        raise PlanSchemaError(f"필수 필드 누락: {exc}") from exc
+        raise PlanSchemaError(f"missing required field: {exc}") from exc
 
 
 def _plan_to_dict(plan: HarnessPlan) -> dict[str, Any]:
-    """HarnessPlan → frontmatter dict (sort 보존)."""
+    """Convert HarnessPlan to frontmatter dict (preserves key order)."""
     return {
         "harness_version": plan.harness_version,
         "schema_version": plan.schema_version,

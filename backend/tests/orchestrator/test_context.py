@@ -163,7 +163,7 @@ class TestBuildContext:
 
         # backend_coder 는 errors, core.logic 포함. 관련 섹션 마커 있음 (전체 아님).
         assert "PARSE_001" in result
-        assert "관련 섹션" in result
+        assert "relevant sections" in result
 
     def test_architect_gets_all_skeleton(self, tmp_path: Path) -> None:
         docs_dir = tmp_path / "docs"
@@ -177,8 +177,8 @@ class TestBuildContext:
         )
 
         assert "Sample App" in result
-        # architect 는 전체이므로 "관련 섹션" 마커 없음
-        assert "관련 섹션" not in result
+        # architect 는 전체이므로 "relevant sections" 마커 없음
+        assert "relevant sections" not in result
 
     def test_adr_directory(self, tmp_path: Path) -> None:
         docs_dir = tmp_path / "docs"

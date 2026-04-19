@@ -1,10 +1,10 @@
-"""Skeleton assembler — 섹션 조각 로드 + 조립.
+"""Skeleton assembler — load section fragments and assemble into skeleton.md.
 
-설계 문서 §4 (skeleton 시스템) 참조.
-- 조각 위치: ~/.claude/harness/templates/skeleton/<section_id>.md (글로벌)
-            또는 {project}/.claude/harness/templates/skeleton/<section_id>.md (로컬)
-- 로컬 override 우선
-- 본문에서 frontmatter 제거 + {{section_number}} 치환
+See design doc §4 (skeleton system).
+- Fragment locations: ~/.claude/harness/templates/skeleton/<section_id>.md (global)
+                      or {project}/.claude/harness/templates/skeleton/<section_id>.md (local)
+- Local override takes precedence
+- Strips frontmatter and substitutes {{section_number}} placeholders
 """
 
 from __future__ import annotations
@@ -17,13 +17,13 @@ DEFAULT_HARNESS_DIR = Path.home() / ".claude" / "harness"
 _FRONTMATTER_RE = re.compile(r"^---\r?\n.*?\r?\n---\r?\n?", re.DOTALL)
 _PLACEHOLDER_NUMBER = "{{section_number}}"
 
-# 치환 안 된 템플릿 플레이스홀더 (예: <pkg>, <cmd_a>, <domain>). lowercase snake_case.
+# Unreplaced template placeholders (e.g. <pkg>, <cmd_a>, <domain>). lowercase snake_case.
 _ANGLE_PLACEHOLDER_RE = re.compile(r"<[a-z_][a-z0-9_]*>")
-# non-filesystem 코드 블록 (예: ```python, ```ts) — 예제용 placeholder 허용.
+# Non-filesystem code fences (```python, ```ts, …) — example placeholders allowed inside.
 _NON_FS_CODE_BLOCK_RE = re.compile(r"```(?!filesystem)\w*\n.*?\n```", re.DOTALL)
-# 표준 HTML/MDX 태그 — 플레이스홀더 오탐 방지.
-# KEEP IN SYNC with harness/bin/harness._HTML_TAGS — drift 는
-# backend/tests/skills/test_html_tags_sync.py 가 감지.
+# Standard HTML/MDX tags — excluded to prevent placeholder false positives.
+# KEEP IN SYNC with harness/bin/harness._HTML_TAGS — drift is caught by
+# backend/tests/skills/test_html_tags_sync.py.
 _HTML_TAGS = frozenset({
     "a", "abbr", "address", "area", "article", "aside", "audio",
     "b", "base", "bdi", "bdo", "blockquote", "body", "br", "button",
@@ -48,32 +48,33 @@ _HTML_TAGS = frozenset({
 
 
 class FragmentNotFoundError(LookupError):
-    """섹션 조각 파일을 글로벌·로컬 어느 곳에서도 찾을 수 없음."""
+    """Section fragment file not found in either global or local locations."""
 
 
 def find_placeholders(text: str) -> dict[str, list[int]]:
-    """assembled skeleton 에서 미치환 템플릿 placeholder (<pkg> 등) 탐색.
+    """Locate unreplaced template placeholders (<pkg> etc.) in an assembled skeleton.
 
-    - 코드 블록 (```python, ```ts 등) 내 예제 placeholder 는 제외.
-    - ```filesystem 블록은 포함 (실제 경로여야 함 — LESSON-018 관련 정합성 게이트).
-    - HTML/SVG 표준 태그 (`<div>`, `<pre>`, `<svg>` 등) 는 제외 — false positive 방지.
-    - 라인 번호는 원본 기준 (sanitize 시 개행 유지).
+    Non-filesystem code fences are stripped (example placeholders allowed).
+    ```filesystem blocks are kept — declared paths must be real (integrity gate).
+    Standard HTML/SVG tags (<div>, <pre>, <svg>, …) are excluded to avoid
+    false positives. Line numbers refer to the original text (newlines are
+    preserved when sanitizing).
 
     Returns:
-        {placeholder_literal: [line_numbers]}. 없으면 빈 dict.
+        {placeholder_literal: [line_numbers]}; empty dict if none.
     """
     def _strip_block(m: re.Match[str]) -> str:
-        # 개행만 남겨 라인 번호 보존
+        # Preserve newlines so line numbers stay accurate
         return "\n" * m.group(0).count("\n")
 
     sanitized = _NON_FS_CODE_BLOCK_RE.sub(_strip_block, text)
     found: dict[str, list[int]] = {}
     for lineno, line in enumerate(sanitized.splitlines(), 1):
-        # 인라인 백틱 코드 (`<pkg>` 같은 템플릿 예시) 제거 — 치환 안 해도 되는 형식 표시
+        # Strip inline backtick code (e.g. `<pkg>` in markdown) — these are
+        # illustrative format markers, not placeholders to replace.
         stripped = re.sub(r"`[^`\n]*`", "", line)
         for match in _ANGLE_PLACEHOLDER_RE.finditer(stripped):
             literal = match.group(0)
-            # HTML/SVG 태그 제외
             tag_name = literal[1:-1]
             if tag_name in _HTML_TAGS:
                 continue
@@ -82,9 +83,9 @@ def find_placeholders(text: str) -> dict[str, list[int]]:
 
 
 class SkeletonAssembler:
-    """섹션 조각 로드 + 조립.
+    """Load section fragments and assemble them into skeleton.md.
 
-    로컬 override 우선:
+    Local fragments override global ones:
       1. {project}/.claude/harness/templates/skeleton/<id>.md
       2. {harness_dir}/templates/skeleton/<id>.md
     """
@@ -99,10 +100,10 @@ class SkeletonAssembler:
         self._fragment_cache: dict[str, str] = {}
 
     def load_fragment(self, section_id: str) -> str:
-        """조각 파일에서 frontmatter 제거된 body 텍스트 반환.
+        """Return fragment body text with frontmatter stripped.
 
         Raises:
-            FragmentNotFoundError: 글로벌/로컬 모두 없음
+            FragmentNotFoundError: if the fragment is not found globally or locally.
         """
         if section_id in self._fragment_cache:
             return self._fragment_cache[section_id]
@@ -119,15 +120,15 @@ class SkeletonAssembler:
         *,
         title: str = "Project Skeleton",
     ) -> str:
-        """주어진 섹션 ID 순서대로 조립한다.
+        """Assemble fragments in the given order.
 
-        - 각 조각의 {{section_number}} 자리에 1부터 시작하는 인덱스 치환
-        - 섹션 사이는 빈 줄 두 개로 구분 (Markdown 가독성)
-        - 빈 section_ids → 제목만 반환
+        Each fragment's ``{{section_number}}`` placeholder is replaced with a
+        1-based index. Sections are separated by blank lines for Markdown
+        readability. An empty ``section_ids`` list returns just the title.
 
         Args:
-            section_ids: 조립할 섹션 ID 순서대로 (중복 자동 제거 — 첫 등장만 사용)
-            title: skeleton 최상위 제목 (`# {title}`)
+            section_ids: section IDs in order. Duplicates are dropped (first wins).
+            title: top-level skeleton title (``# {title}``).
         """
         seen: set[str] = set()
         ordered: list[str] = []
@@ -145,7 +146,7 @@ class SkeletonAssembler:
 
         return "\n\n".join(parts) + "\n"
 
-    # ── 내부 ────────────────────────────────────────────────────────────
+    # Internals
 
     def _resolve_fragment_path(self, section_id: str) -> Path:
         if self.project_dir:
@@ -164,4 +165,4 @@ class SkeletonAssembler:
         )
         if global_path.exists():
             return global_path
-        raise FragmentNotFoundError(f"섹션 조각 '{section_id}.md' 를 찾을 수 없음")
+        raise FragmentNotFoundError(f"section fragment '{section_id}.md' not found")

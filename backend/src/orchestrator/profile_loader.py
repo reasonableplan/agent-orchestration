@@ -1,6 +1,6 @@
-"""Profile loader — _registry.yaml 파싱, 로컬/글로벌 해석, 상속 병합, 프로젝트 감지.
+"""Profile loader — parse _registry.yaml, resolve local/global, merge inheritance, detect projects.
 
-설계 문서 §3 (프로파일 시스템 명세) + §11 (마이그레이션 계획) 참조.
+See design doc §3 (profile system spec) and §11 (migration plan).
 """
 
 from __future__ import annotations
@@ -17,12 +17,12 @@ DEFAULT_HARNESS_DIR = Path.home() / ".claude" / "harness"
 _FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---", re.DOTALL)
 
 
-# ── 데이터 모델 ──────────────────────────────────────────────────────────
+# Data models
 
 
 @dataclass(frozen=True)
 class Toolchain:
-    """프로파일의 검증 도구 명령. None은 해당 도구 없음을 의미."""
+    """Profile toolchain commands. None means the tool is not configured."""
 
     install: str | None
     test: str | None
@@ -33,7 +33,7 @@ class Toolchain:
 
 @dataclass(frozen=True)
 class Whitelist:
-    """프로파일이 허용하는 의존성 목록."""
+    """Allowed dependency lists for a profile."""
 
     runtime: tuple[str, ...]
     dev: tuple[str, ...]
@@ -42,7 +42,7 @@ class Whitelist:
 
 @dataclass(frozen=True)
 class Component:
-    """프로파일의 컴포넌트 타입 (예: persistence, interface.cli)."""
+    """Profile component type (e.g. persistence, interface.cli)."""
 
     id: str
     required: bool
@@ -52,7 +52,7 @@ class Component:
 
 @dataclass(frozen=True)
 class SkeletonSections:
-    """프로파일이 사용하는 skeleton 섹션 ID 목록."""
+    """Skeleton section IDs used by a profile."""
 
     required: tuple[str, ...]
     optional: tuple[str, ...]
@@ -61,7 +61,7 @@ class SkeletonSections:
 
 @dataclass(frozen=True)
 class Profile:
-    """파싱 + 상속 병합 완료된 프로파일."""
+    """Fully parsed and inheritance-merged profile."""
 
     id: str
     name: str
@@ -78,36 +78,36 @@ class Profile:
     gstack_mode: str  # "auto" | "manual" | "prompt"
     gstack_recommended: dict[str, list[str]]
     lessons_applied: tuple[str, ...]
-    body: str  # frontmatter 제외 Markdown 본문
+    body: str  # markdown body (frontmatter stripped)
     raw: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class ProfileMatch:
-    """detection 결과 — 프로파일 + 프로젝트 root 기준 상대 경로."""
+    """Detection result — profile + relative path from project root."""
 
     profile: Profile
     path: str
 
 
 class ProfileNotFoundError(LookupError):
-    """프로파일 파일을 글로벌·로컬 어느 곳에서도 찾을 수 없음."""
+    """Profile file not found in either global or local locations."""
 
 
 class CyclicInheritanceError(ValueError):
-    """extends 체인에서 순환 상속 탐지."""
+    """Cyclic inheritance detected in extends chain."""
 
 
-# ── 로더 ────────────────────────────────────────────────────────────────
+# Loader
 
 
 class ProfileLoader:
-    """프로파일 로더.
+    """Profile loader with local override, inheritance merging, and caching.
 
-    - 로컬 override(`{project}/.claude/harness/profiles/<id>.md`) 우선,
-      없으면 글로벌(`~/.claude/harness/profiles/<id>.md`) 사용.
-    - extends 체인을 따라 병합 (`_base` 항상 최하위).
-    - load() 는 캐시. detect() 는 매번 파일 시스템 스캔.
+    Local override (`{project}/.claude/harness/profiles/<id>.md`) takes
+    precedence over global (`~/.claude/harness/profiles/<id>.md`).
+    Follows extends chains with `_base` as the lowest ancestor.
+    load() results are cached; detect() always scans the filesystem.
     """
 
     def __init__(
@@ -120,16 +120,16 @@ class ProfileLoader:
         self._cache: dict[str, Profile] = {}
 
     def load(self, profile_id: str) -> Profile:
-        """프로파일 로드 — 로컬 override + 상속 병합 후 반환.
+        """Load a profile with local override and inheritance merging.
 
         Raises:
-            ProfileNotFoundError: 글로벌·로컬 어느 곳에도 없음
-            CyclicInheritanceError: extends 체인 순환
-            ValueError: frontmatter 파싱 실패
+            ProfileNotFoundError: Not found in global or local.
+            CyclicInheritanceError: Circular extends chain.
+            ValueError: Frontmatter parse failure.
         """
         if profile_id == "_base":
             raise ValueError(
-                "_base 는 직접 로드할 수 없음 (다른 프로파일이 extends하는 용도)"
+                "_base cannot be loaded directly (it is meant to be extended by other profiles)"
             )
         if profile_id in self._cache:
             return self._cache[profile_id]
@@ -142,9 +142,10 @@ class ProfileLoader:
         return profile
 
     def detect(self, project_dir: Path | None = None) -> list[ProfileMatch]:
-        """프로젝트 루트에서 매칭되는 프로파일 모두 반환 (모노레포 지원).
+        """Return every matching profile for the project root (monorepo-aware).
 
-        각 rule 마다 첫 매칭 경로만 사용. 여러 rule이 같은 경로에 매칭 가능.
+        Each rule uses its first matching path. Multiple rules may match the
+        same path independently.
         """
         root = (project_dir or self.project_dir or Path.cwd()).resolve()
         registry = self.load_registry()
@@ -167,17 +168,15 @@ class ProfileLoader:
         return matches
 
     def load_registry(self) -> dict[str, Any]:
-        """_registry.yaml 로드."""
+        """Load _registry.yaml."""
         path = self.harness_dir / "profiles" / "_registry.yaml"
         if not path.exists():
-            raise FileNotFoundError(f"_registry.yaml 없음: {path}")
+            raise FileNotFoundError(f"_registry.yaml not found: {path}")
         with open(path, encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
 
-    # ── 내부 ────────────────────────────────────────────────────────────
-
     def _resolve_profile_path(self, profile_id: str) -> Path:
-        """로컬 override 우선, 없으면 글로벌."""
+        """Resolve profile path — local override first, then global."""
         if self.project_dir:
             local = (
                 self.project_dir / ".claude" / "harness" / "profiles" / f"{profile_id}.md"
@@ -187,25 +186,25 @@ class ProfileLoader:
         global_path = self.harness_dir / "profiles" / f"{profile_id}.md"
         if global_path.exists():
             return global_path
-        raise ProfileNotFoundError(f"프로파일 '{profile_id}' 파일을 찾을 수 없음")
+        raise ProfileNotFoundError(f"profile '{profile_id}' file not found")
 
     def _parse_file(self, path: Path) -> tuple[dict[str, Any], str]:
-        """파일에서 frontmatter dict + body 텍스트 분리."""
+        """Split file into frontmatter dict + body text."""
         text = path.read_text(encoding="utf-8")
         m = _FRONTMATTER_RE.match(text)
         if not m:
-            raise ValueError(f"{path.name}: YAML frontmatter 없음")
+            raise ValueError(f"{path.name}: missing YAML frontmatter")
         try:
             data = yaml.safe_load(m.group(1))
         except yaml.YAMLError as exc:
-            raise ValueError(f"{path.name}: YAML 파싱 실패: {exc}") from exc
+            raise ValueError(f"{path.name}: YAML parse failed: {exc}") from exc
         if not isinstance(data, dict):
-            raise ValueError(f"{path.name}: frontmatter 는 dict 여야 함")
+            raise ValueError(f"{path.name}: frontmatter must be a dict")
         body = text[m.end() :].lstrip()
         return data, body
 
     def _read_base(self) -> dict[str, Any]:
-        """_base.md raw frontmatter (없으면 빈 dict)."""
+        """Read _base.md raw frontmatter (empty dict if not found)."""
         candidates: list[Path] = []
         if self.project_dir:
             candidates.append(
@@ -219,7 +218,7 @@ class ProfileLoader:
         return {}
 
     def _apply_inheritance(self, data: dict[str, Any]) -> dict[str, Any]:
-        """extends 체인 따라 병합. _base 항상 최하위."""
+        """Merge along the extends chain. _base is always the lowest ancestor."""
         chain: list[dict[str, Any]] = [data]
         seen: set[str] = {data.get("id", "")}
         cur = data
@@ -229,13 +228,13 @@ class ProfileLoader:
                 break
             if parent_id in seen:
                 raise CyclicInheritanceError(
-                    f"순환 상속: {' -> '.join([*seen, parent_id])}"
+                    f"cyclic inheritance: {' -> '.join([*seen, parent_id])}"
                 )
             seen.add(parent_id)
             try:
                 parent_path = self._resolve_profile_path(parent_id)
             except ProfileNotFoundError:
-                # 부모 없으면 즉시 끊고 _base 로
+                # Parent not found — break to _base
                 break
             parent_data, _ = self._parse_file(parent_path)
             chain.append(parent_data)
@@ -245,7 +244,7 @@ class ProfileLoader:
         if base:
             chain.append(base)
 
-        # base 부터 거꾸로 병합 — 자식이 override
+        # Merge from base upward — child overrides parent
         merged: dict[str, Any] = {}
         for layer in reversed(chain):
             merged = _merge_layer(merged, layer)
@@ -301,11 +300,11 @@ class ProfileLoader:
         )
 
 
-# ── 모듈 레벨 헬퍼 ────────────────────────────────────────────────────
+# Module-level helpers
 
 
 def _matches_detect(base: Path, detect: dict[str, Any]) -> bool:
-    """단일 detect 블록 평가 — files / contains / contains_any / not_contains."""
+    """Evaluate a single detect block — files / contains / contains_any / not_contains."""
     if "files" in detect:
         for f in detect["files"] or []:
             if not (base / f).exists():
@@ -334,7 +333,7 @@ def _matches_detect(base: Path, detect: dict[str, Any]) -> bool:
 
 
 def _merge_layer(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
-    """자식이 base를 override. 병합 규칙은 design doc §3.4."""
+    """Child overrides base. Merge rules per design doc S3.4."""
     merged = dict(base)
     for key, value in child.items():
         if (
@@ -360,7 +359,7 @@ def _merge_layer(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
 
 
 def _merge_whitelist(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
-    """whitelist 리스트는 합집합 (base 순서 우선, 자식 추가만)."""
+    """Whitelist lists are unioned (base order first, child appended)."""
     out: dict[str, Any] = dict(base)
     for sub in ("runtime", "dev", "prefix_allowed"):
         seen: set[str] = set()
@@ -377,7 +376,7 @@ def _merge_skeleton_sections(
     base: dict[str, Any],
     child: dict[str, Any],
 ) -> dict[str, Any]:
-    """skeleton_sections: required/optional 합집합, order 는 자식 우선."""
+    """skeleton_sections: required/optional are unioned, order is child-first."""
     out: dict[str, Any] = {}
     for sub in ("required", "optional"):
         seen: set[str] = set()

@@ -1,16 +1,17 @@
-"""HarnessAI 품질 게이트 커버리지 벤치마크.
+"""HarnessAI quality-gate coverage benchmark.
 
-목적: 각 게이트가 "잡아야 할 패턴" 을 정말 잡는지, "깨끗한 코드" 를 잘못 잡지 않는지
-정량 측정. TP/TN/FP/FN 기반 precision/recall 을 계산해 `docs/benchmarks/` 리포트 생성.
+Measures, per gate, whether patterns that *should* be detected are detected
+and whether clean code is *not* flagged. Produces TP/TN/FP/FN counts and
+precision/recall/accuracy for the ``docs/benchmarks/`` report.
 
-- positive fixture: 게이트가 반드시 감지해야 할 악성/패턴 코드
-- negative fixture: 게이트가 건드리면 안 되는 깨끗한 코드
-- 각 게이트별 precision = TP/(TP+FP), recall = TP/(TP+FN)
-- 전체 평균 + gate-by-gate 세부
+- Positive fixtures: code the gate must flag.
+- Negative fixtures: code the gate must not flag.
+- Per-gate precision = TP/(TP+FP), recall = TP/(TP+FN), accuracy = (TP+TN)/N.
+- Overall averages plus gate-by-gate detail.
 
-사용법:
-  python scripts/gate_benchmark.py           # 사람이 읽는 표
-  python scripts/gate_benchmark.py --json    # JSON (CI 연동용)
+Usage:
+  python scripts/gate_benchmark.py           # human-readable table
+  python scripts/gate_benchmark.py --json    # JSON (for CI integration)
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ HA_REVIEW_RUN_PY = REPO_ROOT / "skills" / "ha-review" / "run.py"
 
 if not BACKEND_SRC.exists() or not HA_REVIEW_RUN_PY.exists():
     sys.stderr.write(
-        f"[FATAL] backend/src 또는 skills/ha-review/run.py 누락 — 레포 루트에서 실행하세요.\n"
+        f"[FATAL] backend/src or skills/ha-review/run.py missing — run from the repo root.\n"
         f"  BACKEND_SRC={BACKEND_SRC}\n  HA_REVIEW_RUN_PY={HA_REVIEW_RUN_PY}\n"
     )
     sys.exit(3)
@@ -47,10 +48,10 @@ from src.orchestrator.security_hooks import (  # noqa: E402
 
 
 def _load_ai_slop_module():
-    """skills/ha-review/run.py 의 _AI_SLOP_PATTERNS + _strip_non_code_from_diff 를 동적 import."""
+    """Dynamic import of _AI_SLOP_PATTERNS + _strip_non_code_from_diff from skills/ha-review/run.py."""
     spec = importlib.util.spec_from_file_location("_ha_review", HA_REVIEW_RUN_PY)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"ha-review run.py spec load 실패: {HA_REVIEW_RUN_PY}")
+        raise RuntimeError(f"failed to load ha-review run.py spec: {HA_REVIEW_RUN_PY}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -62,11 +63,11 @@ _STRIP_NON_CODE = _HA_REVIEW._strip_non_code_from_diff
 
 
 def ai_slop_hits(text: str) -> int:
-    """ai-slop 패턴 중 몇 개가 매칭됐는지 (finding count 가 아닌 unique pattern count).
+    """Count unique ai-slop patterns that match (not finding count).
 
-    프로덕션 `ha-review` 와 동일하게 `_strip_non_code_from_diff` 전처리를 통과시킴 —
-    fixture 가 diff 가 아닌 raw text 이므로 변경 없이 지나가지만, 프로덕션 경로와 동일한
-    파이프라인을 사용해 차이를 없앰.
+    Applies the production ``ha-review`` preprocessing (``_strip_non_code_from_diff``).
+    Fixtures are raw text (not diffs) so the preprocessor is a no-op, but using
+    the same pipeline prevents drift between the benchmark and production.
     """
     code_only = _STRIP_NON_CODE(text)
     count = 0
@@ -76,14 +77,14 @@ def ai_slop_hits(text: str) -> int:
     return count
 
 
-# ── fixture 타입 ────────────────────────────────────────────────────────────
+# Fixture types
 
 
 @dataclass
 class Fixture:
     label: str
     snippet: str
-    expected: bool  # True = 게이트가 감지해야 함 (positive), False = 감지하면 안 됨 (negative)
+    expected: bool  # True = gate must detect (positive), False = must not (negative)
 
 
 @dataclass
@@ -93,8 +94,8 @@ class GateResult:
     fp: int
     tn: int
     fn: int
-    missed: list[str]  # 감지 실패한 fixture label 목록 (디버깅용)
-    false_alarm: list[str]  # 오탐한 fixture label 목록
+    missed: list[str]  # fixture labels the gate failed to detect
+    false_alarm: list[str]  # fixture labels the gate flagged in error
 
     @property
     def total(self) -> int:
@@ -115,10 +116,11 @@ class GateResult:
         return (self.tp + self.tn) / self.total if self.total else 1.0
 
 
-# ── fixture 정의 ────────────────────────────────────────────────────────────
+# Fixture definitions
 
-# contract-validator 는 "skeleton 이 선언한 엔드포인트" 목록과 대조. 이 벤치마크에서는
-# fixture 가 사용하는 엔드포인트만 포함하면 됨. fixture 변경 시 이 목록도 동기화.
+# contract-validator compares against skeleton-declared endpoints. In this
+# benchmark, include only the endpoints referenced by fixtures. Keep in sync
+# with fixture changes.
 _CONTRACT_ALLOWED_ENDPOINTS: list[str] = ["GET /projects", "POST /issues"]
 
 FIXTURES: dict[str, list[Fixture]] = {
@@ -142,8 +144,8 @@ FIXTURES: dict[str, list[Fixture]] = {
         Fixture("f_string_sql", 'cursor.execute(f"SELECT * FROM t WHERE id = {uid}")', True),
         Fixture("where_less_delete", 'db.execute("DELETE FROM audit_log;")', True),
         Fixture("orm_query", 'users = session.query(User).filter(User.id == uid).all()', False),
-        # cursor.execute() 자체가 raw API 이므로 parameterized 여도 ORM 우선 정책상 감지 대상.
-        # 진짜 음성 fixture 는 SQLAlchemy select() 사용.
+        # cursor.execute() is a raw API even when parameterized — ORM-first policy flags it.
+        # The true negative uses SQLAlchemy select() instead.
         Fixture("sqlalchemy_select", 'stmt = select(User).where(User.id == uid)\nresult = db.execute(stmt)', False),
     ],
     "dependency-check": [
@@ -164,7 +166,7 @@ FIXTURES: dict[str, list[Fixture]] = {
         Fixture("logger_call", 'logger.info("operation complete")', False),
     ],
     "contract-validator": [
-        # allowed_endpoints 외 엔드포인트 → BLOCK
+        # Endpoints outside allowed_endpoints → BLOCK
         Fixture(
             "off_contract_endpoint",
             '@router.post("/admin/wipe")\ndef wipe(): pass\n',
@@ -179,7 +181,7 @@ FIXTURES: dict[str, list[Fixture]] = {
     "ai-slop": [
         Fixture(
             "verbose_docstring",
-            '"""' + ("설명이 엄청 많음. " * 30) + '"""',
+            '"""' + ("Way too much explanation. " * 30) + '"""',
             True,
         ),
         Fixture(
@@ -208,11 +210,11 @@ FIXTURES: dict[str, list[Fixture]] = {
 }
 
 
-# ── gate 실행 디스패처 ──────────────────────────────────────────────────────
+# Gate dispatcher
 
 
 def _gate_triggered(gate: str, snippet: str) -> bool:
-    """각 게이트 함수 호출 + 하나라도 finding 나왔는지 판정."""
+    """Call the gate function and return True if any finding was produced."""
     if gate == "secret-filter":
         return bool(check_secret_filter(snippet))
     if gate == "command-guard":
@@ -274,7 +276,7 @@ def format_markdown(results: list[GateResult]) -> str:
     overall_r = total_tp / (total_tp + total_fn) if (total_tp + total_fn) else 1.0
     overall_a = (total_tp + total_tn) / total if total else 1.0
     lines.append(
-        f"| **전체** | **{total}** | **{overall_p:.0%}** | **{overall_r:.0%}** | "
+        f"| **overall** | **{total}** | **{overall_p:.0%}** | **{overall_r:.0%}** | "
         f"**{overall_a:.0%}** | | |"
     )
     return "\n".join(lines)
@@ -298,8 +300,8 @@ def to_json(results: list[GateResult]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="HarnessAI 게이트 커버리지 벤치마크")
-    parser.add_argument("--json", action="store_true", help="JSON 출력")
+    parser = argparse.ArgumentParser(description="HarnessAI gate coverage benchmark")
+    parser.add_argument("--json", action="store_true", help="emit JSON")
     args = parser.parse_args()
 
     results = run_benchmark()
@@ -310,7 +312,7 @@ def main() -> int:
         sys.stdout.write("# Gate Coverage Benchmark\n\n")
         sys.stdout.write(format_markdown(results) + "\n")
 
-    # 실패 (missed 또는 false_alarm 존재) 시 exit=1 (CI 게이트)
+    # Exit 1 on any miss or false alarm so this doubles as a CI gate.
     bad = any(r.missed or r.false_alarm for r in results)
     return 1 if bad else 0
 

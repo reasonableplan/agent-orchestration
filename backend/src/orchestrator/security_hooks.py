@@ -1,4 +1,4 @@
-"""보안 훅 — 에이전트 출력 코드에서 보안/품질 위반을 탐지한다."""
+"""Security hooks — detect security and quality violations in agent output."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from enum import StrEnum
 
 
 class Severity(StrEnum):
-    BLOCK = "BLOCK"  # 즉시 reject — merge 불가
-    WARN = "WARN"    # 로그 기록 — 진행은 허용
+    BLOCK = "BLOCK"  # Reject immediately — merge forbidden
+    WARN = "WARN"    # Log only — execution continues
 
 
 @dataclass
 class Finding:
-    """개별 위반 탐지 결과."""
+    """A single violation detected by a hook."""
 
     hook: str
     severity: Severity
@@ -25,7 +25,7 @@ class Finding:
 
 @dataclass
 class SecurityResult:
-    """전체 보안 훅 실행 결과."""
+    """Aggregate result of all security hooks."""
 
     findings: list[Finding] = field(default_factory=list)
 
@@ -38,18 +38,16 @@ class SecurityResult:
         blocks = [f for f in self.findings if f.severity == Severity.BLOCK]
         warns = [f for f in self.findings if f.severity == Severity.WARN]
         if not self.findings:
-            return "보안 훅 통과"
+            return "security hooks passed"
         parts = []
         if blocks:
-            parts.append(f"BLOCK {len(blocks)}건")
+            parts.append(f"BLOCK x{len(blocks)}")
         if warns:
-            parts.append(f"WARN {len(warns)}건")
+            parts.append(f"WARN x{len(warns)}")
         return " / ".join(parts)
 
 
-# ---------------------------------------------------------------------------
-# 화이트리스트 (conventions.md 기준)
-# ---------------------------------------------------------------------------
+# Whitelists (based on conventions.md)
 
 _PYTHON_WHITELIST = {
     "fastapi", "uvicorn", "sqlmodel", "sqlalchemy", "alembic",
@@ -60,7 +58,7 @@ _PYTHON_WHITELIST = {
     "collections", "contextlib", "abc", "io", "time", "math",
     "hashlib", "hmac", "secrets", "base64", "urllib", "http",
     "email", "copy", "weakref", "threading", "multiprocessing",
-    # 내부 모듈 허용
+    # Internal modules allowed
     "src", "__future__",
 }
 
@@ -69,7 +67,7 @@ _FRONTEND_WHITELIST = {
     "tailwindcss", "postcss", "autoprefixer", "react-hook-form",
     "react-router-dom", "class-variance-authority",
     "clsx", "tailwind-merge", "lucide-react", "zod",
-    # @radix-ui/* 접두사 처리는 별도
+    # @radix-ui/* prefix handled separately
 }
 
 _FRONTEND_WHITELIST_PREFIXES = ("@radix-ui/",)
@@ -199,7 +197,7 @@ _DB_PATTERNS: list[tuple[re.Pattern[str], str, Severity]] = [
         Severity.BLOCK,
     ),
     (
-        # DELETE FROM table 뒤에 WHERE 없는 경우 (같은 라인 기준)
+        # DELETE FROM <table> without a WHERE clause on the same line
         re.compile(r'\bDELETE\s+FROM\s+\w+\s*(?:;|$)', re.IGNORECASE),
         "WHERE 없는 DELETE — 전체 행 삭제 위험",
         Severity.BLOCK,
@@ -245,10 +243,11 @@ def check_dependency(
     frontend_whitelist: set[str] | None = None,
     frontend_prefixes: tuple[str, ...] | None = None,
 ) -> list[Finding]:
-    """의존성 화이트리스트 검사.
+    """Dependency whitelist check.
 
-    Harness v2: python_whitelist / frontend_whitelist / frontend_prefixes 인자로
-    프로파일 기반 동적 whitelist 주입 가능. None 이면 모듈 기본값 사용.
+    Harness v2: pass ``python_whitelist`` / ``frontend_whitelist`` /
+    ``frontend_prefixes`` to inject profile-derived whitelists. ``None`` uses
+    the built-in defaults.
     """
     py_wl = python_whitelist if python_whitelist is not None else _PYTHON_WHITELIST
     fe_wl = frontend_whitelist if frontend_whitelist is not None else _FRONTEND_WHITELIST
@@ -270,7 +269,7 @@ def check_dependency(
                         line=i,
                         snippet=line.strip()[:120],
                     ))
-        # pip install 명령 탐지
+        # Detect pip install commands
         for i, line in enumerate(lines, start=1):
             for m in _PIP_INSTALL.finditer(line):
                 pkg = m.group(1).lower()
@@ -298,7 +297,7 @@ def check_dependency(
                         line=i,
                         snippet=line.strip()[:120],
                     ))
-        # npm install 명령 탐지
+        # Detect npm install commands
         for i, line in enumerate(lines, start=1):
             for m in _NPM_INSTALL.finditer(line):
                 pkg = m.group(1)
@@ -399,12 +398,12 @@ def check_contract_validator(
     text: str,
     allowed_endpoints: list[str] | None = None,
 ) -> list[Finding]:
-    """skeleton에 정의된 엔드포인트 외 추가 여부를 검사한다.
+    """Check for endpoints not declared in the skeleton.
 
     Args:
-        text: 에이전트 출력 텍스트
-        allowed_endpoints: 허용된 엔드포인트 목록 (예: ["GET /projects", "POST /issues"])
-                           None이면 패턴 탐지만 수행 (WARN)
+        text: agent output text.
+        allowed_endpoints: whitelist of allowed endpoints (e.g. ``["GET /projects", "POST /issues"]``).
+                           ``None`` performs pattern detection only (WARN).
     """
     findings: list[Finding] = []
 
@@ -431,15 +430,14 @@ def check_contract_validator(
     return findings
 
 
-# ---------------------------------------------------------------------------
-# 통합 실행기
-# ---------------------------------------------------------------------------
+# Aggregate runner
+
 
 class SecurityHooks:
-    """6개 보안 훅을 순서대로 실행한다.
+    """Run all six security hooks in order.
 
-    Harness v2: 생성 시 프로파일 기반 whitelist 주입 가능.
-    인자 미지정 시 모듈 기본값 사용 (레거시 호환).
+    Harness v2: pass profile-derived whitelists at construction. Without
+    arguments the module defaults are used (legacy compat).
     """
 
     def __init__(
@@ -455,13 +453,13 @@ class SecurityHooks:
 
     @classmethod
     def from_profile(cls, profile: object) -> SecurityHooks:
-        """profile_loader.Profile 인스턴스에서 whitelist 추출하여 생성.
+        """Build SecurityHooks from a ``profile_loader.Profile`` instance.
 
-        Profile 의 whitelist.runtime + whitelist.dev 합집합을 사용.
-        is_frontend 분기는 호출자가 run_all 의 인자로 결정.
+        Uses the union of ``whitelist.runtime`` + ``whitelist.dev``. The
+        ``is_frontend`` branch is selected by the caller via ``run_all``.
 
-        ※ 동일 SecurityHooks 인스턴스를 backend/frontend 양쪽에 사용하지 말 것.
-          프로파일별로 별도 인스턴스 권장.
+        Note: do not reuse the same SecurityHooks instance for both backend
+        and frontend — prefer one instance per profile.
         """
         wl_runtime = getattr(getattr(profile, "whitelist", None), "runtime", ())
         wl_dev = getattr(getattr(profile, "whitelist", None), "dev", ())
@@ -480,12 +478,12 @@ class SecurityHooks:
         is_frontend: bool = False,
         allowed_endpoints: list[str] | None = None,
     ) -> SecurityResult:
-        """모든 보안 훅을 실행하고 통합 결과를 반환한다.
+        """Run every security hook and return the aggregated result.
 
         Args:
-            text: 에이전트 출력 텍스트 (코드 포함)
-            is_frontend: True이면 프론트엔드 의존성 규칙 적용
-            allowed_endpoints: skeleton에 정의된 허용 엔드포인트 목록
+            text: agent output text (code included).
+            is_frontend: if True, use frontend dependency rules.
+            allowed_endpoints: endpoints declared in the skeleton.
         """
         findings: list[Finding] = []
         findings.extend(check_secret_filter(text))

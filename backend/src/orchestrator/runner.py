@@ -1,4 +1,4 @@
-"""에이전트 실행기 — provider에 위임, 타임아웃/재시도/에스컬레이션 관리."""
+"""Agent runner — delegate to providers with timeout, retry, and escalation."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from src.orchestrator.providers.gemini_cli import GeminiCliProvider
 
 @dataclass
 class RunResult:
-    """에이전트 실행 결과."""
+    """Result of a single agent execution."""
 
     agent: str
     output: str
@@ -30,24 +30,22 @@ class RunResult:
 
 
 def _create_provider(config: AgentConfig) -> BaseProvider:
-    """에이전트 설정에 맞는 provider 인스턴스를 생성."""
+    """Instantiate the provider matching the agent config."""
     if config.provider == Provider.CLAUDE_CLI:
         return ClaudeCliProvider()
     if config.provider == Provider.GEMINI:
         return GeminiApiProvider()
     if config.provider == Provider.GEMINI_CLI:
         return GeminiCliProvider()
-    raise NotImplementedError(f"provider '{config.provider}'는 아직 지원하지 않습니다.")
+    raise NotImplementedError(f"provider '{config.provider}' is not supported yet.")
 
 
 @dataclass
 class AgentRunner:
-    """에이전트를 실행하는 핵심 엔진.
+    """Core agent execution engine.
 
-    - provider에 실행을 위임
-    - 타임아웃/재시도/에스컬레이션 정책 처리
-    - 동시 실행 세마포어로 병렬 제어
-    - skeleton 컨텍스트 자동 주입
+    Delegates to the provider, enforces timeout / retry / escalation policies,
+    limits concurrency via a semaphore, and injects skeleton context.
     """
 
     config: OrchestratorConfig
@@ -60,7 +58,7 @@ class AgentRunner:
         self._providers: dict[str, BaseProvider] = {}
 
     def _get_provider(self, agent: str) -> BaseProvider:
-        """에이전트별 provider를 캐싱해서 반환."""
+        """Return a cached provider for the given agent."""
         if agent not in self._providers:
             agent_config = self.config.get_agent(agent)
             self._providers[agent] = _create_provider(agent_config)
@@ -73,11 +71,11 @@ class AgentRunner:
         *,
         working_dir: str | Path | None = None,
     ) -> RunResult:
-        """에이전트를 실행하고 결과를 반환한다.
+        """Run a single agent and return its result.
 
-        - 세마포어로 동시 실행 수 제한
-        - skeleton 컨텍스트 자동 주입
-        - 타임아웃 시 on_timeout 정책에 따라 retry/escalate/log_only
+        The semaphore limits concurrency, skeleton context is auto-injected,
+        and on timeout the ``on_timeout`` policy (retry / escalate / log_only)
+        is applied.
         """
         async with self._semaphore:
             return await self._run_with_retry(agent, prompt, working_dir=working_dir)
@@ -88,19 +86,20 @@ class AgentRunner:
         *,
         working_dir: str | Path | None = None,
     ) -> list[RunResult]:
-        """여러 에이전트를 병렬 실행. 세마포어로 동시 실행 수 제한.
+        """Run multiple agents in parallel under the concurrency semaphore.
 
         Args:
-            tasks: [(에이전트명, 프롬프트), ...] 리스트
+            tasks: list of ``(agent_name, prompt)`` tuples.
         """
         coros = [
             self.run(agent, prompt, working_dir=working_dir)
             for agent, prompt in tasks
         ]
         results = await asyncio.gather(*coros, return_exceptions=True)
-        # 예외를 RunResult 로 변환 — 한 에이전트 실패가 나머지에 영향 없음.
-        # `Exception` 만 캐치 — `CancelledError` / `KeyboardInterrupt` / `SystemExit` 는
-        # `BaseException` 직속이므로 자동으로 제외되어 상위 취소/중단 전파가 보존됨.
+        # Convert exceptions to RunResult so one agent's failure doesn't affect others.
+        # Only `Exception` is caught — `CancelledError` / `KeyboardInterrupt` /
+        # `SystemExit` inherit directly from `BaseException` and are re-raised so
+        # cancellation/shutdown propagates to the caller.
         converted: list[RunResult] = []
         for i, r in enumerate(results):
             if isinstance(r, Exception):
@@ -110,7 +109,7 @@ class AgentRunner:
                     duration_ms=0, attempts=0, error=str(r),
                 ))
             elif isinstance(r, BaseException):
-                raise r  # CancelledError 등 — 절대 삼키지 말고 재발생
+                raise r  # Never swallow CancelledError and friends
             else:
                 converted.append(r)
         return converted
@@ -122,12 +121,12 @@ class AgentRunner:
         *,
         working_dir: str | Path | None = None,
     ) -> RunResult:
-        """재시도 로직을 포함한 실행."""
+        """Execute with retry logic according to the agent's on_timeout policy."""
         agent_config = self.config.get_agent(agent)
         provider = self._get_provider(agent)
         work_dir = Path(working_dir) if working_dir else self.project_dir
 
-        # 컨텍스트 조합
+        # Assemble the system prompt context
         prompt_path = self.project_dir / agent_config.prompt_path
         skeleton_path = self.project_dir / "docs" / "skeleton.md"
         docs_dir = self.project_dir / "docs"
@@ -175,7 +174,7 @@ class AgentRunner:
                 self.logger.log_run(
                     agent=agent, prompt=prompt, status="timeout",
                     duration_ms=duration_ms,
-                    error=f"타임아웃 ({agent_config.timeout_seconds}초)",
+                    error=f"timeout ({agent_config.timeout_seconds}s)",
                 )
                 if attempt < max_attempts:
                     continue
@@ -195,7 +194,7 @@ class AgentRunner:
                     duration_ms=duration_ms, attempts=attempt, error=str(e),
                 )
 
-        raise RuntimeError("예상치 못한 루프 종료")  # unreachable
+        raise RuntimeError("unexpected loop termination")  # unreachable
 
     def _handle_final_timeout(
         self,
@@ -204,22 +203,22 @@ class AgentRunner:
         duration_ms: int,
         attempts: int,
     ) -> RunResult:
-        """최종 타임아웃 시 on_timeout 정책 처리."""
+        """Handle final timeout according to the agent's on_timeout policy."""
         if config.on_timeout == OnTimeout.ESCALATE:
             self.logger.log_escalation(
                 agent=agent,
-                reason=f"타임아웃 {attempts}회 — 최대 재시도 초과",
+                reason=f"timeout x{attempts} — max retries exceeded",
                 escalated_to="PM",
             )
             return RunResult(
                 agent=agent, output="", success=False,
                 duration_ms=duration_ms, attempts=attempts,
-                error="타임아웃 → PM에 에스컬레이션", escalated=True,
+                error="timeout -> escalated to PM", escalated=True,
             )
 
         # log_only
         return RunResult(
             agent=agent, output="", success=False,
             duration_ms=duration_ms, attempts=attempts,
-            error=f"타임아웃 ({config.timeout_seconds}초) — 로그만 기록",
+            error=f"timeout ({config.timeout_seconds}s) — logged only",
         )

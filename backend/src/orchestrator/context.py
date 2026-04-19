@@ -1,8 +1,9 @@
-"""Skeleton 섹션 ID 기반 컨텍스트 주입 (Harness v2).
+"""Skeleton section-ID based context injection (Harness v2).
 
-`SECTION_TITLES` / `AGENT_SECTIONS_BY_ID` / `extract_section_by_id` /
-`build_context` — 섹션 ID 로만 동작. v1 번호 기반 (`SECTION_MAP`,
-`extract_section`, `fill_skeleton_template`) 은 Phase 4b (2026-04-19) 제거.
+Provides `SECTION_TITLES`, `AGENT_SECTIONS_BY_ID`, `extract_section_by_id`,
+and `build_context` — all keyed by section ID. The legacy number-based API
+(`SECTION_MAP`, `extract_section`, `fill_skeleton_template`) was removed in
+Phase 4b (2026-04-19).
 """
 
 from __future__ import annotations
@@ -10,8 +11,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-# 표준 20개 섹션 ID → 조각 frontmatter `name` 과 일치하는 헤딩 제목.
-# (~/.claude/harness/templates/skeleton/<id>.md 의 name 필드와 동기화 필수.)
+# Standard 20 section IDs → heading titles matching fragment frontmatter `name`.
+# Must stay in sync with ~/.claude/harness/templates/skeleton/<id>.md name fields.
 SECTION_TITLES: dict[str, str] = {
     "overview": "프로젝트 개요",
     "requirements": "기능 요구사항",
@@ -35,7 +36,7 @@ SECTION_TITLES: dict[str, str] = {
     "notes": "구현 노트",
 }
 
-# 에이전트별 섹션 ID 매핑. "*" 는 전체.
+# Per-agent section ID mapping. "*" means all sections.
 AGENT_SECTIONS_BY_ID: dict[str, list[str]] = {
     "architect": ["*"],
     "designer": [
@@ -61,7 +62,7 @@ AGENT_SECTIONS_BY_ID: dict[str, list[str]] = {
     ],
 }
 
-# 에이전트별 추가 문서
+# Additional docs per agent
 EXTRA_DOCS: dict[str, list[str]] = {
     "architect": ["conventions.md", "shared-lessons.md", "adr/"],
     "designer": ["conventions.md", "shared-lessons.md", "guidelines/frontend/style.md"],
@@ -87,17 +88,13 @@ EXTRA_DOCS: dict[str, list[str]] = {
 
 
 def extract_section_by_id(skeleton_text: str, section_id: str) -> str:
-    """섹션 ID 로 skeleton.md 에서 섹션 추출.
+    """Extract a section from skeleton.md by section ID.
 
-    SECTION_TITLES 의 매핑을 통해 `## N. <title>` 헤딩을 찾고
-    그 섹션의 텍스트를 반환. 같은 레벨 다음 헤딩 직전까지가 한 섹션.
-
-    Args:
-        skeleton_text: skeleton.md 전체 텍스트
-        section_id: 표준 섹션 ID (예: "overview", "interface.cli")
+    Looks up the heading title via SECTION_TITLES, finds the matching
+    `## N. <title>` heading, and returns text up to the next same-level heading.
 
     Returns:
-        섹션 텍스트. ID 가 표준에 없거나 헤딩을 못 찾으면 빈 문자열.
+        Section text, or empty string if the ID is unknown or heading not found.
     """
     if section_id == "*":
         return skeleton_text
@@ -106,7 +103,7 @@ def extract_section_by_id(skeleton_text: str, section_id: str) -> str:
     if not title:
         return ""
 
-    # `## N. <title>` 또는 `### N-M. <title>` 매칭 (제목 정확히 일치)
+    # Match `## N. <title>` or `### N-M. <title>` (exact title match)
     title_pattern = re.escape(title)
     pattern = rf"^(#{{2,4}})\s+\d+(?:-\d+)?\.\s+{title_pattern}\s*$"
     lines = skeleton_text.split("\n")
@@ -139,24 +136,14 @@ def build_context(
     docs_dir: Path,
     prompt_path: Path | None = None,
 ) -> str:
-    """에이전트에 주입할 전체 컨텍스트를 조합 (섹션 ID 기반).
-
-    Args:
-        agent: 에이전트 이름
-        skeleton_path: skeleton.md 경로
-        docs_dir: docs/ 디렉토리 경로
-        prompt_path: 에이전트별 CLAUDE.md 경로
-
-    Returns:
-        조합된 컨텍스트 문자열
-    """
+    """Assemble the full context to inject into an agent (section-ID based)."""
     parts: list[str] = []
 
-    # 1. 에이전트 시스템 프롬프트 (CLAUDE.md)
+    # 1. Agent system prompt (CLAUDE.md)
     if prompt_path and prompt_path.exists():
         parts.append(prompt_path.read_text(encoding="utf-8").strip())
 
-    # 2. skeleton 섹션 추출 (ID 기반)
+    # 2. Extract skeleton sections (ID-based)
     if skeleton_path.exists():
         skeleton_text = skeleton_path.read_text(encoding="utf-8")
         sections = AGENT_SECTIONS_BY_ID.get(agent, [])
@@ -169,13 +156,13 @@ def build_context(
                 if content:
                     extracted.append(content)
             if extracted:
-                parts.append("# Skeleton (관련 섹션)\n\n" + "\n\n".join(extracted))
+                parts.append("# Skeleton (relevant sections)\n\n" + "\n\n".join(extracted))
 
-    # 3. 추가 문서
+    # 3. Extra docs
     extra = EXTRA_DOCS.get(agent, [])
     for doc_name in extra:
         if doc_name.endswith("/"):
-            # 디렉토리 — 하위 .md 파일 전부 읽기
+            # Directory — read all child .md files
             dir_path = docs_dir / doc_name.rstrip("/")
             if dir_path.is_dir():
                 for md_file in sorted(dir_path.glob("*.md")):

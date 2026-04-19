@@ -281,7 +281,7 @@ class TestSecurityHooks:
 
     def test_no_findings_summary(self) -> None:
         result = SecurityHooks().run_all("")
-        assert result.summary == "보안 훅 통과"
+        assert result.summary == "security hooks passed"
 
 
 # ── Harness v2: 프로파일 whitelist 주입 ─────────────────────────────────
