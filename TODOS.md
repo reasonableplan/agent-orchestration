@@ -65,18 +65,21 @@
 
 ## v2 후속 (Phase 4+)
 
-- [ ] **Orchestra production 흐름의 v2 wiring**
-  - 현재: `run_pipeline_with_phases()` 가 레거시 `materialize_skeleton` 사용
-  - 개선: `assemble_skeleton_for_profiles()` 직접 호출로 전환
-  - 파일: `backend/src/orchestrator/orchestrate.py:787`
+- [ ] **Orchestra production 흐름의 v2 wiring** (Phase 4 후속)
+  - 현재: `run_pipeline_with_phases()` 의 `materialize_skeleton` 은
+    `extract_filled_sections` 으로 에이전트 출력에서 섹션 추출 후 concat (v2 스킬 경로
+    `/ha-*` 는 이 함수를 거치지 않고 `SkeletonAssembler` 직접 사용).
+  - 개선 (미결): Orchestra 자체도 profile 기반 assemble → 에이전트가 섹션 ID 로 채움으로
+    일원화. 파일: `backend/src/orchestrator/orchestrate.py` 의 `materialize_skeleton`.
 
-- [ ] **/my-* 스킬 삭제 (Phase 4)**
-  - 12개 스킬: `~/.claude/skills/my-*/`
-  - 사전 조건: /ha-* 로 실제 프로젝트 1개 완주 검증
+- [x] **/my-* 스킬 삭제 (Phase 4a, 2026-04-19 commit f2fae69)**
+  - 12개 스킬 삭제 완료, backup: `~/.claude/.my-skills-backup-20260419-062118/`
 
-- [ ] **레거시 코드 정리 (Phase 4)**
-  - `SECTION_MAP`, `fill_skeleton_template`, `extract_section` (번호 기반)
-  - `backend/src/orchestrator/context.py` + `orchestrate.py`
+- [x] **레거시 코드 정리 (Phase 4b, 2026-04-19)**
+  - `SECTION_MAP`, `fill_skeleton_template`, `extract_section` (번호 기반) 삭제
+  - `build_context(use_section_ids=False)` 분기 삭제 (기본=ID 기반)
+  - `orchestrate.py::_extract_allowed_endpoints` 섹션 7 폴백 삭제
+  - `materialize_skeleton` template 치환 경로 삭제 (`skeleton_template.md` 부재 전제)
 
 - [ ] **ccg 멀티 LLM consensus**
   - Reviewer 판단 고위험 결정만 Claude+Codex+Gemini 합의

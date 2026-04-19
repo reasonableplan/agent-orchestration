@@ -40,8 +40,9 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
 ### Fixed
 - (항목 추가되는대로)
 
-### Removed — **BREAKING** (Phase 4a)
+### Removed — **BREAKING** (Phase 4a + 4b)
 
+**Phase 4a** (스킬/문서 정리):
 - **`/my-*` 스킬 12종 전체 삭제** — `~/.claude/skills/my-db-design/`, `my-architect/`,
   `my-designer/`, `my-skeleton-check/`, `my-tasks/`, `my-db/`, `my-api/`, `my-ui/`,
   `my-logic/`, `my-type-check/`, `my-review/`, `my-lessons/`. v1 의 4-스택 하드코딩
@@ -49,13 +50,21 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
   완전 대체됨. [ADR-005](docs/decisions/005-ha-skills-cut-over.md) 참조.
 - **README `v1 (레거시)` 섹션 제거** — 신규 사용자의 혼란 제거.
 
+**Phase 4b** (backend production 레거시 코드 제거):
+- **`backend/src/orchestrator/context.py`** — `SECTION_MAP` (번호 기반 에이전트 매핑),
+  `extract_section` (번호 기반 추출), `fill_skeleton_template` (구 템플릿 치환) 3개 삭제.
+- **`build_context` 시그니처** — `use_section_ids: bool = False` 파라미터 제거.
+  기본 동작이 섹션 ID 기반 (`AGENT_SECTIONS_BY_ID` + `extract_section_by_id`) 으로 고정.
+- **`orchestrate.py::materialize_skeleton`** — `skeleton_template.md` 부재 전제
+  (commit `595ef88` 에서 삭제됨) 로 template 치환 분기 제거. 추출된 섹션을 바로 concat.
+- **`orchestrate.py::_extract_allowed_endpoints`** — 레거시 섹션 번호 7 폴백 제거.
+  `interface.http` ID 기반 추출만 유지.
+- **`runner.py`** — `build_context(..., use_section_ids=True)` 호출에서 kwarg 제거.
+- **테스트 수**: 365 → 347 (v1 테스트 18개 삭제, v2 커버리지 유지).
+
 **마이그레이션 가이드**: 기존 HabitFlow / 금칙어게임 / Personal Jira 는 이미 완료 상태라
 영향 없음. 새 프로젝트는 전부 `/ha-init → /ha-design → /ha-plan → /ha-build → /ha-verify
 → /ha-review` 흐름 사용. `/my-lessons` 회고 흐름은 `/ha-deepinit` + `/ha-review` 조합으로 대체.
-
-**Phase 4b (대기)** — `backend/src/orchestrator/context.py` 의 `SECTION_MAP` /
-`fill_skeleton_template` / `extract_section` + `orchestrate.py::materialize_skeleton` v1 경로
-제거는 별도 커밋으로 분리 (2-3h 소요, 테스트 영향 확인 필요).
 
 ---
 

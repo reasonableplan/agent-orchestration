@@ -1,7 +1,7 @@
 # ADR-005: /my-\* 스킬 완전 삭제, /ha-\* 로 single cut-over
 
-- **Status**: Accepted — Phase 4a 실행 (스킬 12종 삭제 완료 2026-04-19), Phase 4b 대기 (backend production 레거시 코드 제거)
-- **Date**: 2026-04-10 (결정), 2026-04-19 (Phase 4a 실행)
+- **Status**: Accepted — Phase 4a + 4b 실행 완료 (2026-04-19)
+- **Date**: 2026-04-10 (결정), 2026-04-19 (Phase 4a + 4b 실행)
 - **Depends on**: [ADR-001 프로파일 기반 아키텍처](001-profile-based-architecture.md)
 
 ## Context
@@ -84,11 +84,18 @@ v1 의 `/my-*` 스킬 12종 과 v2 의 `/ha-*` 스킬 7종 이 **현재 병행**
 - [x] `CHANGELOG.md` Breaking Change 섹션 기록
 - [x] ADR-005 status 갱신 (Proposed → Accepted 부분)
 
-**Phase 4b** — backend production 레거시 제거 (대기):
+**Phase 4b** — backend production 레거시 제거 (2026-04-19 완료):
 
-- [ ] `backend/src/orchestrator/context.py` 의 `SECTION_MAP` / `fill_skeleton_template` / `extract_section` 제거
-- [ ] `backend/src/orchestrator/orchestrate.py` 의 `materialize_skeleton` v1 경로 제거 (assemble_skeleton_for_profiles 로 완전 전환)
-- [ ] `backend/tests/` 에서 v1 테스트 삭제 (v2 로 이미 커버되는지 먼저 확인)
+- [x] `backend/src/orchestrator/context.py` 의 `SECTION_MAP` / `fill_skeleton_template` / `extract_section` 제거
+- [x] `backend/src/orchestrator/context.py` 의 `build_context(use_section_ids=False)` 분기 제거 (기본 ID 기반)
+- [x] `backend/src/orchestrator/orchestrate.py` 의 `materialize_skeleton` 템플릿 치환 경로 제거
+  (`skeleton_template.md` 는 commit `595ef88` 에서 이미 삭제됨)
+- [x] `backend/src/orchestrator/orchestrate.py::_extract_allowed_endpoints` 레거시 섹션 7 폴백 제거
+- [x] `backend/tests/orchestrator/test_context.py` v1 테스트 삭제 (테스트 수 365 → 347)
+
+**Phase 4b 후속** (별도 플랜):
+
+- [ ] `Orchestra.run_pipeline_with_phases` 자체를 `assemble_skeleton_for_profiles` 기반으로 재작성 (v2 스킬 경로와 일원화)
 - [ ] `docs/workflow-unified.md` 등 v1 워크플로우 문서 `docs/archive/` 로 이동
 
 **참고**: install.sh / install.ps1 — my-\* 관련 제거 불필요 (원래 복사 대상 아님)

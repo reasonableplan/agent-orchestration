@@ -10,11 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from src.orchestrator.config import OrchestratorConfig, load_agents_config
-from src.orchestrator.context import (
-    extract_section,
-    extract_section_by_id,
-    fill_skeleton_template,
-)
+from src.orchestrator.context import extract_section_by_id
 from src.orchestrator.logger import AgentLogger
 from src.orchestrator.output_parser import (
     DesignVerdict,
@@ -189,6 +185,9 @@ class Orchestra:
     ) -> Path:
         """Architect + Designer 출력을 파싱해 docs/skeleton.md에 기록한다.
 
+        v2 (Phase 4b, 2026-04-19): skeleton_template.md 삭제 후 템플릿 치환 경로
+        제거. Architect/Designer 출력에서 추출한 섹션을 그대로 이어붙인다.
+
         runner.py가 에이전트 실행 시 docs/skeleton.md를 자동으로 읽으므로,
         이 파일이 생성되면 이후 모든 에이전트가 채워진 계약서를 받는다.
 
@@ -199,28 +198,19 @@ class Orchestra:
         Returns:
             생성된 skeleton.md 경로
         """
-        template_path = self.project_dir / "docs" / "skeleton_template.md"
         skeleton_path = self.project_dir / "docs" / "skeleton.md"
 
-        template_text = (
-            template_path.read_text(encoding="utf-8") if template_path.exists() else ""
-        )
-
-        # 두 에이전트 출력에서 섹션 추출 (Designer가 Architect를 덮어쓸 수 있음)
+        # 두 에이전트 출력에서 섹션 추출 (Designer가 Architect를 덮어쓸 수 있음).
+        # 중복 section_num 은 나중에 온 것이 이전 것을 덮어씀.
         raw_sections = extract_filled_sections(architect_output)
         raw_sections += extract_filled_sections(designer_output)
-        sections = [{"section_num": s.section_num, "content": s.content} for s in raw_sections]
-
-        if not sections:
+        if not raw_sections:
             raise ValueError(
                 "skeleton 섹션 추출 실패 — Architect/Designer 출력에서 유효한 섹션을 찾을 수 없음"
             )
 
-        if template_text:
-            filled_text = fill_skeleton_template(template_text, sections)
-        else:
-            # 템플릿 없으면 추출된 섹션을 그대로 이어붙임
-            filled_text = "\n\n".join(s["content"] for s in sections)
+        deduped: dict[str, str] = {s.section_num: s.content for s in raw_sections}
+        filled_text = "\n\n".join(deduped.values())
 
         skeleton_path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -229,7 +219,7 @@ class Orchestra:
             logger.error("skeleton.md 쓰기 실패: %s", exc)
             raise
 
-        logger.info("skeleton.md 생성 완료 — %d개 섹션 채움", len(sections))
+        logger.info("skeleton.md 생성 완료 — %d개 섹션 채움", len(deduped))
         return skeleton_path
 
     def assemble_skeleton_for_profiles(
@@ -867,8 +857,6 @@ class Orchestra:
     def _extract_allowed_endpoints(self) -> list[str]:
         """skeleton.md `interface.http` 섹션에서 허용된 엔드포인트 목록을 추출한다.
 
-        v2: extract_section_by_id 우선, 실패 시 레거시 섹션 번호 7로 폴백.
-
         Returns:
             ["GET /api/projects", "POST /api/issues", ...] 형태 리스트.
             skeleton.md 없거나 섹션 비면 빈 리스트 (contract validator 비활성화됨).
@@ -878,11 +866,7 @@ class Orchestra:
             return []
 
         skeleton_text = skeleton_path.read_text(encoding="utf-8")
-        # ID 기반 우선 — 새 skeleton (Harness v2)
         section_text = extract_section_by_id(skeleton_text, "interface.http")
-        # 폴백 — 구 skeleton_template 형식 (섹션 번호 7)
-        if not section_text:
-            section_text = extract_section(skeleton_text, 7)
         if not section_text:
             return []
 

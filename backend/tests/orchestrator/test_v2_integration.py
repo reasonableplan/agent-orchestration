@@ -4,7 +4,7 @@
   ProfileLoader.detect()
   → Orchestra.assemble_skeleton_for_profiles()
   → 빈 skeleton.md 생성
-  → context.build_context(use_section_ids=True) 가 정상 발췌
+  → context.build_context 가 섹션 ID 매핑으로 정상 발췌
   → SecurityHooks.from_profile() 이 프로파일 whitelist 적용
 
 이 테스트는 Phase 2 의 모듈들이 실제로 함께 동작하는지 확인.
@@ -135,12 +135,11 @@ def test_e2e_detect_assemble_extract(tmp_path: Path) -> None:
     assert "## 2. 기술 스택" in skeleton_text
     assert "## 3. 에러 핸들링" in skeleton_text
 
-    # 3. build_context (use_section_ids=True) 가 v2 매핑으로 발췌
+    # 3. build_context 가 v2 매핑으로 발췌
     context = build_context(
         agent="backend_coder",
         skeleton_path=skeleton_path,
         docs_dir=project / "docs",
-        use_section_ids=True,
     )
     # backend_coder 는 overview/stack/errors 포함
     assert "프로젝트 개요" in context
