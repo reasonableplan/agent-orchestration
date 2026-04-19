@@ -466,7 +466,7 @@ class SecurityHooks:
         wl_runtime = getattr(getattr(profile, "whitelist", None), "runtime", ())
         wl_dev = getattr(getattr(profile, "whitelist", None), "dev", ())
         wl_prefixes = getattr(getattr(profile, "whitelist", None), "prefix_allowed", ())
-        combined = set(wl_runtime) | set(wl_dev)
+        combined: set[str] = set(wl_runtime) | set(wl_dev)
         return cls(
             python_whitelist=combined,
             frontend_whitelist=combined,

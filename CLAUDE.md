@@ -78,6 +78,7 @@
 ```
 [ ] 전체 테스트 통과 (cd backend && uv run pytest tests/)
 [ ] 린트 0 errors (uv run ruff check src/)
+[ ] 타입 체크 0 errors (uv run pyright src/)
 [ ] 새 함수에 테스트 작성했는가?
 [ ] 인터페이스 변경 시 호출처 전부 업데이트했는가?
 [ ] 에이전트 실행이 Orchestra 경유인가? (AgentRunner 직접 호출 금지)
@@ -90,10 +91,11 @@
 
 ## 프로젝트 구조 요약
 
-- **스택**: Python 3.12 / FastAPI + WebSocket / uv / pytest / ruff
+- **스택**: Python 3.12 / FastAPI + WebSocket / uv / pytest / ruff / pyright
 - **에이전트 실행**: Claude CLI subprocess (`claude` 명령어, provider 교체 가능)
 - **테스트**: `cd backend && uv run pytest tests/ --rootdir=.`
 - **린트**: `cd backend && uv run ruff check src/`
+- **타입체크**: `cd backend && uv run pyright src/`
 - **서버 실행**: `cd backend && uv run python -m src.main`
 - **설계 문서**: `~/.gstack/projects/reasonableplan-agent-orchestration/` (office-hours 생성)
 

@@ -51,8 +51,9 @@ class AgentRunner:
     """
 
     config: OrchestratorConfig
-    project_dir: str | Path = "."
+    project_dir: Path = field(default_factory=lambda: Path("."))
     logger: AgentLogger = field(default_factory=AgentLogger)
+
     def __post_init__(self) -> None:
         self.project_dir = Path(self.project_dir).resolve()
         self._semaphore = asyncio.Semaphore(self.config.max_concurrent)
@@ -97,10 +98,11 @@ class AgentRunner:
             for agent, prompt in tasks
         ]
         results = await asyncio.gather(*coros, return_exceptions=True)
-        # 예외를 RunResult로 변환 — 한 에이전트 실패가 나머지에 영향 없음
+        # 예외를 RunResult로 변환 — 한 에이전트 실패가 나머지에 영향 없음.
+        # BaseException 으로 체크해야 KeyboardInterrupt/SystemExit 도 안전하게 캡처.
         converted: list[RunResult] = []
         for i, r in enumerate(results):
-            if isinstance(r, Exception):
+            if isinstance(r, BaseException):
                 agent_name = tasks[i][0]
                 converted.append(RunResult(
                     agent=agent_name, output="", success=False,

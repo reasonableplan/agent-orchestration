@@ -7,6 +7,7 @@ import logging
 import time
 import uuid
 from pathlib import Path
+from typing import cast
 
 from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +18,7 @@ from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ExceptionHandler
 
 from src.dashboard.auth import make_auth_checker
 from src.dashboard.event_mapper import EventMapper
@@ -30,9 +32,10 @@ logger = logging.getLogger(__name__)
 # structlog은 선택적 사용 — 없어도 서버는 정상 동작
 try:
     import structlog as _structlog
-    _HAS_STRUCTLOG = True
 except ImportError:
-    _HAS_STRUCTLOG = False
+    _structlog = None  # type: ignore[assignment]
+
+_HAS_STRUCTLOG = _structlog is not None
 
 _ws_manager: WebSocketManager | None = None
 _event_mapper: EventMapper | None = None
@@ -45,7 +48,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         request_id = str(uuid.uuid4())
         start = time.monotonic()
 
-        if _HAS_STRUCTLOG:
+        if _structlog is not None:
             _structlog.contextvars.bind_contextvars(request_id=request_id)
         try:
             response = await call_next(request)
@@ -70,7 +73,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             )
             raise
         finally:
-            if _HAS_STRUCTLOG:
+            if _structlog is not None:
                 _structlog.contextvars.unbind_contextvars("request_id")
 
 
@@ -112,7 +115,12 @@ def create_app(
         openapi_url=None if is_prod else "/openapi.json",
     )
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    # slowapi 의 핸들러 시그니처 (RateLimitExceeded 전용) 와 FastAPI 의 ExceptionHandler
+    # 범용 시그니처 (Exception) 가 타입 레벨에서 불일치. 런타임은 호환 — cast 로 우회.
+    app.add_exception_handler(
+        RateLimitExceeded,
+        cast(ExceptionHandler, _rate_limit_exceeded_handler),
+    )
 
     # 의존성 초기화 (project_dir 지정 시)
     if project_dir is not None:
@@ -145,10 +153,12 @@ def create_app(
     app.include_router(stats.router, dependencies=[Depends(auth_check)])
     app.include_router(command.router, dependencies=[Depends(auth_check)])
 
-    # WebSocket
+    # WebSocket — 모듈 레벨 globals + 로컬 non-Optional 별칭 (중첩 함수 type narrowing)
     global _ws_manager, _event_mapper
     _ws_manager = WebSocketManager()
     _event_mapper = EventMapper(_ws_manager)
+    ws_manager: WebSocketManager = _ws_manager
+    event_mapper: EventMapper = _event_mapper
 
     # 진행 중인 WS 백그라운드 태스크 — GC 방지
     _ws_bg_tasks: set[asyncio.Task] = set()
@@ -170,7 +180,7 @@ def create_app(
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket) -> None:
         # 첫 메시지 기반 인증 (auth_token이 None이면 dev 모드 — 즉시 승인)
-        ok = await _ws_manager.authenticate(ws, auth_token)
+        ok = await ws_manager.authenticate(ws, auth_token)
         if not ok:
             return
         _ws_msg_times[id(ws)] = []  # 재연결 시 이전 rate-limit 윈도우 초기화
@@ -232,7 +242,7 @@ def create_app(
                         c: str = content,
                         p: Phase = phase,
                         o=orchestra,
-                        em=_event_mapper,
+                        em=event_mapper,
                     ) -> None:
                         success = False
                         error: str | None = "내부 오류"
@@ -329,7 +339,7 @@ def create_app(
             logger.error("WS connection error: %s", exc)
         finally:
             _ws_msg_times.pop(id(ws), None)
-            _ws_manager.disconnect(ws)
+            ws_manager.disconnect(ws)
 
     # 정적 파일 (빌드된 프론트엔드)
     static_dir = Path(__file__).parent.parent.parent.parent / "packages" / "dashboard-client" / "dist"
