@@ -1,8 +1,18 @@
 # HarnessAI 벤치마크
 
-**"진짜 돌아가나?" 에 수치로 답변**. LLM 호출 없이 측정 가능한 핵심 연산의 latency.
+**"진짜 돌아가나?" 에 수치로 답변**. LLM 호출 없이 측정 가능한 핵심 연산 + 품질 게이트.
 
-## 측정 대상
+## 문서 인덱스
+
+| 문서 | 무엇 | 왜 |
+|---|---|---|
+| **이 문서** | 핵심 연산 latency (profile 감지 / skeleton 조립 / harness CLI) | `/ha-*` UX 예측 |
+| [gate-coverage.md](gate-coverage.md) | 7개 품질 게이트 커버리지 (35 fixtures, **100%** precision/recall/accuracy) | 게이트가 선언대로 지키는지 자기 검증 |
+| [dogfooding-catches.md](dogfooding-catches.md) | LESSON 21개 ↔ 원천 프로젝트 ↔ 현재 게이트 매핑 (정성적) | LESSON 이 단순 기록에서 **게이트 강제** 로 올라가는 흐름 |
+
+---
+
+## 측정 대상 (핵심 연산 latency)
 
 | 영역 | 무엇을 측정 | 왜 중요 |
 |---|---|---|
@@ -64,18 +74,20 @@ HARNESS_BENCH_INSTALL=1 uv run python ../scripts/benchmark.py
 
 구현: `scripts/collect_e2e.py` (다음 세션)
 
-### 비교 벤치마크 (Phase 3 계획)
+### 비교 벤치마크
 
-같은 태스크를 3가지 도구로 구현 + 품질 비교:
+**현재**: [gate-coverage.md](gate-coverage.md) 로 HarnessAI 게이트의 자기 검증 35 fixtures
+(100% precision/recall/accuracy) + [dogfooding-catches.md](dogfooding-catches.md) 로 plain Claude
+대비 **구조적 차이** 정성 기록.
+
+**향후** (동일 요구사항 controlled head-to-head):
 - HarnessAI (`/ha-*` 풀 파이프라인)
 - Plain Claude Code (CLAUDE.md 만)
 - Cursor / Copilot
 
-메트릭:
-- LESSON 위반 수 (`/ha-review` 기준)
-- 소요 시간
-- 토큰/비용
-- 최종 테스트 통과율
+메트릭: LESSON 위반 수 · 소요 시간 · 토큰/비용 · 최종 테스트 통과율.
+
+비용/시간 제약으로 currently deferred.
 
 ## 재현 이슈
 

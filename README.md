@@ -205,6 +205,7 @@ observability · deployment · tasks · notes
 - **상태**: `docs/harness-plan.md` (YAML frontmatter) + `.orchestra/` JSON (DB 없음)
 - **테스트**: pytest **357개** backend + **12개** install 스냅샷 (회귀 0건)
 - **타입 체크**: pyright **0 errors** (`src/` 전수)
+- **게이트 커버리지**: 7개 품질 게이트 × 35 fixtures → **precision 100% / recall 100% / accuracy 100%** ([gate-coverage.md](docs/benchmarks/gate-coverage.md))
 - **성능** (30 iter, LLM 제외): profile 감지 **~5 ms**, skeleton 조립 **<1 ms**, `harness validate` **~150 ms**, `harness integrity` **~104 ms**. [docs/benchmarks/](docs/benchmarks/)
 - **v2 인프라**: `profile_loader`, `skeleton_assembler`, `plan_manager`, `harness` 검증 CLI
 
@@ -263,7 +264,7 @@ python harness/bin/harness integrity --project .   # skeleton ↔ FS 정합성
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 시스템 구조 · 프로파일 · skeleton · 게이트 (**먼저 읽으세요**) |
 | [docs/decisions/](docs/decisions/) | Architecture Decision Records (ADR 5개) |
 | [docs/e2e-reports/](docs/e2e-reports/) | E2E 리포트 — dogfooding 증거 (code-hijack 완주, ui-assistant 진행 중) |
-| [docs/benchmarks/](docs/benchmarks/) | 성능 측정 (profile 감지 / skeleton 조립 / harness CLI) |
+| [docs/benchmarks/](docs/benchmarks/) | 성능 측정 + **게이트 커버리지** (35 fixtures, 100%) + LESSON↔게이트 dogfooding 트레이싱 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 프로파일/LESSON/게이트/스킬 기여 가이드 |
 | [CHANGELOG.md](CHANGELOG.md) | 버전별 변경 이력 |
 | [SETUP.md](SETUP.md) | 처음부터 끝까지 설치/실행 가이드 |

@@ -42,6 +42,17 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
 - **`pyright` dev 의존성 + 자가검증 필수 항목**. `src/` 14개 pre-existing 타입 에러
   전부 정리 (0 errors 달성). `CLAUDE.md` 에 `uv run pyright src/` 추가.
 
+### Added — 비교 실험
+- **`scripts/gate_benchmark.py` + `docs/benchmarks/gate-coverage.md`** — 7개 품질
+  게이트 × 35 fixtures 커버리지 벤치마크. positive/negative fixture 기반 TP/TN/FP/FN
+  → **precision 100% / recall 100% / accuracy 100%**. 초기 2 fixture 실패가 게이트 정책
+  경계 재확인 + LESSON-018 dead 상수 정규식이 walrus operator 미커버 발견 (미래 개선
+  후보). CI 통합 가능 (`exit 1` on miss/false-alarm).
+- **`docs/benchmarks/dogfooding-catches.md`** — 21개 LESSON ↔ 원천 프로젝트 (Personal
+  Jira / HabitFlow / 금칙어게임 / code-hijack / ui-assistant) ↔ 현재 감지 게이트 매핑.
+  LESSON-013/018/021 이 단순 기록에서 **자동 감지 게이트**로 올라간 흐름을 추적.
+  plain Claude 와의 **구조적 차이** 정성 비교 포함.
+
 ### Changed
 - (항목 추가되는대로)
 
