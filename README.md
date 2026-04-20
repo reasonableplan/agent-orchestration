@@ -290,6 +290,7 @@ python scripts/gate_benchmark.py   # 35 fixtures, exits 1 on any miss / false al
 | [CLAUDE.md](CLAUDE.md) | Implementation rules (senior-production bar) |
 | [SECURITY.md](SECURITY.md) | Vulnerability disclosure |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community conduct |
+| [docs/harness-v2-design.md](docs/harness-v2-design.md) | v2 redesign worklog (Korean-only, developer reference) |
 
 ---
 

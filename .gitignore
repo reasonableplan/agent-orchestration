@@ -26,3 +26,8 @@ backend/.venv/
 backend/docs/skeleton.md
 backend/docs/tasks.md
 backend/docs/harness-plan.md
+
+# Local-only working files (scratch, PoC, agent state snapshots)
+.context/
+backend/.orchestra/
+scripts/poc_ha_init.py

@@ -25,7 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BACKEND_SRC = REPO_ROOT / "backend" / "src"
+BACKEND_ROOT = REPO_ROOT / "backend"
+BACKEND_SRC = BACKEND_ROOT / "src"
 HA_REVIEW_RUN_PY = REPO_ROOT / "skills" / "ha-review" / "run.py"
 
 if not BACKEND_SRC.exists() or not HA_REVIEW_RUN_PY.exists():
@@ -35,7 +36,10 @@ if not BACKEND_SRC.exists() or not HA_REVIEW_RUN_PY.exists():
     )
     sys.exit(3)
 
-sys.path.insert(0, str(BACKEND_SRC))
+# Insert backend/ on sys.path so `from src.orchestrator...` resolves both
+# standalone (`python scripts/gate_benchmark.py`) and under uv
+# (`uv --project backend run python scripts/gate_benchmark.py`).
+sys.path.insert(0, str(BACKEND_ROOT))
 
 from src.orchestrator.security_hooks import (  # noqa: E402
     check_code_quality,

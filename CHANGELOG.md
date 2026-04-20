@@ -17,7 +17,7 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
 
 ---
 
-## [0.4.0] — 2026-04-19 — "portfolio-ready"
+## [0.4.0] — 2026-04-20 — "portfolio-ready"
 
 Final verification snapshot at release time:
 **pytest 357 pass / ruff 0 / pyright 0 / gate_benchmark 35/35 (100% precision/recall/accuracy) / harness validate 27 files 0 errors**.

@@ -12,6 +12,13 @@ and how `/ha-design` would fill it in. The artifacts in `docs/` are real
 | `docs/harness-plan.md` | `/ha-init` state file with `current_step: init` |
 | `docs/skeleton.md` | Empty skeleton assembled from `python-cli.required` section IDs |
 
+> **Skeleton-only example.** This directory intentionally has no `hello_cli/`
+> package yet. The `[project.scripts]` entry in `pyproject.toml` shows where
+> the CLI will live once `/ha-build` implements it — do not run `pip install .`
+> on this example as-is (it will fail with `ModuleNotFoundError: hello_cli`).
+> The purpose here is to demonstrate what `/ha-init` produces **before** any
+> source code is written.
+
 > **Note on section headings.** `docs/skeleton.md` uses Korean section titles
 > ("프로젝트 개요", "기술 스택", …) because the default skeleton templates
 > ship with Korean `name:` fields and the `SECTION_TITLES` map in

@@ -273,6 +273,8 @@ python harness/bin/harness integrity --project .   # skeleton ↔ FS 정합성
 | [TODOS.md](TODOS.md) | 향후 개선 항목 |
 | [backend/docs/shared-lessons.md](backend/docs/shared-lessons.md) | 21개 과거 실수 패턴 |
 | [CLAUDE.md](CLAUDE.md) | 구현 시 엄격 규칙 (현업 시니어 수준) |
+| [SECURITY.md](SECURITY.md) | 취약점 보고 프로세스 |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | 커뮤니티 행동 규범 |
 | [docs/harness-v2-design.md](docs/harness-v2-design.md) | v2 재설계 상세 작업 로그 |
 
 ---
