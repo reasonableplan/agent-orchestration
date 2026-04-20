@@ -1,4 +1,5 @@
 """Bearer token 인증 미들웨어."""
+
 from __future__ import annotations
 
 import hmac
@@ -15,7 +16,7 @@ def make_auth_checker(token: str | None):
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-        provided = auth_header[len("Bearer "):]
+        provided = auth_header[len("Bearer ") :]
         # timing-safe compare
         if not hmac.compare_digest(provided.encode(), token.encode()):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")

@@ -290,6 +290,6 @@ def test_find_placeholders_excludes_inline_backtick_examples() -> None:
         실제 누락 placeholder: <missing>
     """).strip()
     result = find_placeholders(text)
-    assert "<pkg>" not in result           # 백틱 안 → 템플릿 예시
-    assert "<YYYY-MM-DD>" not in result    # 동일
-    assert "<missing>" in result           # 백틱 밖 → 실제 누락
+    assert "<pkg>" not in result  # 백틱 안 → 템플릿 예시
+    assert "<YYYY-MM-DD>" not in result  # 동일
+    assert "<missing>" in result  # 백틱 밖 → 실제 누락

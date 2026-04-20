@@ -1,4 +1,5 @@
 """GET /health — 서버 상태 확인."""
+
 from __future__ import annotations
 
 import logging
@@ -19,6 +20,7 @@ async def health_check() -> JSONResponse:
     # Phase 상태 확인
     try:
         from src.dashboard.routes.deps import get_phase_manager
+
         pm = get_phase_manager()
         checks["phase"] = {"status": "ok", "current": str(pm.current_phase)}
     except RuntimeError:
@@ -32,6 +34,7 @@ async def health_check() -> JSONResponse:
     # config 확인
     try:
         from src.dashboard.routes.deps import get_config
+
         cfg = get_config()
         checks["config"] = {"status": "ok", "agents": len(cfg.all_agents())}
     except RuntimeError:

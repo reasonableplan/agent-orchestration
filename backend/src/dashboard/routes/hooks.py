@@ -1,4 +1,5 @@
 """GET /api/hooks — 훅 목록 (새 구조에서 미구현, 빈 응답 반환)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter

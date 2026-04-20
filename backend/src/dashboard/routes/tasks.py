@@ -1,4 +1,5 @@
 """GET /api/tasks — 태스크 결과 조회."""
+
 from __future__ import annotations
 
 import logging

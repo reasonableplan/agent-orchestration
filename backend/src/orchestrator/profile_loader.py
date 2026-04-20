@@ -178,9 +178,7 @@ class ProfileLoader:
     def _resolve_profile_path(self, profile_id: str) -> Path:
         """Resolve profile path — local override first, then global."""
         if self.project_dir:
-            local = (
-                self.project_dir / ".claude" / "harness" / "profiles" / f"{profile_id}.md"
-            )
+            local = self.project_dir / ".claude" / "harness" / "profiles" / f"{profile_id}.md"
             if local.exists():
                 return local
         global_path = self.harness_dir / "profiles" / f"{profile_id}.md"
@@ -207,9 +205,7 @@ class ProfileLoader:
         """Read _base.md raw frontmatter (empty dict if not found)."""
         candidates: list[Path] = []
         if self.project_dir:
-            candidates.append(
-                self.project_dir / ".claude" / "harness" / "profiles" / "_base.md"
-            )
+            candidates.append(self.project_dir / ".claude" / "harness" / "profiles" / "_base.md")
         candidates.append(self.harness_dir / "profiles" / "_base.md")
         for p in candidates:
             if p.exists():
@@ -336,11 +332,7 @@ def _merge_layer(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
     """Child overrides base. Merge rules per design doc S3.4."""
     merged = dict(base)
     for key, value in child.items():
-        if (
-            key == "whitelist"
-            and isinstance(value, dict)
-            and isinstance(merged.get(key), dict)
-        ):
+        if key == "whitelist" and isinstance(value, dict) and isinstance(merged.get(key), dict):
             merged[key] = _merge_whitelist(merged[key], value)
         elif key == "components" and isinstance(value, list):
             base_comps = merged.get(key) or []

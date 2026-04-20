@@ -31,16 +31,12 @@ class GeminiCliProvider(BaseProvider):
         cmd = self._build_command(config)
 
         # Gemini CLI는 --system-prompt 플래그가 없음 — 프롬프트 앞에 붙임
-        full_prompt = (
-            f"{system_prompt}\n\n---\n\n{prompt}" if system_prompt else prompt
-        )
+        full_prompt = f"{system_prompt}\n\n---\n\n{prompt}" if system_prompt else prompt
 
         env = {**os.environ}
         # GEMINI_API_KEY가 환경에 없으면 명시적 경고
         if "GEMINI_API_KEY" not in env:
-            raise RuntimeError(
-                "GEMINI_API_KEY 환경변수가 설정되어 있지 않습니다."
-            )
+            raise RuntimeError("GEMINI_API_KEY 환경변수가 설정되어 있지 않습니다.")
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -60,9 +56,7 @@ class GeminiCliProvider(BaseProvider):
         except TimeoutError:
             await self._kill_process_tree(proc)
             await proc.wait()
-            raise TimeoutError(
-                f"{agent_name} 타임아웃: {config.timeout_seconds}초 초과"
-            ) from None
+            raise TimeoutError(f"{agent_name} 타임아웃: {config.timeout_seconds}초 초과") from None
 
         if proc.returncode != 0:
             error_msg = stderr.decode("utf-8", errors="replace").strip()
@@ -82,10 +76,13 @@ class GeminiCliProvider(BaseProvider):
         cli = "gemini.cmd" if sys.platform == "win32" else "gemini"
         return [
             cli,
-            "-p", "",       # 비대화형 모드 활성화 (실제 프롬프트는 stdin)
-            "-m", config.model,
-            "-o", "text",   # 순수 텍스트 출력
-            "-y",           # 모든 tool 자동 승인
+            "-p",
+            "",  # 비대화형 모드 활성화 (실제 프롬프트는 stdin)
+            "-m",
+            config.model,
+            "-o",
+            "text",  # 순수 텍스트 출력
+            "-y",  # 모든 tool 자동 승인
         ]
 
     async def _kill_process_tree(self, proc: asyncio.subprocess.Process) -> None:
@@ -96,7 +93,11 @@ class GeminiCliProvider(BaseProvider):
         try:
             if sys.platform == "win32":
                 kill_proc = await asyncio.create_subprocess_exec(
-                    "taskkill", "/T", "/F", "/PID", str(pid),
+                    "taskkill",
+                    "/T",
+                    "/F",
+                    "/PID",
+                    str(pid),
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
                 )

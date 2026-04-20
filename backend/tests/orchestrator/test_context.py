@@ -51,19 +51,41 @@ SAMPLE_SKELETON = """\
 class TestSectionTitlesMap:
     def test_all_20_standard_sections_present(self) -> None:
         expected_ids = {
-            "overview", "requirements", "stack", "configuration", "errors",
-            "auth", "persistence", "integrations",
-            "interface.http", "interface.cli", "interface.ipc", "interface.sdk",
-            "view.screens", "view.components", "state.flow", "core.logic",
-            "observability", "deployment", "tasks", "notes",
+            "overview",
+            "requirements",
+            "stack",
+            "configuration",
+            "errors",
+            "auth",
+            "persistence",
+            "integrations",
+            "interface.http",
+            "interface.cli",
+            "interface.ipc",
+            "interface.sdk",
+            "view.screens",
+            "view.components",
+            "state.flow",
+            "core.logic",
+            "observability",
+            "deployment",
+            "tasks",
+            "notes",
         }
         assert set(SECTION_TITLES.keys()) == expected_ids
 
 
 class TestAgentSectionsById:
     def test_all_agents_have_id_mapping(self) -> None:
-        expected = {"architect", "designer", "orchestrator", "backend_coder",
-                    "frontend_coder", "reviewer", "qa"}
+        expected = {
+            "architect",
+            "designer",
+            "orchestrator",
+            "backend_coder",
+            "frontend_coder",
+            "reviewer",
+            "qa",
+        }
         assert set(AGENT_SECTIONS_BY_ID.keys()) == expected
 
     def test_architect_gets_all(self) -> None:

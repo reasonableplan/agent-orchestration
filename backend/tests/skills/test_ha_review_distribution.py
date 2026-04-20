@@ -17,7 +17,9 @@ from pathlib import Path
 # fixture: ha_review_module (from conftest)
 
 
-def _mk_python_project(root: Path, src_modules: dict[str, str], test_modules: dict[str, str]) -> None:
+def _mk_python_project(
+    root: Path, src_modules: dict[str, str], test_modules: dict[str, str]
+) -> None:
     """src/ 와 tests/ 레이아웃으로 Python 프로젝트 구조 작성."""
     src = root / "src"
     tests = root / "tests"
@@ -66,9 +68,7 @@ def test_distribution_even_coverage_no_findings(ha_review_module, tmp_path: Path
     assert findings == []
 
 
-def test_distribution_blocks_when_src_exists_but_no_tests(
-    ha_review_module, tmp_path: Path
-) -> None:
+def test_distribution_blocks_when_src_exists_but_no_tests(ha_review_module, tmp_path: Path) -> None:
     src = tmp_path / "src"
     src.mkdir()
     (src / "__init__.py").touch()
@@ -154,15 +154,11 @@ def test_distribution_detects_js_test_patterns(ha_review_module, tmp_path: Path)
             "__tests__/Small.test.tsx": "test('renders', () => {});\n",
         },
     )
-    findings = ha_review_module._check_test_distribution(
-        tmp_path, "react-vite", ".", "vitest run"
-    )
+    findings = ha_review_module._check_test_distribution(tmp_path, "react-vite", ".", "vitest run")
     assert any(f["severity"] == "WARN" for f in findings)
 
 
-def test_distribution_ignores_tests_folder_in_source_scan(
-    ha_review_module, tmp_path: Path
-) -> None:
+def test_distribution_ignores_tests_folder_in_source_scan(ha_review_module, tmp_path: Path) -> None:
     """src/__tests__/ 안의 파일은 source 모듈로 카운트 안 됨."""
     _mk_js_project(
         tmp_path,
@@ -174,9 +170,7 @@ def test_distribution_ignores_tests_folder_in_source_scan(
     )
     # helper.tsx 는 __tests__/ 안이라 source 로 카운트되면 안 됨.
     # App.tsx 만 source 로 인식되고, test 파일 1개 존재 → no BLOCK, no skew.
-    findings = ha_review_module._check_test_distribution(
-        tmp_path, "react-vite", ".", "vitest run"
-    )
+    findings = ha_review_module._check_test_distribution(tmp_path, "react-vite", ".", "vitest run")
     assert findings == []
 
 

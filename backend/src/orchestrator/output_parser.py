@@ -226,13 +226,15 @@ def parse_task_list(output: str) -> list[TaskItem]:
             else []
         )
 
-        tasks.append(TaskItem(
-            id=task_id,
-            agent=agent,
-            depends_on=depends_on,
-            description=description,
-            status=status,
-        ))
+        tasks.append(
+            TaskItem(
+                id=task_id,
+                agent=agent,
+                depends_on=depends_on,
+                description=description,
+                status=status,
+            )
+        )
 
     return tasks
 
@@ -279,7 +281,7 @@ class QaResult:
     """QA agent report result."""
 
     health_score: int  # 0-10
-    passed: bool       # health_score >= QA_PASS_THRESHOLD
+    passed: bool  # health_score >= QA_PASS_THRESHOLD
     issues: list[str] = field(default_factory=list)
     raw: str = ""
 
@@ -396,11 +398,13 @@ def extract_filled_sections(output: str) -> list[SkeletonSection]:
 
             content = "\n".join(lines[start:i]).strip()
             if content:
-                sections.append(SkeletonSection(
-                    section_num=section_num,
-                    content=content,
-                    section_id=section_id,
-                ))
+                sections.append(
+                    SkeletonSection(
+                        section_num=section_num,
+                        content=content,
+                        section_id=section_id,
+                    )
+                )
         else:
             i += 1
 
@@ -413,7 +417,5 @@ def extract_filled_sections_by_id(output: str) -> dict[str, str]:
     Only includes headings matching SECTION_TITLES. Unmatched sections are ignored.
     """
     return {
-        s.section_id: s.content
-        for s in extract_filled_sections(output)
-        if s.section_id is not None
+        s.section_id: s.content for s in extract_filled_sections(output) if s.section_id is not None
     }

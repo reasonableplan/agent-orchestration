@@ -1,4 +1,5 @@
 """GET /api/stats — 시스템 요약 통계."""
+
 from __future__ import annotations
 
 import logging

@@ -74,7 +74,9 @@ class ValidationPipeline:
             return await self._exec_check("typecheck:python", ["mypy", "."])
         if (self._project_dir / "tsconfig.json").exists():
             return await self._exec_check("typecheck:typescript", ["npx", "tsc", "--noEmit"])
-        return CheckResult(name="typecheck", status=CheckStatus.SKIPPED, output="no type-check config found")
+        return CheckResult(
+            name="typecheck", status=CheckStatus.SKIPPED, output="no type-check config found"
+        )
 
     async def _run_tests(self) -> CheckResult:
         """Run tests (Python: pytest, TypeScript: vitest)."""

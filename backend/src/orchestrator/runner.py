@@ -91,10 +91,7 @@ class AgentRunner:
         Args:
             tasks: list of ``(agent_name, prompt)`` tuples.
         """
-        coros = [
-            self.run(agent, prompt, working_dir=working_dir)
-            for agent, prompt in tasks
-        ]
+        coros = [self.run(agent, prompt, working_dir=working_dir) for agent, prompt in tasks]
         results = await asyncio.gather(*coros, return_exceptions=True)
         # Convert exceptions to RunResult so one agent's failure doesn't affect others.
         # Only `Exception` is caught — `CancelledError` / `KeyboardInterrupt` /
@@ -104,10 +101,16 @@ class AgentRunner:
         for i, r in enumerate(results):
             if isinstance(r, Exception):
                 agent_name = tasks[i][0]
-                converted.append(RunResult(
-                    agent=agent_name, output="", success=False,
-                    duration_ms=0, attempts=0, error=str(r),
-                ))
+                converted.append(
+                    RunResult(
+                        agent=agent_name,
+                        output="",
+                        success=False,
+                        duration_ms=0,
+                        attempts=0,
+                        error=str(r),
+                    )
+                )
             elif isinstance(r, BaseException):
                 raise r  # Never swallow CancelledError and friends
             else:
@@ -133,17 +136,18 @@ class AgentRunner:
 
         system_prompt: str | None = None
         if prompt_path.exists() or skeleton_path.exists():
-            system_prompt = build_context(
-                agent=agent,
-                skeleton_path=skeleton_path,
-                docs_dir=docs_dir,
-                prompt_path=prompt_path if prompt_path.exists() else None,
-            ) or None
+            system_prompt = (
+                build_context(
+                    agent=agent,
+                    skeleton_path=skeleton_path,
+                    docs_dir=docs_dir,
+                    prompt_path=prompt_path if prompt_path.exists() else None,
+                )
+                or None
+            )
 
         max_attempts = 1 + (
-            agent_config.max_retries_on_timeout
-            if agent_config.on_timeout == OnTimeout.RETRY
-            else 0
+            agent_config.max_retries_on_timeout if agent_config.on_timeout == OnTimeout.RETRY else 0
         )
         attempt = 0
 
@@ -162,17 +166,25 @@ class AgentRunner:
                 duration_ms = int((time.monotonic() - start) * 1000)
 
                 self.logger.log_run(
-                    agent=agent, prompt=prompt, status="success", duration_ms=duration_ms,
+                    agent=agent,
+                    prompt=prompt,
+                    status="success",
+                    duration_ms=duration_ms,
                 )
                 return RunResult(
-                    agent=agent, output=output, success=True,
-                    duration_ms=duration_ms, attempts=attempt,
+                    agent=agent,
+                    output=output,
+                    success=True,
+                    duration_ms=duration_ms,
+                    attempts=attempt,
                 )
 
             except TimeoutError:
                 duration_ms = int((time.monotonic() - start) * 1000)
                 self.logger.log_run(
-                    agent=agent, prompt=prompt, status="timeout",
+                    agent=agent,
+                    prompt=prompt,
+                    status="timeout",
                     duration_ms=duration_ms,
                     error=f"timeout ({agent_config.timeout_seconds}s)",
                 )
@@ -180,18 +192,28 @@ class AgentRunner:
                     continue
 
                 return self._handle_final_timeout(
-                    agent, agent_config, duration_ms, attempt,
+                    agent,
+                    agent_config,
+                    duration_ms,
+                    attempt,
                 )
 
             except Exception as e:
                 duration_ms = int((time.monotonic() - start) * 1000)
                 self.logger.log_run(
-                    agent=agent, prompt=prompt, status="error",
-                    duration_ms=duration_ms, error=str(e),
+                    agent=agent,
+                    prompt=prompt,
+                    status="error",
+                    duration_ms=duration_ms,
+                    error=str(e),
                 )
                 return RunResult(
-                    agent=agent, output="", success=False,
-                    duration_ms=duration_ms, attempts=attempt, error=str(e),
+                    agent=agent,
+                    output="",
+                    success=False,
+                    duration_ms=duration_ms,
+                    attempts=attempt,
+                    error=str(e),
                 )
 
         raise RuntimeError("unexpected loop termination")  # unreachable
@@ -211,14 +233,21 @@ class AgentRunner:
                 escalated_to="PM",
             )
             return RunResult(
-                agent=agent, output="", success=False,
-                duration_ms=duration_ms, attempts=attempts,
-                error="timeout -> escalated to PM", escalated=True,
+                agent=agent,
+                output="",
+                success=False,
+                duration_ms=duration_ms,
+                attempts=attempts,
+                error="timeout -> escalated to PM",
+                escalated=True,
             )
 
         # log_only
         return RunResult(
-            agent=agent, output="", success=False,
-            duration_ms=duration_ms, attempts=attempts,
+            agent=agent,
+            output="",
+            success=False,
+            duration_ms=duration_ms,
+            attempts=attempts,
             error=f"timeout ({config.timeout_seconds}s) — logged only",
         )

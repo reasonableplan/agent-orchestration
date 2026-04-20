@@ -149,7 +149,12 @@ class PlanManager:
         plan.updated_at = _now_iso()
         plan.last_activity = plan.updated_at
         data = _plan_to_dict(plan)
-        text = "---\n" + yaml.safe_dump(data, allow_unicode=True, sort_keys=False) + "---\n\n" + plan.body
+        text = (
+            "---\n"
+            + yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+            + "---\n\n"
+            + plan.body
+        )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
 
@@ -281,9 +286,7 @@ class PlanManager:
         reason: str,
     ) -> HarnessPlan:
         """Record a rollback backup entry (actual file copy is caller's responsibility)."""
-        plan.backups.append(
-            {"path": path, "at": _now_iso(), "reason": reason}
-        )
+        plan.backups.append({"path": path, "at": _now_iso(), "reason": reason})
         plan.last_activity = _now_iso()
         return plan
 
@@ -363,9 +366,7 @@ def _plan_to_dict(plan: HarnessPlan) -> dict[str, Any]:
         "project_type": plan.project_type,
         "scale": plan.scale,
         "user_description_original": plan.user_description_original,
-        "profiles": [
-            {"id": p.id, "path": p.path, "status": p.status} for p in plan.profiles
-        ],
+        "profiles": [{"id": p.id, "path": p.path, "status": p.status} for p in plan.profiles],
         "skeleton_sections": {
             "required": list(plan.skeleton_sections.required),
             "optional": list(plan.skeleton_sections.optional),

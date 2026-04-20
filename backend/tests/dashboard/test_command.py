@@ -1,4 +1,5 @@
 """POST /api/command 라우트 단위 테스트."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -12,19 +13,22 @@ from src.orchestrator.runner import RunResult
 
 
 def _make_run_result(success: bool = True, output: str = "ok") -> RunResult:
-    return RunResult(agent="backend_coder", output=output, success=success,
-                     duration_ms=100, attempts=1)
+    return RunResult(
+        agent="backend_coder", output=output, success=success, duration_ms=100, attempts=1
+    )
 
 
 def _make_orchestra(phase: Phase) -> MagicMock:
     orchestra = MagicMock()
     orchestra.phase_manager.current_phase = phase
-    orchestra.implement_with_retry = AsyncMock(return_value={
-        "implement": _make_run_result(),
-        "verify": {},
-        "attempts": 1,
-        "passed": True,
-    })
+    orchestra.implement_with_retry = AsyncMock(
+        return_value={
+            "implement": _make_run_result(),
+            "verify": {},
+            "attempts": 1,
+            "passed": True,
+        }
+    )
     orchestra.runner.run = AsyncMock(return_value=_make_run_result())
     return orchestra
 
@@ -33,10 +37,12 @@ def _make_orchestra(phase: Phase) -> MagicMock:
 # IMPLEMENTING phase — Orchestra.implement_with_retry() 경유
 # ---------------------------------------------------------------------------
 
+
 class TestSendCommandImplementing:
     @pytest.fixture()
     def app(self):
         from fastapi import FastAPI
+
         app = FastAPI()
         app.include_router(router)
         return app
@@ -81,6 +87,7 @@ class TestSendCommandImplementing:
 # Phase → 에이전트 매핑
 # ---------------------------------------------------------------------------
 
+
 class TestPhaseAgentMap:
     def test_implementing_maps_to_backend_coder(self):
         assert _PHASE_AGENT_MAP["implementing"] == "backend_coder"
@@ -99,10 +106,12 @@ class TestPhaseAgentMap:
 # No-agent phase
 # ---------------------------------------------------------------------------
 
+
 class TestSendCommandNoAgent:
     @pytest.fixture()
     def app(self):
         from fastapi import FastAPI
+
         app = FastAPI()
         app.include_router(router)
         return app

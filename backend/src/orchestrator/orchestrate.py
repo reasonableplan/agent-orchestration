@@ -63,9 +63,7 @@ def _extract_section_body(section_text: str) -> str:
     return parts[1].strip()
 
 
-def _replace_section_body_in_skeleton(
-    skeleton_text: str, section_id: str, new_body: str
-) -> str:
+def _replace_section_body_in_skeleton(skeleton_text: str, section_id: str, new_body: str) -> str:
     """Replace the body of a section in the skeleton while preserving the heading.
 
     The heading line (`## N. <title>`) is kept intact to preserve the numbering
@@ -214,8 +212,11 @@ class Orchestra:
                 return {
                     "architect": architect_result,
                     "designer": RunResult(
-                        agent="designer", output="", success=False,
-                        duration_ms=0, attempts=0,
+                        agent="designer",
+                        output="",
+                        success=False,
+                        duration_ms=0,
+                        attempts=0,
                         error="Architect 실패로 인해 Designer 실행 취소",
                     ),
                 }
@@ -234,7 +235,9 @@ class Orchestra:
                 break
 
             if round_num < max_negotiation_rounds:
-                requests_text = "\n".join(f"- {r}" for r in verdict.api_requests) or "(세부 요청 없음)"
+                requests_text = (
+                    "\n".join(f"- {r}" for r in verdict.api_requests) or "(세부 요청 없음)"
+                )
                 architect_prompt = (
                     f"{requirements}\n\n"
                     f"<design_conflicts>\n"
@@ -244,7 +247,9 @@ class Orchestra:
                 )
                 logger.warning(
                     "설계 충돌 — 재협의 라운드 %d/%d (API 요청 %d개)",
-                    round_num, max_negotiation_rounds, len(verdict.api_requests),
+                    round_num,
+                    max_negotiation_rounds,
+                    len(verdict.api_requests),
                 )
             else:
                 logger.warning(
@@ -328,13 +333,9 @@ class Orchestra:
         skeleton_text = skeleton_path.read_text(encoding="utf-8")
 
         # Architect first, then Designer — same section_id means Designer wins.
-        raw = extract_filled_sections(architect_output) + extract_filled_sections(
-            designer_output
-        )
+        raw = extract_filled_sections(architect_output) + extract_filled_sections(designer_output)
         merged_by_id: dict[str, str] = {
-            s.section_id: _extract_section_body(s.content)
-            for s in raw
-            if s.section_id is not None
+            s.section_id: _extract_section_body(s.content) for s in raw if s.section_id is not None
         }
         if not merged_by_id:
             raise ValueError(
@@ -411,9 +412,7 @@ class Orchestra:
                 ordered.append(sid)
                 seen_o.add(sid)
 
-        assembler = SkeletonAssembler(
-            harness_dir=harness_dir, project_dir=self.project_dir
-        )
+        assembler = SkeletonAssembler(harness_dir=harness_dir, project_dir=self.project_dir)
         try:
             content = assembler.assemble(
                 ordered, title=title or f"Project Skeleton — {self.project_dir.name}"
@@ -432,7 +431,8 @@ class Orchestra:
 
         logger.info(
             "skeleton.md 조립 완료 — 프로파일=%s, 섹션=%d개",
-            profile_ids, len(ordered),
+            profile_ids,
+            len(ordered),
         )
         return skeleton_path
 
@@ -465,18 +465,24 @@ class Orchestra:
                 self.phase_manager.transition(Phase.VERIFYING)
             except InvalidTransitionError:
                 # Another parallel task already transitioned to VERIFYING — ignore
-                logger.debug("VERIFYING 전이 생략 — 현재 Phase: %s", self.phase_manager.current_phase)
+                logger.debug(
+                    "VERIFYING 전이 생략 — 현재 Phase: %s", self.phase_manager.current_phase
+                )
 
         # 1. Security hooks — analyze agent output code
         task_result = self.state.load_task_result(task_id)
-        agent_output = (task_result or {}).get("output", "") if isinstance(task_result, dict) else ""
+        agent_output = (
+            (task_result or {}).get("output", "") if isinstance(task_result, dict) else ""
+        )
         security_result: SecurityResult = self._get_security_hooks().run_all(
             agent_output,
             is_frontend=is_frontend,
             allowed_endpoints=allowed_endpoints,
         )
         if security_result.blocked:
-            block_msgs = [f.message for f in security_result.findings if f.severity.value == "BLOCK"]
+            block_msgs = [
+                f.message for f in security_result.findings if f.severity.value == "BLOCK"
+            ]
             logger.error(
                 "보안 훅 BLOCK — task_id=%s findings=%s",
                 task_id,
@@ -591,15 +597,16 @@ class Orchestra:
                         f"{original_prompt}\n\n"
                         f"<review_feedback>\n"
                         f"이전 구현이 REJECT되었습니다 (시도 {attempt}/{max_retries}).\n"
-                        f"수정 사항:\n" + "\n".join(f"- {v}" for v in violations) +
-                        "\n</review_feedback>"
+                        f"수정 사항:\n"
+                        + "\n".join(f"- {v}" for v in violations)
+                        + "\n</review_feedback>"
                     )
-                    logger.warning(
-                        "태스크 %s REJECT — 재시도 %d/%d", task_id, attempt, max_retries
-                    )
+                    logger.warning("태스크 %s REJECT — 재시도 %d/%d", task_id, attempt, max_retries)
                 else:
                     logger.error(
-                        "태스크 %s — 최대 재시도 %d회 초과. 에스컬레이션 필요.", task_id, max_retries
+                        "태스크 %s — 최대 재시도 %d회 초과. 에스컬레이션 필요.",
+                        task_id,
+                        max_retries,
                     )
                     self.agent_logger.log_escalation(
                         agent=agent,
@@ -633,9 +640,7 @@ class Orchestra:
 
         phase_prompt = (
             f"Phase {phase_num} 리뷰를 수행하세요.\n\n"
-            f"<phase_tasks>\n" +
-            "\n\n".join(task_summaries) +
-            f"\n</phase_tasks>\n\n"
+            f"<phase_tasks>\n" + "\n\n".join(task_summaries) + f"\n</phase_tasks>\n\n"
             f"Phase {phase_num}의 모든 태스크가 완료되었습니다. "
             f"Phase 리뷰 형식으로 결과를 출력하세요."
         )
@@ -675,16 +680,12 @@ class Orchestra:
                 task_summaries.append(f"[{tid}]\n{output}")
 
         skeleton_path = self.project_dir / "docs" / "skeleton.md"
-        skeleton_text = (
-            skeleton_path.read_text(encoding="utf-8") if skeleton_path.exists() else ""
-        )
+        skeleton_text = skeleton_path.read_text(encoding="utf-8") if skeleton_path.exists() else ""
 
         qa_prompt = (
             f"Phase {phase_num} QA를 수행하세요.\n\n"
             f"<skeleton>\n{skeleton_text}\n</skeleton>\n\n"
-            f"<phase_tasks>\n" +
-            "\n\n".join(task_summaries) +
-            "\n</phase_tasks>\n\n"
+            f"<phase_tasks>\n" + "\n\n".join(task_summaries) + "\n</phase_tasks>\n\n"
             "QA Report 형식으로 결과를 출력하세요."
         )
 
@@ -701,7 +702,10 @@ class Orchestra:
         else:
             logger.info(
                 "Phase %d QA — health_score=%d/10 passed=%s issues=%d",
-                phase_num, parsed.health_score, parsed.passed, len(parsed.issues),
+                phase_num,
+                parsed.health_score,
+                parsed.passed,
+                len(parsed.issues),
             )
         return parsed
 
@@ -752,7 +756,9 @@ class Orchestra:
         for phase_num, phase_tasks in enumerate(phases, start=1):
             if not phase_tasks:
                 logger.warning("Phase %d — 태스크 없음, 건너뜀", phase_num)
-                results.append({"phase_num": phase_num, "tasks": {}, "review": None, "passed": True})
+                results.append(
+                    {"phase_num": phase_num, "tasks": {}, "review": None, "passed": True}
+                )
                 continue
 
             phase_result: dict[str, Any] = {
@@ -772,6 +778,7 @@ class Orchestra:
                 if not pending:
                     logger.debug("Phase %d — 모든 태스크 이미 통과", phase_num)
                 else:
+
                     async def _run_task(task: TaskItem) -> tuple[str, dict[str, Any]]:
                         tid = task.id
                         is_frontend: bool = task.agent == "frontend_coder"
@@ -816,7 +823,12 @@ class Orchestra:
                     qa_passed = qa is None or qa.passed  # treat parse failure as pass
                     if qa_passed:
                         phase_result["passed"] = True
-                        logger.info("Phase %d APPROVE + QA PASS (시도 %d/%d)", phase_num, phase_attempt, max_phase_retries)
+                        logger.info(
+                            "Phase %d APPROVE + QA PASS (시도 %d/%d)",
+                            phase_num,
+                            phase_attempt,
+                            max_phase_retries,
+                        )
                         break
                     logger.warning(
                         "Phase %d QA FAIL — health_score=%d/10 issues=%s",
@@ -826,7 +838,12 @@ class Orchestra:
                     )
 
                 if phase_attempt < max_phase_retries:
-                    logger.warning("Phase %d REJECT — 재시도 %d/%d", phase_num, phase_attempt, max_phase_retries)
+                    logger.warning(
+                        "Phase %d REJECT — 재시도 %d/%d",
+                        phase_num,
+                        phase_attempt,
+                        max_phase_retries,
+                    )
                 else:
                     logger.error("Phase %d — 최대 재시도 초과.", phase_num)
                     all_passed = False
@@ -880,7 +897,12 @@ class Orchestra:
         # 2. Task breakdown
         phases, breakdown_dict = await self.run_breakdown(requirements, design_results)
         if not phases:
-            return {"design": design_results, "breakdown": breakdown_dict, "phases": [], "success": False}
+            return {
+                "design": design_results,
+                "breakdown": breakdown_dict,
+                "phases": [],
+                "success": False,
+            }
 
         # 3. Phase execution
         phase_results = await self.run_phases(

@@ -1,4 +1,5 @@
 """WebSocket 연결 풀 관리."""
+
 from __future__ import annotations
 
 import asyncio
@@ -64,7 +65,9 @@ class WebSocketManager:
             return False
 
         token = msg.get("token") or ""
-        if msg.get("type") != "auth" or not hmac.compare_digest(token.encode(), auth_token.encode()):
+        if msg.get("type") != "auth" or not hmac.compare_digest(
+            token.encode(), auth_token.encode()
+        ):
             log.warning("WS auth failed — invalid token")
             await _safe_close(ws, 4001)
             return False
@@ -87,11 +90,13 @@ class WebSocketManager:
     async def broadcast(self, event_type: str, data: Any) -> None:
         if not self._connections:
             return
-        payload = json.dumps({
-            "type": event_type,
-            "payload": data,
-            "timestamp": datetime.now(UTC).isoformat(),
-        })
+        payload = json.dumps(
+            {
+                "type": event_type,
+                "payload": data,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
 
         async def _safe_send(ws: WebSocket) -> WebSocket | None:
             try:

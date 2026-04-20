@@ -273,6 +273,12 @@ def test_save_load_preserves_completed_steps_and_history(tmp_path: Path) -> None
 def test_state_order_constant() -> None:
     """STATE_ORDER 가 변경되면 명시적으로 검토되도록."""
     assert STATE_ORDER == (
-        "init", "designed", "planned", "building",
-        "built", "verified", "reviewed", "shipped",
+        "init",
+        "designed",
+        "planned",
+        "building",
+        "built",
+        "verified",
+        "reviewed",
+        "shipped",
     )

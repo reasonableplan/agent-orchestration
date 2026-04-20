@@ -1,4 +1,5 @@
 """대시보드 의존성 주입."""
+
 from __future__ import annotations
 
 from pathlib import Path

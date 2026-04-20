@@ -1,6 +1,5 @@
 """output_parser 테스트."""
 
-
 from src.orchestrator.output_parser import (
     DesignVerdict,
     ReviewVerdict,
@@ -15,6 +14,7 @@ from src.orchestrator.output_parser import (
 # ---------------------------------------------------------------------------
 # PR 리뷰 파싱
 # ---------------------------------------------------------------------------
+
 
 class TestParsePRReview:
     def test_approve(self) -> None:
@@ -80,6 +80,7 @@ class TestParsePRReview:
 # ---------------------------------------------------------------------------
 # Phase 리뷰 파싱
 # ---------------------------------------------------------------------------
+
 
 class TestParsePhaseReview:
     def test_approve_can_proceed(self) -> None:
@@ -155,6 +156,7 @@ class TestParsePhaseReview:
 # 태스크 목록 파싱
 # ---------------------------------------------------------------------------
 
+
 class TestParseTaskList:
     def test_basic_task_table(self) -> None:
         output = """
@@ -213,6 +215,7 @@ class TestParseTaskList:
 # ---------------------------------------------------------------------------
 # Skeleton 섹션 추출
 # ---------------------------------------------------------------------------
+
 
 class TestExtractFilledSections:
     def test_single_section(self) -> None:
@@ -345,7 +348,7 @@ class TestParsePhases:
 """
         phases = parse_phases(output)
         assert len(phases) == 2
-        assert phases[0] == []        # Phase 1 — 태스크 없음
+        assert phases[0] == []  # Phase 1 — 태스크 없음
         assert phases[1][0].id == "T-010"
 
     def test_depends_on_parsed(self) -> None:
@@ -517,4 +520,5 @@ ignored
 
     def test_empty_input_returns_empty(self) -> None:
         from src.orchestrator.output_parser import extract_filled_sections_by_id
+
         assert extract_filled_sections_by_id("") == {}

@@ -28,7 +28,7 @@ class ClaudeCliProvider(BaseProvider):
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
-            stdin=asyncio.subprocess.PIPE,   # 프롬프트를 stdin으로 전달 — Windows cmd.exe 8191자 제한 우회
+            stdin=asyncio.subprocess.PIPE,  # 프롬프트를 stdin으로 전달 — Windows cmd.exe 8191자 제한 우회
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(working_dir) if working_dir else None,
@@ -44,15 +44,11 @@ class ClaudeCliProvider(BaseProvider):
         except TimeoutError:
             await self._kill_process_tree(proc)
             await proc.wait()
-            raise TimeoutError(
-                f"{agent_name} 타임아웃: {config.timeout_seconds}초 초과"
-            ) from None
+            raise TimeoutError(f"{agent_name} 타임아웃: {config.timeout_seconds}초 초과") from None
 
         if proc.returncode != 0:
             error_msg = stderr.decode("utf-8", errors="replace").strip()
-            raise RuntimeError(
-                f"{agent_name} CLI 실행 실패 (exit {proc.returncode}): {error_msg}"
-            )
+            raise RuntimeError(f"{agent_name} CLI 실행 실패 (exit {proc.returncode}): {error_msg}")
 
         return stdout.decode("utf-8", errors="replace").strip()
 
@@ -70,8 +66,9 @@ class ClaudeCliProvider(BaseProvider):
         cli = "claude.cmd" if sys.platform == "win32" else "claude"
         cmd = [
             cli,
-            "-p",                           # non-interactive print 모드, stdin에서 prompt 읽음
-            "--model", config.model,
+            "-p",  # non-interactive print 모드, stdin에서 prompt 읽음
+            "--model",
+            config.model,
         ]
 
         if system_prompt:
@@ -88,7 +85,11 @@ class ClaudeCliProvider(BaseProvider):
             if sys.platform == "win32":
                 # Windows: taskkill로 프로세스 트리 전체 강제 종료
                 kill_proc = await asyncio.create_subprocess_exec(
-                    "taskkill", "/T", "/F", "/PID", str(pid),
+                    "taskkill",
+                    "/T",
+                    "/F",
+                    "/PID",
+                    str(pid),
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
                 )

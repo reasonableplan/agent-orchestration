@@ -1,4 +1,5 @@
 """FastAPI 대시보드 서버 — REST + WebSocket."""
+
 from __future__ import annotations
 
 import asyncio
@@ -166,6 +167,7 @@ def create_app(
 
     # command route의 백그라운드 태스크도 shutdown 시 정리되도록 등록
     from src.dashboard.routes.command import _background_tasks as cmd_bg_tasks
+
     register_bg_task_set(cmd_bg_tasks)
 
     # WS 메시지 rate limiting (LLM API 비용 보호)
@@ -224,12 +226,15 @@ def create_app(
                         orchestra = get_orchestra()
                     except RuntimeError:
                         logger.error("Orchestra not available for %s", msg_type)
-                        await ws.send_text(json.dumps({"type": "error", "message": "Server not initialized"}))
+                        await ws.send_text(
+                            json.dumps({"type": "error", "message": "Server not initialized"})
+                        )
                         continue
 
                     phase = orchestra.phase_manager.current_phase
 
                     from src.orchestrator.orchestrate import PHASE_AGENT_MAP
+
                     agent = PHASE_AGENT_MAP.get(str(phase))
                     if agent is None:
                         await ws.send_text(
@@ -269,7 +274,9 @@ def create_app(
                             try:
                                 await em.emit_agent_complete(a, success, duration, error)
                             except Exception:
-                                logger.error("emit_agent_complete failed agent=%s", a, exc_info=True)
+                                logger.error(
+                                    "emit_agent_complete failed agent=%s", a, exc_info=True
+                                )
 
                     task = asyncio.create_task(_run_chat())
                     _ws_bg_tasks.add(task)
@@ -288,20 +295,26 @@ def create_app(
                     target_phase_str = _action_phase_map.get(action)
                     if target_phase_str is None:
                         logger.warning("plan.%s: 지원하지 않는 액션", action)
-                        await ws.send_text(json.dumps({"type": "error", "message": f"Unsupported plan action: {action}"}))
+                        await ws.send_text(
+                            json.dumps(
+                                {"type": "error", "message": f"Unsupported plan action: {action}"}
+                            )
+                        )
                         continue
 
                     try:
                         pm = get_phase_manager()
                         pm.transition(Phase(target_phase_str))
-                        logger.info("Phase transitioned to %s via plan.%s", target_phase_str, action)
+                        logger.info(
+                            "Phase transitioned to %s via plan.%s", target_phase_str, action
+                        )
                     except RuntimeError:
                         logger.error("PhaseManager not available for plan action")
-                        await ws.send_text(json.dumps({"type": "error", "message": "Server not initialized"}))
-                    except InvalidTransitionError as exc:
                         await ws.send_text(
-                            json.dumps({"type": "error", "message": str(exc)})
+                            json.dumps({"type": "error", "message": "Server not initialized"})
                         )
+                    except InvalidTransitionError as exc:
+                        await ws.send_text(json.dumps({"type": "error", "message": str(exc)}))
 
                 elif msg_type == "task-retry":
                     payload = msg.get("payload", {})
@@ -311,6 +324,7 @@ def create_app(
 
                     try:
                         from src.dashboard.routes.deps import get_state_manager
+
                         sm = get_state_manager()
                     except RuntimeError:
                         logger.error("StateManager not available for task-retry")
@@ -342,7 +356,9 @@ def create_app(
             ws_manager.disconnect(ws)
 
     # 정적 파일 (빌드된 프론트엔드)
-    static_dir = Path(__file__).parent.parent.parent.parent / "packages" / "dashboard-client" / "dist"
+    static_dir = (
+        Path(__file__).parent.parent.parent.parent / "packages" / "dashboard-client" / "dist"
+    )
     if static_dir.exists():
         app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 

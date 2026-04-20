@@ -70,9 +70,7 @@ def _make_run_result(
 
 def _make_validation_result(*, passed: bool = True) -> ValidationResult:
     status = CheckStatus.PASSED if passed else CheckStatus.FAILED
-    return ValidationResult(
-        checks=[CheckResult(name="lint:python", status=status, output="ok")]
-    )
+    return ValidationResult(checks=[CheckResult(name="lint:python", status=status, output="ok")])
 
 
 # ── 초기화 ───────────────────────────────────────────────────────────────────
@@ -152,23 +150,31 @@ class TestDesign:
 
         assert "architect 출력" in captured_prompts["designer"]
 
-    async def test_design_logs_escalation(self, orchestra: Orchestra, caplog: pytest.LogCaptureFixture) -> None:
+    async def test_design_logs_escalation(
+        self, orchestra: Orchestra, caplog: pytest.LogCaptureFixture
+    ) -> None:
         orchestra.runner.run = AsyncMock(  # type: ignore[method-assign]
-            return_value=_make_run_result("architect", success=False, escalated=True, error="타임아웃")
+            return_value=_make_run_result(
+                "architect", success=False, escalated=True, error="타임아웃"
+            )
         )
 
         import logging
+
         with caplog.at_level(logging.WARNING, logger="src.orchestrator.orchestrate"):
             await orchestra.design("요구사항")
 
         assert any("에스컬레이션" in r.message for r in caplog.records)
 
-    async def test_design_logs_failure(self, orchestra: Orchestra, caplog: pytest.LogCaptureFixture) -> None:
+    async def test_design_logs_failure(
+        self, orchestra: Orchestra, caplog: pytest.LogCaptureFixture
+    ) -> None:
         orchestra.runner.run = AsyncMock(  # type: ignore[method-assign]
             return_value=_make_run_result("architect", success=False, error="실패")
         )
 
         import logging
+
         with caplog.at_level(logging.ERROR, logger="src.orchestrator.orchestrate"):
             await orchestra.design("요구사항")
 
@@ -269,9 +275,7 @@ class TestDesignNegotiation:
         async def mock_run(agent: str, prompt: str, **kwargs: object) -> RunResult:
             call_log.append(agent)
             if agent == "designer":
-                return _make_run_result(
-                    agent, output="## Design Verdict: CONFLICT\n"
-                )
+                return _make_run_result(agent, output="## Design Verdict: CONFLICT\n")
             return _make_run_result(agent, output="아키텍처 설계")
 
         orchestra.runner.run = mock_run  # type: ignore[method-assign]
@@ -323,7 +327,9 @@ class TestImplement:
         assert orchestra.phase_manager.current_phase == Phase.IMPLEMENTING
 
     async def test_implement_saves_task_result(self, orchestra: Orchestra) -> None:
-        orchestra.runner.run = AsyncMock(return_value=_make_run_result("backend_coder", output="코드"))  # type: ignore[method-assign]
+        orchestra.runner.run = AsyncMock(
+            return_value=_make_run_result("backend_coder", output="코드")
+        )  # type: ignore[method-assign]
         orchestra.phase_manager._current = Phase.TASK_BREAKDOWN
 
         await orchestra.implement("task-001", "backend_coder", "API 구현")
@@ -451,7 +457,9 @@ class TestImplementWithRetry:
         )  # type: ignore[method-assign]
         orchestra.pipeline.run_all = AsyncMock(return_value=_make_validation_result(passed=True))  # type: ignore[method-assign]
 
-        result = await orchestra.implement_with_retry("T-001", "backend_coder", "구현", max_retries=2)
+        result = await orchestra.implement_with_retry(
+            "T-001", "backend_coder", "구현", max_retries=2
+        )
 
         assert result["passed"] is False
         assert result["attempts"] == 2
@@ -682,6 +690,7 @@ class TestRunPipelineWithPhases:
 
     async def test_phase_done_on_success(self, orchestra: Orchestra) -> None:
         """전체 성공 시 Phase.DONE으로 전환되는지 확인."""
+
         async def mock_run(agent: str, prompt: str, **kwargs: object) -> RunResult:
             if agent == "orchestrator":
                 return _make_run_result(agent, output=_BREAKDOWN_SINGLE_PHASE)
@@ -705,6 +714,7 @@ class TestRunPipelineWithPhases:
 
     async def test_phase_not_done_on_failure(self, orchestra: Orchestra) -> None:
         """Phase 실패 시 Phase.DONE으로 전환하지 않는지 확인."""
+
         async def mock_run(agent: str, prompt: str, **kwargs: object) -> RunResult:
             if agent == "orchestrator":
                 return _make_run_result(agent, output=_BREAKDOWN_SINGLE_PHASE)
@@ -744,9 +754,7 @@ class TestMaterializeSkeleton:
         assert "| id | UUID |" in content
         assert "| GET | /api |" in content
 
-    def test_designer_overwrites_architect_for_same_section(
-        self, orchestra: Orchestra
-    ) -> None:
+    def test_designer_overwrites_architect_for_same_section(self, orchestra: Orchestra) -> None:
         """같은 section_num 이면 Designer 가 Architect 를 덮어쓴다 (dedup 계약)."""
         architect_out = "## 7. API 스키마\n| GET | /old |\n"
         designer_out = "## 7. API 스키마\n| GET | /new |\n"
@@ -762,10 +770,9 @@ class TestMaterializeSkeleton:
         with pytest.raises(ValueError, match="skeleton 섹션 추출 실패"):
             orchestra.materialize_skeleton("출력 A", "출력 B")
 
-    async def test_pipeline_returns_failure_on_empty_skeleton(
-        self, orchestra: Orchestra
-    ) -> None:
+    async def test_pipeline_returns_failure_on_empty_skeleton(self, orchestra: Orchestra) -> None:
         """materialize_skeleton이 ValueError 발생 시 파이프라인이 success=False 반환."""
+
         async def mock_run(agent: str, prompt: str, **kwargs: object) -> RunResult:
             if agent == "architect":
                 return _make_run_result(agent, output="## 6. DB 스키마\n| id | UUID |\n")
@@ -809,9 +816,8 @@ class TestMaterializeSkeleton:
         orchestra.pipeline.run_all = AsyncMock(return_value=_make_validation_result(passed=True))  # type: ignore[method-assign]
 
         import asyncio
-        asyncio.get_event_loop().run_until_complete(
-            orchestra.run_pipeline_with_phases("요구사항")
-        )
+
+        asyncio.get_event_loop().run_until_complete(orchestra.run_pipeline_with_phases("요구사항"))
 
         skeleton_path = tmp_path / "docs" / "skeleton.md"
         assert skeleton_path.exists()
@@ -888,9 +894,7 @@ class TestAssembleSkeletonForProfiles:
         harness = tmp_path / "harness"
         _setup_v2_harness(harness)
 
-        path = orchestra.assemble_skeleton_for_profiles(
-            ["minimal"], harness_dir=harness
-        )
+        path = orchestra.assemble_skeleton_for_profiles(["minimal"], harness_dir=harness)
 
         assert path == tmp_path / "docs" / "skeleton.md"
         text = path.read_text(encoding="utf-8")
@@ -922,17 +926,13 @@ class TestAssembleSkeletonForProfiles:
         with pytest.raises(ValueError, match="profile_ids"):
             orchestra.assemble_skeleton_for_profiles([])
 
-    def test_missing_profile_raises(
-        self, orchestra: Orchestra, tmp_path: Path
-    ) -> None:
+    def test_missing_profile_raises(self, orchestra: Orchestra, tmp_path: Path) -> None:
         harness = tmp_path / "harness"
         _setup_v2_harness(harness)
         from src.orchestrator.profile_loader import ProfileNotFoundError
 
         with pytest.raises(ProfileNotFoundError):
-            orchestra.assemble_skeleton_for_profiles(
-                ["nonexistent"], harness_dir=harness
-            )
+            orchestra.assemble_skeleton_for_profiles(["nonexistent"], harness_dir=harness)
 
     def test_custom_title(self, orchestra: Orchestra, tmp_path: Path) -> None:
         harness = tmp_path / "harness"
@@ -961,8 +961,10 @@ class TestMaterializeSkeletonV2:
         designer_out = "## 2. 기술 스택\n- Python 3.12\n- FastAPI\n"
 
         path = orchestra.materialize_skeleton_v2(
-            architect_out, designer_out,
-            profile_ids=["minimal"], harness_dir=harness,
+            architect_out,
+            designer_out,
+            profile_ids=["minimal"],
+            harness_dir=harness,
         )
         content = path.read_text(encoding="utf-8")
 
@@ -985,8 +987,10 @@ class TestMaterializeSkeletonV2:
         designer_out = "## 1. 프로젝트 개요\n- 확정: new\n"
 
         path = orchestra.materialize_skeleton_v2(
-            architect_out, designer_out,
-            profile_ids=["minimal"], harness_dir=harness,
+            architect_out,
+            designer_out,
+            profile_ids=["minimal"],
+            harness_dir=harness,
         )
         content = path.read_text(encoding="utf-8")
 
@@ -1004,8 +1008,10 @@ class TestMaterializeSkeletonV2:
         architect_out = "## 99. 기술 스택\n- Rust\n"
 
         path = orchestra.materialize_skeleton_v2(
-            architect_out, "",
-            profile_ids=["minimal"], harness_dir=harness,
+            architect_out,
+            "",
+            profile_ids=["minimal"],
+            harness_dir=harness,
         )
         content = path.read_text(encoding="utf-8")
 
@@ -1014,17 +1020,17 @@ class TestMaterializeSkeletonV2:
         assert "## 99." not in content
         assert "Rust" in content
 
-    def test_no_matching_sections_raises(
-        self, orchestra: Orchestra, tmp_path: Path
-    ) -> None:
+    def test_no_matching_sections_raises(self, orchestra: Orchestra, tmp_path: Path) -> None:
         """SECTION_TITLES 매칭 헤딩이 없는 출력 → ValueError."""
         harness = tmp_path / "harness"
         _setup_v2_harness(harness)
 
         with pytest.raises(ValueError, match="SECTION_TITLES"):
             orchestra.materialize_skeleton_v2(
-                "그냥 텍스트", "다른 텍스트",
-                profile_ids=["minimal"], harness_dir=harness,
+                "그냥 텍스트",
+                "다른 텍스트",
+                profile_ids=["minimal"],
+                harness_dir=harness,
             )
 
     def test_sections_outside_profile_still_merge_if_assembled(
@@ -1037,8 +1043,10 @@ class TestMaterializeSkeletonV2:
         architect_out = "## 4. 저장소 / 스키마\n- SQLite\n"
 
         path = orchestra.materialize_skeleton_v2(
-            architect_out, "",
-            profile_ids=["minimal"], harness_dir=harness,
+            architect_out,
+            "",
+            profile_ids=["minimal"],
+            harness_dir=harness,
             included_overrides=["overview", "stack", "core.logic", "persistence"],
         )
         content = path.read_text(encoding="utf-8")
@@ -1067,9 +1075,7 @@ class TestReplaceSectionBodyHelpers:
     def test_replace_preserves_heading_line(self) -> None:
         from src.orchestrator.orchestrate import _replace_section_body_in_skeleton
 
-        skeleton = (
-            "# Title\n\n## 1. 프로젝트 개요\n- old body\n\n## 2. 기술 스택\n- stack\n"
-        )
+        skeleton = "# Title\n\n## 1. 프로젝트 개요\n- old body\n\n## 2. 기술 스택\n- stack\n"
         result = _replace_section_body_in_skeleton(skeleton, "overview", "- new body")
 
         assert "## 1. 프로젝트 개요" in result

@@ -14,6 +14,7 @@ from src.orchestrator.runner import RunResult
 # 헬퍼
 # ---------------------------------------------------------------------------
 
+
 def _make_run_result(agent: str, *, output: str = "", success: bool = True) -> RunResult:
     return RunResult(
         agent=agent,
@@ -34,8 +35,24 @@ _BREAKDOWN_SINGLE_PHASE = (
 )
 
 _DESIGN_RESULTS = {
-    "architect": RunResult(agent="architect", output="", success=True, duration_ms=10, attempts=1, error=None, escalated=False),
-    "designer": RunResult(agent="designer", output="", success=True, duration_ms=10, attempts=1, error=None, escalated=False),
+    "architect": RunResult(
+        agent="architect",
+        output="",
+        success=True,
+        duration_ms=10,
+        attempts=1,
+        error=None,
+        escalated=False,
+    ),
+    "designer": RunResult(
+        agent="designer",
+        output="",
+        success=True,
+        duration_ms=10,
+        attempts=1,
+        error=None,
+        escalated=False,
+    ),
 }
 
 
@@ -61,6 +78,7 @@ def _make_orchestra_mock() -> MagicMock:
 # _ask_approval
 # ---------------------------------------------------------------------------
 
+
 class TestAskApproval:
     async def test_yes_inputs(self) -> None:
         for answer in ("y", "yes", "ㅇ", "ㅇㅇ", "예", "네"):
@@ -81,6 +99,7 @@ class TestAskApproval:
 # ---------------------------------------------------------------------------
 # run() — 게이트 경로
 # ---------------------------------------------------------------------------
+
 
 class TestRunInteractivePipeline:
     """run()의 각 게이트 rejection/success 경로 테스트."""
@@ -138,8 +157,11 @@ class TestRunInteractivePipeline:
 
         assert result is True
         mock_orchestra.run_phases.assert_called_once()
-        done_calls = [c for c in mock_orchestra.phase_manager.transition.call_args_list
-                      if c.args and c.args[0] == Phase.DONE]
+        done_calls = [
+            c
+            for c in mock_orchestra.phase_manager.transition.call_args_list
+            if c.args and c.args[0] == Phase.DONE
+        ]
         assert len(done_calls) == 1
 
     async def test_breakdown_failure_returns_false(self, tmp_path: Path) -> None:
@@ -172,6 +194,9 @@ class TestRunInteractivePipeline:
             result = await run("요구사항", tmp_path)
 
         assert result is False
-        done_calls = [c for c in mock_orchestra.phase_manager.transition.call_args_list
-                      if c.args and c.args[0] == Phase.DONE]
+        done_calls = [
+            c
+            for c in mock_orchestra.phase_manager.transition.call_args_list
+            if c.args and c.args[0] == Phase.DONE
+        ]
         assert len(done_calls) == 0

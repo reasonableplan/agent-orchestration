@@ -17,6 +17,7 @@ from src.orchestrator.security_hooks import (
 # 1. secret-filter
 # ---------------------------------------------------------------------------
 
+
 class TestSecretFilter:
     def test_hardcoded_api_key_blocked(self) -> None:
         code = 'API_KEY = "sk-abcdefghijklmnopqrst"'
@@ -46,7 +47,7 @@ class TestSecretFilter:
         assert findings == []
 
     def test_line_number_recorded(self) -> None:
-        code = "# 첫 줄\nAPI_KEY = \"secretvalue123\""
+        code = '# 첫 줄\nAPI_KEY = "secretvalue123"'
         findings = check_secret_filter(code)
         assert any(f.line == 2 for f in findings)
 
@@ -54,6 +55,7 @@ class TestSecretFilter:
 # ---------------------------------------------------------------------------
 # 2. command-guard
 # ---------------------------------------------------------------------------
+
 
 class TestCommandGuard:
     def test_rm_rf_blocked(self) -> None:
@@ -91,6 +93,7 @@ class TestCommandGuard:
 # 3. db-guard
 # ---------------------------------------------------------------------------
 
+
 class TestDbGuard:
     def test_raw_cursor_execute_blocked(self) -> None:
         code = 'cursor.execute("SELECT * FROM users")'
@@ -127,6 +130,7 @@ class TestDbGuard:
 # ---------------------------------------------------------------------------
 # 4. dependency-check
 # ---------------------------------------------------------------------------
+
 
 class TestDependencyCheck:
     def test_whitelist_python_import_clean(self) -> None:
@@ -170,6 +174,7 @@ class TestDependencyCheck:
 # 5. code-quality
 # ---------------------------------------------------------------------------
 
+
 class TestCodeQuality:
     def test_typescript_any_blocked(self) -> None:
         code = "const handler = (data: any) => data"
@@ -211,6 +216,7 @@ class TestCodeQuality:
 # 6. contract-validator
 # ---------------------------------------------------------------------------
 
+
 class TestContractValidator:
     def test_allowed_endpoint_clean(self) -> None:
         code = '@router.get("/projects")\nasync def list_projects(): ...'
@@ -235,9 +241,7 @@ class TestContractValidator:
             '@router.get("/issues")\nasync def list_issues(): ...\n'
             '@router.post("/secret")\nasync def secret(): ...'
         )
-        findings = check_contract_validator(
-            code, allowed_endpoints=["GET /issues"]
-        )
+        findings = check_contract_validator(code, allowed_endpoints=["GET /issues"])
         assert len(findings) == 1
         assert "/secret" in findings[0].message
 
@@ -245,6 +249,7 @@ class TestContractValidator:
 # ---------------------------------------------------------------------------
 # SecurityHooks 통합
 # ---------------------------------------------------------------------------
+
 
 class TestSecurityHooks:
     def test_clean_code_no_findings(self) -> None:
@@ -255,9 +260,7 @@ class TestSecurityHooks:
             "async def list_projects(db: Session):\n"
             "    return db.query(Project).all()\n"
         )
-        result = SecurityHooks().run_all(
-            code, allowed_endpoints=["GET /projects"]
-        )
+        result = SecurityHooks().run_all(code, allowed_endpoints=["GET /projects"])
         assert not result.blocked
         assert result.findings == []
 
@@ -324,8 +327,14 @@ class TestProfileWhitelistInjection:
         )
 
         profile = Profile(
-            id="test", name="test", status="confirmed", version=1,
-            extends=None, paths=(), detect={}, components=(),
+            id="test",
+            name="test",
+            status="confirmed",
+            version=1,
+            extends=None,
+            paths=(),
+            detect={},
+            components=(),
             skeleton_sections=SkeletonSections((), (), ()),
             toolchain=Toolchain(None, None, None, None, None),
             whitelist=Whitelist(
@@ -333,8 +342,11 @@ class TestProfileWhitelistInjection:
                 dev=("dev_pkg",),
                 prefix_allowed=("@my-org/",),
             ),
-            file_structure="x", gstack_mode="manual",
-            gstack_recommended={}, lessons_applied=(), body="",
+            file_structure="x",
+            gstack_mode="manual",
+            gstack_recommended={},
+            lessons_applied=(),
+            body="",
         )
 
         hooks = SecurityHooks.from_profile(profile)

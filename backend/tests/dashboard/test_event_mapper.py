@@ -1,4 +1,5 @@
 """EventMapper 단위 테스트."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -21,14 +22,18 @@ def mapper(ws_manager: MagicMock) -> EventMapper:
 
 
 class TestEmitPhaseChange:
-    async def test_broadcasts_phase_change(self, mapper: EventMapper, ws_manager: MagicMock) -> None:
+    async def test_broadcasts_phase_change(
+        self, mapper: EventMapper, ws_manager: MagicMock
+    ) -> None:
         await mapper.emit_phase_change("IMPLEMENTING")
         ws_manager.broadcast.assert_called_once_with(
             "phase.change",
             {"phase": "IMPLEMENTING", "data": {}},
         )
 
-    async def test_includes_data_when_provided(self, mapper: EventMapper, ws_manager: MagicMock) -> None:
+    async def test_includes_data_when_provided(
+        self, mapper: EventMapper, ws_manager: MagicMock
+    ) -> None:
         await mapper.emit_phase_change("VERIFYING", data={"task_id": "T-001"})
         ws_manager.broadcast.assert_called_once_with(
             "phase.change",
@@ -51,13 +56,17 @@ class TestEmitAgentStart:
             {"agent": "backend_coder", "prompt": "DB 모델 구현"},
         )
 
-    async def test_prompt_truncated_to_200(self, mapper: EventMapper, ws_manager: MagicMock) -> None:
+    async def test_prompt_truncated_to_200(
+        self, mapper: EventMapper, ws_manager: MagicMock
+    ) -> None:
         long_prompt = "x" * 500
         await mapper.emit_agent_start("architect", long_prompt)
         _, payload = ws_manager.broadcast.call_args[0]
         assert len(payload["prompt"]) == 200
 
-    async def test_short_prompt_not_truncated(self, mapper: EventMapper, ws_manager: MagicMock) -> None:
+    async def test_short_prompt_not_truncated(
+        self, mapper: EventMapper, ws_manager: MagicMock
+    ) -> None:
         short = "짧은 프롬프트"
         await mapper.emit_agent_start("reviewer", short)
         _, payload = ws_manager.broadcast.call_args[0]
@@ -130,7 +139,9 @@ class TestEmitTaskUpdate:
 
 
 class TestEmitPhaseMessage:
-    async def test_broadcasts_phase_message(self, mapper: EventMapper, ws_manager: MagicMock) -> None:
+    async def test_broadcasts_phase_message(
+        self, mapper: EventMapper, ws_manager: MagicMock
+    ) -> None:
         await mapper.emit_phase_message("orchestrator", "태스크 분해 완료")
         ws_manager.broadcast.assert_called_once_with(
             "phase.message",

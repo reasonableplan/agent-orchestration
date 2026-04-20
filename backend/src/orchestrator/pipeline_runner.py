@@ -57,11 +57,12 @@ _ENGINEERING_REVIEW_PROMPT = """\
 
 # Utilities
 
+
 def _hr(title: str) -> None:
     width = 60
-    print(f"\n{'='*width}")
+    print(f"\n{'=' * width}")
     print(f"  {title}")
-    print(f"{'='*width}")
+    print(f"{'=' * width}")
 
 
 async def _ask_approval(question: str) -> bool:
@@ -82,6 +83,7 @@ async def _ask_approval(question: str) -> bool:
 
 
 # Main runner
+
 
 async def run(
     requirements: str,
@@ -157,8 +159,9 @@ async def run(
         total_tasks = sum(len(p) for p in phases)
         print(f"\n✅ {len(phases)}개 Phase, {total_tasks}개 태스크 분해 완료")
         for i, phase_tasks in enumerate(phases, start=1):
-            print(f"  Phase {i}: {len(phase_tasks)}개 태스크 "
-                  f"({', '.join(t.id for t in phase_tasks)})")
+            print(
+                f"  Phase {i}: {len(phase_tasks)}개 태스크 ({', '.join(t.id for t in phase_tasks)})"
+            )
 
         approved = await _ask_approval("태스크 분해 결과를 확인했습니다. 구현을 시작할까요?")
         if not approved:
@@ -235,9 +238,7 @@ async def run(
     _hr("GATE 2 — 엔지니어링 리뷰")
     print("skeleton 설계를 리뷰 중입니다...\n")
 
-    skeleton_text = (
-        skeleton_path.read_text(encoding="utf-8") if skeleton_path.exists() else ""
-    )
+    skeleton_text = skeleton_path.read_text(encoding="utf-8") if skeleton_path.exists() else ""
     eng_result = await orchestra.runner.run(
         "reviewer",
         _ENGINEERING_REVIEW_PROMPT.format(skeleton=skeleton_text),
@@ -246,10 +247,7 @@ async def run(
 
     approved = await _ask_approval("구현을 시작할까요?")
     if not approved:
-        print(
-            "\n파이프라인 중단 — skeleton.md를 수정 후 "
-            "pipeline_runner.run()으로 재시작하세요."
-        )
+        print("\n파이프라인 중단 — skeleton.md를 수정 후 pipeline_runner.run()으로 재시작하세요.")
         return False
 
     # PHASE 2: task breakdown
@@ -266,8 +264,7 @@ async def run(
     total_tasks = sum(len(p) for p in phases)
     print(f"\n✅ {len(phases)}개 Phase, {total_tasks}개 태스크 분해 완료")
     for i, phase_tasks in enumerate(phases, start=1):
-        print(f"  Phase {i}: {len(phase_tasks)}개 태스크 "
-              f"({', '.join(t.id for t in phase_tasks)})")
+        print(f"  Phase {i}: {len(phase_tasks)}개 태스크 ({', '.join(t.id for t in phase_tasks)})")
 
     approved = await _ask_approval("태스크 분해 결과를 확인했습니다. 구현을 시작할까요?")
     if not approved:
@@ -323,7 +320,7 @@ def main() -> None:
         action="append",
         default=None,
         help="v2 프로파일 ID (복수 지정 가능: --profile fastapi --profile react-vite). "
-             "지정 시 프로파일 템플릿으로 skeleton 조립 후 섹션 ID 로 merge.",
+        "지정 시 프로파일 템플릿으로 skeleton 조립 후 섹션 ID 로 merge.",
     )
     args = parser.parse_args()
 

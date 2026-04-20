@@ -13,7 +13,8 @@ from textwrap import dedent
 # fixtures: harness_module (from conftest)
 
 
-PLAN_MINIMAL = dedent("""
+PLAN_MINIMAL = (
+    dedent("""
     ---
     project: test
     profiles: []
@@ -26,7 +27,9 @@ PLAN_MINIMAL = dedent("""
     skeleton_sections: {included: [overview]}
     verify_history: []
     ---
-""").strip() + "\n"
+""").strip()
+    + "\n"
+)
 
 
 def _make_project(tmp_path: Path, *, plan: bool = True, skeleton: str | None = None) -> Path:
@@ -142,9 +145,7 @@ def test_integrity_ignores_placeholders_in_python_code_blocks(
     assert not any("<func>" in m or "<value>" in m for m in errs)
 
 
-def test_integrity_silent_when_filesystem_block_absent(
-    harness_module, tmp_path: Path
-) -> None:
+def test_integrity_silent_when_filesystem_block_absent(harness_module, tmp_path: Path) -> None:
     """```filesystem 블록 없으면 silent pass (opt-in feature)."""
     skeleton = "# Test\n\nNo filesystem section.\n"
     project = _make_project(tmp_path, skeleton=skeleton)
@@ -152,9 +153,7 @@ def test_integrity_silent_when_filesystem_block_absent(
     harness_module.check_integrity(project, None, report)
     assert report.error_count == 0
     # filesystem 블록이 없으면 WARN/ERROR 둘 다 없어야 함 (완전 silent)
-    fs_related = [
-        i for i in report.issues if "filesystem" in i.message.lower()
-    ]
+    fs_related = [i for i in report.issues if "filesystem" in i.message.lower()]
     assert fs_related == []
 
 
@@ -165,16 +164,16 @@ def test_integrity_placeholder_line_number_accurate_after_code_block(
     (tmp_path / "pyproject.toml").touch()
     # 코드 블록 (line 3-7) 뒤 placeholder (line 9)
     skeleton = (
-        "# Test\n"                   # 1
-        "\n"                          # 2
-        "```python\n"                 # 3
-        "line 4 in block\n"           # 4
-        "line 5 in block\n"           # 5
-        "line 6 in block\n"           # 6
-        "```\n"                       # 7
-        "\n"                          # 8
-        "<pkg> at line 9\n"           # 9
-        "\n"                          # 10
+        "# Test\n"  # 1
+        "\n"  # 2
+        "```python\n"  # 3
+        "line 4 in block\n"  # 4
+        "line 5 in block\n"  # 5
+        "line 6 in block\n"  # 6
+        "```\n"  # 7
+        "\n"  # 8
+        "<pkg> at line 9\n"  # 9
+        "\n"  # 10
         "```filesystem\n"
         "pyproject.toml\n"
         "```\n"
@@ -182,9 +181,7 @@ def test_integrity_placeholder_line_number_accurate_after_code_block(
     project = _make_project(tmp_path, skeleton=skeleton)
     report = harness_module.Report()
     harness_module.check_integrity(project, None, report)
-    placeholder_err = next(
-        (i for i in report.issues if "<pkg>" in i.message), None
-    )
+    placeholder_err = next((i for i in report.issues if "<pkg>" in i.message), None)
     assert placeholder_err is not None
     assert "line 9" in placeholder_err.message
 

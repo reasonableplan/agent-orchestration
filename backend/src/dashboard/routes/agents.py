@@ -1,4 +1,5 @@
 """GET /api/agents — 에이전트 목록 및 설정 조회."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Path
@@ -9,14 +10,16 @@ from src.dashboard.routes.deps import get_config
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
 # agents.yaml에서 허용된 모델 목록 (claude_client 의존 제거)
-_ALLOWED_MODELS: frozenset[str] = frozenset({
-    "claude-opus-4-5",
-    "claude-sonnet-4-5",
-    "claude-haiku-3-5",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022",
-    "claude-3-opus-20240229",
-})
+_ALLOWED_MODELS: frozenset[str] = frozenset(
+    {
+        "claude-opus-4-5",
+        "claude-sonnet-4-5",
+        "claude-haiku-3-5",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022",
+        "claude-3-opus-20240229",
+    }
+)
 
 
 class AgentSummary(BaseModel):

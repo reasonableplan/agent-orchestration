@@ -347,9 +347,7 @@ def test_detect_monorepo(tmp_path: Path) -> None:
     )
 
     (project / "backend").mkdir(parents=True)
-    (project / "backend" / "pyproject.toml").write_text(
-        "fastapi", encoding="utf-8"
-    )
+    (project / "backend" / "pyproject.toml").write_text("fastapi", encoding="utf-8")
     (project / "frontend").mkdir(parents=True)
     (project / "frontend" / "package.json").write_text(
         '{"dependencies": {"react": "*", "vite": "*"}}', encoding="utf-8"

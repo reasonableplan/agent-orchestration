@@ -30,23 +30,17 @@ class GeminiApiProvider(BaseProvider):
     ) -> str:
         api_key = os.environ.get("GEMINI_API_KEY", "")
         if not api_key:
-            raise RuntimeError(
-                "GEMINI_API_KEY 환경변수가 설정되어 있지 않습니다."
-            )
+            raise RuntimeError("GEMINI_API_KEY 환경변수가 설정되어 있지 않습니다.")
 
         url = f"{_API_BASE}/{config.model}:generateContent"
         body: dict = {
-            "contents": [
-                {"role": "user", "parts": [{"text": prompt}]}
-            ],
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "maxOutputTokens": config.max_tokens,
             },
         }
         if system_prompt:
-            body["system_instruction"] = {
-                "parts": [{"text": system_prompt}]
-            }
+            body["system_instruction"] = {"parts": [{"text": system_prompt}]}
 
         timeout = httpx.Timeout(
             connect=10.0,
@@ -69,16 +63,13 @@ class GeminiApiProvider(BaseProvider):
 
         if resp.status_code != 200:
             raise RuntimeError(
-                f"{agent_name} Gemini API 오류 (HTTP {resp.status_code}): "
-                f"{resp.text[:300]}"
+                f"{agent_name} Gemini API 오류 (HTTP {resp.status_code}): {resp.text[:300]}"
             )
 
         data = resp.json()
         try:
             text: str = data["candidates"][0]["content"]["parts"][0]["text"]
         except (KeyError, IndexError) as exc:
-            raise RuntimeError(
-                f"{agent_name} Gemini 응답 파싱 실패: {data}"
-            ) from exc
+            raise RuntimeError(f"{agent_name} Gemini 응답 파싱 실패: {data}") from exc
 
         return text.strip()

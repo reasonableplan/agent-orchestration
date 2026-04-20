@@ -36,12 +36,17 @@ def _make_config(max_concurrent: int = 2, **overrides: object) -> OrchestratorCo
 class TestRun:
     async def test_successful_run(self, tmp_path: Path) -> None:
         config = _make_config()
-        runner = AgentRunner(config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs"))
+        runner = AgentRunner(
+            config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs")
+        )
 
         with patch.object(runner, "_run_with_retry") as mock_run:
             mock_run.return_value = RunResult(
-                agent="architect", output="result", success=True,
-                duration_ms=100, attempts=1,
+                agent="architect",
+                output="result",
+                success=True,
+                duration_ms=100,
+                attempts=1,
             )
             result = await runner.run("architect", "설계해줘")
 
@@ -50,7 +55,9 @@ class TestRun:
 
     async def test_timeout_escalate(self, tmp_path: Path) -> None:
         config = _make_config(timeout_seconds=1, on_timeout="escalate", max_retries_on_timeout=0)
-        runner = AgentRunner(config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs"))
+        runner = AgentRunner(
+            config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs")
+        )
 
         # provider.execute가 TimeoutError를 raise
         mock_provider = AsyncMock()
@@ -65,7 +72,9 @@ class TestRun:
 
     async def test_timeout_retry(self, tmp_path: Path) -> None:
         config = _make_config(timeout_seconds=1, on_timeout="retry", max_retries_on_timeout=2)
-        runner = AgentRunner(config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs"))
+        runner = AgentRunner(
+            config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs")
+        )
 
         mock_provider = AsyncMock()
         mock_provider.execute = AsyncMock(side_effect=TimeoutError("타임아웃"))
@@ -78,7 +87,9 @@ class TestRun:
 
     async def test_timeout_retry_succeeds_on_second(self, tmp_path: Path) -> None:
         config = _make_config(timeout_seconds=1, on_timeout="retry", max_retries_on_timeout=2)
-        runner = AgentRunner(config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs"))
+        runner = AgentRunner(
+            config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs")
+        )
 
         mock_provider = AsyncMock()
         mock_provider.execute = AsyncMock(side_effect=[TimeoutError("타임아웃"), "success"])
@@ -92,7 +103,9 @@ class TestRun:
 
     async def test_cli_error(self, tmp_path: Path) -> None:
         config = _make_config()
-        runner = AgentRunner(config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs"))
+        runner = AgentRunner(
+            config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs")
+        )
 
         mock_provider = AsyncMock()
         mock_provider.execute = AsyncMock(side_effect=RuntimeError("CLI 실패"))
@@ -106,7 +119,8 @@ class TestRun:
     async def test_semaphore_limits_concurrency(self, tmp_path: Path) -> None:
         config = _make_config(max_concurrent=1)
         runner = AgentRunner(
-            config=config, project_dir=tmp_path,
+            config=config,
+            project_dir=tmp_path,
             logger=AgentLogger(tmp_path / "logs"),
         )
 
@@ -128,10 +142,12 @@ class TestRun:
         runner._providers["architect"] = mock_provider
         runner._providers["designer"] = mock_provider
 
-        results = await runner.run_many([
-            ("architect", "작업1"),
-            ("designer", "작업2"),
-        ])
+        results = await runner.run_many(
+            [
+                ("architect", "작업1"),
+                ("designer", "작업2"),
+            ]
+        )
 
         assert len(results) == 2
         assert all(r.success for r in results)
@@ -143,7 +159,8 @@ class TestRunMany:
     async def test_parallel_execution(self, tmp_path: Path) -> None:
         config = _make_config(max_concurrent=2)
         runner = AgentRunner(
-            config=config, project_dir=tmp_path,
+            config=config,
+            project_dir=tmp_path,
             logger=AgentLogger(tmp_path / "logs"),
         )
 
@@ -152,20 +169,22 @@ class TestRunMany:
         runner._providers["architect"] = mock_provider
         runner._providers["designer"] = mock_provider
 
-        results = await runner.run_many([
-            ("architect", "작업1"),
-            ("designer", "작업2"),
-        ])
+        results = await runner.run_many(
+            [
+                ("architect", "작업1"),
+                ("designer", "작업2"),
+            ]
+        )
 
         assert len(results) == 2
         assert all(r.success for r in results)
-
 
     async def test_partial_failure(self, tmp_path: Path) -> None:
         """한 에이전트 실패해도 나머지 결과가 살아있는지 확인."""
         config = _make_config()
         runner = AgentRunner(
-            config=config, project_dir=tmp_path,
+            config=config,
+            project_dir=tmp_path,
             logger=AgentLogger(tmp_path / "logs"),
         )
 
@@ -178,10 +197,12 @@ class TestRunMany:
         runner._providers["architect"] = ok_provider
         runner._providers["designer"] = fail_provider
 
-        results = await runner.run_many([
-            ("architect", "작업1"),
-            ("designer", "작업2"),
-        ])
+        results = await runner.run_many(
+            [
+                ("architect", "작업1"),
+                ("designer", "작업2"),
+            ]
+        )
 
         assert len(results) == 2
         # architect 성공
@@ -195,7 +216,8 @@ class TestRunMany:
         """모든 에이전트 실패 시 전부 RunResult로 반환."""
         config = _make_config()
         runner = AgentRunner(
-            config=config, project_dir=tmp_path,
+            config=config,
+            project_dir=tmp_path,
             logger=AgentLogger(tmp_path / "logs"),
         )
 
@@ -205,10 +227,12 @@ class TestRunMany:
         runner._providers["architect"] = fail_provider
         runner._providers["designer"] = fail_provider
 
-        results = await runner.run_many([
-            ("architect", "작업1"),
-            ("designer", "작업2"),
-        ])
+        results = await runner.run_many(
+            [
+                ("architect", "작업1"),
+                ("designer", "작업2"),
+            ]
+        )
 
         assert len(results) == 2
         assert all(not r.success for r in results)
@@ -222,7 +246,9 @@ class TestContextInjection:
         (prompt_dir / "CLAUDE.md").write_text("You are an architect.", encoding="utf-8")
 
         config = _make_config()
-        runner = AgentRunner(config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs"))
+        runner = AgentRunner(
+            config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs")
+        )
 
         mock_provider = AsyncMock()
         mock_provider.execute = AsyncMock(return_value="done")
@@ -238,7 +264,9 @@ class TestContextInjection:
     async def test_no_context_files_passes_none(self, tmp_path: Path) -> None:
         """컨텍스트 파일이 없으면 system_prompt=None 전달."""
         config = _make_config()
-        runner = AgentRunner(config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs"))
+        runner = AgentRunner(
+            config=config, project_dir=tmp_path, logger=AgentLogger(tmp_path / "logs")
+        )
 
         mock_provider = AsyncMock()
         mock_provider.execute = AsyncMock(return_value="done")

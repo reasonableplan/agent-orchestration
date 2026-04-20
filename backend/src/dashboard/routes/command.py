@@ -1,4 +1,5 @@
 """사용자 명령 처리 — Phase 기반 에이전트 실행."""
+
 from __future__ import annotations
 
 import asyncio
@@ -61,7 +62,9 @@ async def send_command(body: CommandRequest) -> CommandResponse:
                 result = await orchestra.implement_with_retry(task_id, agent, body.content)
                 logger.info(
                     "Command completed agent=%s passed=%s attempts=%s",
-                    agent, result.get("passed"), result.get("attempts"),
+                    agent,
+                    result.get("passed"),
+                    result.get("attempts"),
                 )
             else:
                 runner = get_runner()

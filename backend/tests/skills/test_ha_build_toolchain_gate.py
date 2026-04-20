@@ -39,7 +39,9 @@ def _make_plan(profile_id: str, path: str, test_cmd: str, lint_cmd: str, type_cm
     )
 
 
-def _patch_get_active_profiles(ha_build, profile_id: str, test_cmd: str, lint_cmd: str, type_cmd: str | None, monkeypatch):
+def _patch_get_active_profiles(
+    ha_build, profile_id: str, test_cmd: str, lint_cmd: str, type_cmd: str | None, monkeypatch
+):
     """get_active_profiles 를 모킹해 가짜 프로파일 반환."""
     fake_profile = SimpleNamespace(
         id=profile_id,
@@ -99,7 +101,9 @@ def test_toolchain_gate_iterates_all_profiles(ha_build, tmp_path, monkeypatch) -
         id="react-vite",
         toolchain=SimpleNamespace(test="true", lint="false", type="true"),
     )
-    monkeypatch.setattr(ha_build, "get_active_profiles", lambda plan, project: [profile_a, profile_b])
+    monkeypatch.setattr(
+        ha_build, "get_active_profiles", lambda plan, project: [profile_a, profile_b]
+    )
     plan = SimpleNamespace(
         profiles=[
             SimpleNamespace(id="fastapi", path="backend"),
