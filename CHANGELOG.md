@@ -7,6 +7,27 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
 ## [Unreleased]
 
 ### Added
+- (항목 추가되는대로)
+
+### Changed
+- (항목 추가되는대로)
+
+### Fixed
+- (항목 추가되는대로)
+
+---
+
+## [0.4.0] — 2026-04-19 — "portfolio-ready"
+
+Final verification snapshot at release time:
+**pytest 357 pass / ruff 0 / pyright 0 / gate_benchmark 35/35 (100% precision/recall/accuracy) / harness validate 27 files 0 errors**.
+
+First tagged release. Goal: the repository is ready for public GitHub
+disclosure — bilingual README, community standards (LICENSE/CoC/SECURITY),
+CI, GitHub templates, working examples/, English code comments, profile-based
+v2 pipeline in both skill and Orchestra paths, 9 quality gates benchmarked.
+
+### Added
 - **`docs/decisions/` ADR 5개** (B4) — Architecture Decision Records.
   - ADR-001: 프로파일 기반 아키텍처로의 전환
   - ADR-002: Skeleton 섹션 번호 → ID 전환
@@ -54,11 +75,29 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
   LESSON-013/018/021 이 단순 기록에서 **자동 감지 게이트**로 올라간 흐름을 추적.
   plain Claude 와의 **구조적 차이** 정성 비교 포함.
 
-### Changed
-- (항목 추가되는대로)
+### Added — 공개 준비
+- **`README.md` 영어 버전** 신규 + 기존 한국어는 `README.ko.md` 로 이전. 양쪽 상단에
+  언어 토글 배너. 영어 README 에 shields.io 배지 6종 (tests / pyright / ruff /
+  gate-coverage / python / license) + Tech stack 의 latency summary 추가.
+- **커뮤니티 표준 파일** — `LICENSE` (MIT, copyright 2026 reasonableplan),
+  `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1 축약), `SECURITY.md` (취약점
+  보고 프로세스 + 응답 SLA critical 7d / high 30d + scope).
+- **GitHub 템플릿** — `.github/ISSUE_TEMPLATE/{bug,feature,profile_request}.md`
+  3종 + `.github/pull_request_template.md` (CONTRIBUTING PR 체크리스트 재사용,
+  pyright / gate_benchmark / harness validate 항목 포함).
+- **`examples/python-cli-hello/`** — 최소 재현 가능한 예시 프로젝트 (pyproject.toml
+  + docs/harness-plan.md + docs/skeleton.md + README). 신규 사용자가 `/ha-init`
+  결과를 실행 전에 미리 볼 수 있음. Korean skeleton heading 관련 로컬라이제이션
+  메모 포함.
 
-### Fixed
-- (항목 추가되는대로)
+### Changed — 공개 준비
+- **`.github/workflows/ci.yml` 전면 재작성** — 기존은 postgres/alembic 참조하는
+  stale template (이 프로젝트엔 DB 없음). 새 workflow: ruff lint + format check +
+  pyright + pytest + harness validate + gate_benchmark + install-snapshot.
+- **15 파일 주석/docstring 영어화** (orchestrator/* + scripts/*). `pipeline_runner`
+  의 에이전트 프롬프트 · `print()` · `input()` 한국어 UX 메시지, `output_parser`
+  의 한글 regex 파싱 패턴, `security_hooks` 의 Finding 메시지 문자열은 의도적 유지.
+  변경된 테스트 5개에서 에러 메시지 matcher 동기화.
 
 ### Removed — **BREAKING** (Phase 4a + 4b)
 
