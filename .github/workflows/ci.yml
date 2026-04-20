@@ -42,7 +42,8 @@ jobs:
         run: uv run pytest tests/ --rootdir=. -q
 
       - name: Harness schema validation
-        run: python3 harness/bin/harness validate
+        working-directory: backend
+        run: uv run python ../harness/bin/harness validate
 
       - name: Gate coverage benchmark
         working-directory: backend
