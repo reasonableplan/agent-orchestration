@@ -75,8 +75,15 @@ class ClaudeCliProvider(BaseProvider):
         프롬프트는 stdin으로 전달 — Windows .cmd 래퍼가 cmd.exe를 거칠 때 발생하는
         8191자 커맨드라인 제한을 우회한다. -p (print mode) + stdin 조합.
         """
-        # Windows에서 npm CLI는 .cmd 래퍼로 설치됨 — create_subprocess_exec은 .cmd 직접 실행 불가
-        cli = "claude.cmd" if sys.platform == "win32" else "claude"
+        # On Windows, Claude CLI may be installed as .exe (native installer) or
+        # .cmd (npm wrapper). Let shutil.which resolve whichever is on PATH.
+        # Fall back to the bare name — Python's create_subprocess_exec will then
+        # consult PATHEXT at spawn time.
+        if sys.platform == "win32":
+            import shutil
+            cli = shutil.which("claude") or shutil.which("claude.cmd") or "claude.exe"
+        else:
+            cli = "claude"
         cmd = [
             cli,
             "-p",  # non-interactive print 모드, stdin에서 prompt 읽음

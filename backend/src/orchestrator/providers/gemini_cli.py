@@ -84,7 +84,12 @@ class GeminiCliProvider(BaseProvider):
         -y: 모든 tool 승인 자동화 (비대화형 실행에 필수)
         -o text: ANSI 이스케이프 없는 순수 텍스트 출력
         """
-        cli = "gemini.cmd" if sys.platform == "win32" else "gemini"
+        # Windows: installer may ship .exe or .cmd wrapper; let shutil.which resolve.
+        if sys.platform == "win32":
+            import shutil
+            cli = shutil.which("gemini") or shutil.which("gemini.cmd") or "gemini.exe"
+        else:
+            cli = "gemini"
         return [
             cli,
             "-p",
