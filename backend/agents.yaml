@@ -1,11 +1,16 @@
 max_concurrent: 2  # 동시 실행 에이전트 수 제한
 
+# timeout_seconds 기준:
+# - batch 모드 (full skeleton 생성): architect/designer 600s 권장
+# - compact prompt (skeleton 이미 채워진 후): orchestrator 300s 충분
+# 메인 레포 개발자 환경: 이 값들로 충분. CI/느린 환경: 1.5배 권장.
+
 architect:
   provider: claude-cli
   model: claude-opus-4-6
   prompt_path: agents/architect/CLAUDE.md
-  timeout_seconds: 300
-  on_timeout: escalate
+  timeout_seconds: 600
+  on_timeout: retry
   max_retries_on_timeout: 1
   max_tokens: 8192
 
@@ -13,8 +18,8 @@ designer:
   provider: claude-cli
   model: claude-opus-4-6
   prompt_path: agents/designer/CLAUDE.md
-  timeout_seconds: 300
-  on_timeout: escalate
+  timeout_seconds: 600
+  on_timeout: retry
   max_retries_on_timeout: 1
   max_tokens: 8192
 
@@ -22,7 +27,7 @@ orchestrator:
   provider: claude-cli
   model: claude-opus-4-6
   prompt_path: agents/orchestrator/CLAUDE.md
-  timeout_seconds: 180
+  timeout_seconds: 300
   on_timeout: retry
   max_retries_on_timeout: 2
   max_tokens: 8192
