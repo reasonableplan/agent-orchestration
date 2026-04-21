@@ -35,6 +35,42 @@ from src.orchestrator.state import StateManager
 
 logger = logging.getLogger(__name__)
 
+# Batch-mode directive prepended to architect/designer prompts in non-interactive runs.
+# Prevents agents from entering interview/question mode and ensures all 17 skeleton
+# sections are filled immediately using the exact SECTION_TITLES headings.
+_BATCH_MODE_DIRECTIVE = """\
+[BATCH MODE — NO QUESTIONS, NO INTERVIEW]
+비대화형 실행 모드입니다. 사용자는 답변할 수 없습니다.
+모호한 항목은 합리적 기본값으로 결정하고 즉시 skeleton 섹션을 전부 채워 출력하세요.
+
+## 출력 규칙 (필수)
+각 담당 섹션을 `## <번호>. <한국어 제목>` 형식으로 출력하세요.
+제목은 SECTION_TITLES 와 정확히 일치해야 합니다 (토씨 하나 틀리면 섹션 merge 실패).
+
+사용 가능한 헤딩:
+- `## 1. 프로젝트 개요`
+- `## 2. 기능 요구사항`
+- `## 3. 기술 스택`
+- `## 4. 설정 / 환경변수`
+- `## 5. 에러 핸들링`
+- `## 6. 인증 / 권한`
+- `## 7. 저장소 / 스키마`
+- `## 8. 외부 통합`
+- `## 9. HTTP API`
+- `## 10. 상태 흐름`
+- `## 11. 도메인 로직`
+- `## 12. 로깅 / 모니터링`
+- `## 13. 배포 설정`
+- `## 14. 태스크 분해`
+- `## 15. 구현 노트`
+- `## 16. 화면 목록`
+- `## 17. 컴포넌트 트리`
+
+---
+
+## 프로젝트 요구사항
+"""
+
 # Phase-to-agent mapping (ordered tuples) — internal pipeline use
 _PHASE_AGENTS: dict[Phase, tuple[str, ...]] = {
     Phase.DESIGNING: ("architect", "designer"),
@@ -186,12 +222,20 @@ class Orchestra:
         self,
         requirements: str,
         max_negotiation_rounds: int = 3,
+        batch_mode: bool = False,
     ) -> dict[str, RunResult]:
         """Design phase — Architect / Designer negotiation loop.
 
         If the Designer outputs ``## Design Verdict: CONFLICT``, the API
         requests are forwarded to the Architect for redesign. ACCEPT or
         no marker is treated as agreement.
+
+        Args:
+            requirements: Project requirements text.
+            max_negotiation_rounds: Maximum number of architect/designer rounds.
+            batch_mode: When True, prepend ``_BATCH_MODE_DIRECTIVE`` to the
+                initial architect prompt. Prevents agents from entering
+                interview mode in non-interactive (CI/bench) runs.
 
         Returns:
             {"architect": RunResult, "designer": RunResult} from the last round.
@@ -201,7 +245,7 @@ class Orchestra:
         _no_result = RunResult(agent="", output="", success=False, duration_ms=0, attempts=0)
         architect_result: RunResult = _no_result
         designer_result: RunResult = _no_result
-        architect_prompt = requirements
+        architect_prompt = _BATCH_MODE_DIRECTIVE + requirements if batch_mode else requirements
 
         for round_num in range(1, max_negotiation_rounds + 1):
             architect_result = await self.runner.run("architect", architect_prompt)
