@@ -7,6 +7,34 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
 ## [Unreleased]
 
 ### Added
+- **결정권 분리 원칙 전면 적용** (`36c026d`, `8dd11f7`) — Architect/Designer 는
+  skeleton 에 DB/화면/레이아웃 세부까지 확정, Orchestrator 는 tasks.md 에 태스크별
+  구현 스펙 블록 작성, Coder 는 자율 결정 금지 + 미정의 시 `--status blocked`
+  에스컬레이션. 5 에이전트 CLAUDE.md + ha-plan/ha-build SKILL.md 일관 업데이트.
+  - **Architect CLAUDE.md** — DB 세부 완비 체크리스트 (컬럼/타입/NULL/UNIQUE/
+    기본값/인덱스/FK ondelete/`DateTime(timezone=True)`), 모호함 금지 원칙
+    ("적절한 인덱스" 같은 표현 금지), 백엔드 레이아웃 결정 책임 (src/ vs flat,
+    디렉토리 구조, 파일 경로 예시).
+  - **Designer CLAUDE.md** — 화면당 8 필드 체크리스트 (경로/레이아웃/인증/초기
+    로딩/API/store/에러/flow), 컴포넌트별 파일 경로 + props 타입 명시, store
+    state/action 시그니처 완비, 프론트엔드 레이아웃·파일명 결정 책임, React
+    Query 하드코딩 제거 (conventions 위임).
+  - **Orchestrator CLAUDE.md** — tasks.md 에 Phase 5컬럼 테이블 + 태스크별
+    스펙 블록 (생성/수정 파일, skeleton 참조, 구현 세부, 참조 파일, 완료 기준)
+    포맷 추가. 파서 호환성 유지 (5컬럼 regex 불변).
+  - **Backend/Frontend Coder CLAUDE.md** — 권위 순서 섹션 (conventions > 루트
+    CLAUDE.md > agent CLAUDE.md > tasks.md 스펙 블록 > skeleton), 자율 결정
+    금지 테이블 (레이아웃/DB 필드/API 경로/파일명), 에스컬레이션 절차.
+  - **ha-plan SKILL.md** — 출력 포맷 예시에 "태스크별 구현 스펙 블록" 추가,
+    스펙 없는 태스크는 미완성 산출물로 간주.
+  - **ha-build SKILL.md** — 읽기 순서에 tasks.md 스펙 블록 1순위 배치, 스펙
+    불완전 시 blocked 에스컬레이션 절차 명시, 하위 호환 폴백 안내.
+- **실측 검증 완료** — `bench-personaljira-v3` Stage B smoke test 로 결정권
+  분리 효과 정량 확인: skeleton `persistence` 0→11 테이블, FK ondelete 0→16,
+  `CustomException` subclass 0→15 (conventions 위반→완비), Sonnet Backend
+  Coder Phase 1 10 태스크 실행 pytest **194 / ruff 0 / pyright 0** clean.
+  자율 결정 14건 모두 자발 보고, 스펙 위반 0건. (리포트는 bench 디렉토리
+  내부, 레포 외부).
 - **`docs/ARCHITECTURE.md` 영어 버전 신규** — 현재 한국어는 `ARCHITECTURE.ko.md`
   로 이전, 양쪽 상단에 언어 토글 배너. 영어 버전은 섹션 11로 나누어 condensed
   ~200 라인 (한국어 원본은 worklog-style 상세).
