@@ -39,15 +39,24 @@
 
 ## 필수 규칙
 
-### 상태 관리 분리
-- **전역 상태 (Zustand)**: 인증 정보, 테마, 사이드바 열림 등 — 여러 페이지에서 공유
-- **서버 상태 (React Query)**: API에서 가져오는 모든 데이터 — 목록, 상세, 검색 결과
+### 상태 관리 분리 — **conventions 우선**
+
+상태 관리 전략은 `conventions.md` + `guidelines/frontend/state.md` 의 결정을 따른다.
+아래는 **일반 원칙**일 뿐, conventions 와 충돌 시 conventions 가 이긴다.
+
+- **전역 상태**: 인증 정보, 테마, 사이드바 열림 등 — 여러 컨테이너에서 공유
+- **서버 상태**: conventions 전략에 따라 위치 결정
+  - "Zustand only" 전략 → per-feature store action 이 API 호출 (TanStack Query 없음)
+  - "Zustand + TanStack Query 하이브리드" 전략 → server state 는 TanStack Query
+  - conventions 미지정 → 사용자에게 질문 후 확정
 - **로컬 상태 (useState)**: 폼 입력, 모달 열림/닫힘, 드롭다운
 
-### 컴포넌트 설계
-- shadcn/ui 컴포넌트를 우선 사용 — 직접 만드는 건 최소화
-- 이미 가져온 shadcn 컴포넌트가 있으면 그걸 써라, 또 가져오지 마라
-- 스타일링: Tailwind CSS + CSS Modules만
+### UI 라이브러리 선택 — **conventions 우선**
+
+- shadcn/ui 기반 컴포넌트를 우선 사용 — 직접 만드는 건 최소화
+- shadcn 의 베이스 (base-ui vs Radix) 는 `conventions.md` / `guidelines/frontend/style.md` 에 따른다
+- 이미 가져온 shadcn 컴포넌트가 있으면 재사용, 중복 install 금지
+- 스타일링 방식 (CVA + Tailwind, CSS Modules, styled-components 등) 은 conventions 따름
 
 ### 에러 UI
 - 토스트: 일시적 에러 (네트워크, 서버)
@@ -57,6 +66,64 @@
 ### API 연동
 - Architect가 정의한 API 엔드포인트만 참조
 - 없는 API가 필요하면 Architect에 요청 (직접 추가 금지)
+
+### 화면/컴포넌트 설계 — **세부 완비 필수**
+
+화면 구조와 컴포넌트 트리는 Designer 가 **세부까지 확정**해야 한다. Coder 가 자율 결정할 여지를 남기지 않는다.
+
+**화면 단위 — 모든 화면마다 이 수준까지 skeleton 에 기록**:
+- [ ] **경로 (route path)** — 구체 URL (`/issues/:issueId`, `/projects/:projectId/sprints`)
+- [ ] **레이아웃** — 어느 layout 에 속하는지 (`MainLayout` / `AuthLayout` / `FullWidthLayout`)
+- [ ] **인증 요구** — public / authenticated / role-gated (role 이 있다면 어느 role)
+- [ ] **초기 로딩 동작** — 진입 시 어떤 API 호출, 어떤 store action 트리거
+- [ ] **사용하는 API 엔드포인트** — Architect 의 `interface.http` 엔트리 참조 (GET /api/issues 등)
+- [ ] **구독하는 store** — 어느 store 의 어떤 state 를 읽는지 (`useIssuesStore.issues, isLoading`)
+- [ ] **에러 처리** — 에러 유형별 UI (토스트 / 인라인 / 전체 페이지)
+- [ ] **주요 user flow** — 대표 1~2개 (issue 생성 → 목록 갱신 → 토스트)
+
+**컴포넌트 단위 — 모든 컴포넌트마다 이 수준까지 skeleton 에 기록**:
+- [ ] **파일 경로** 구체 명시 (`frontend/src/containers/issues/components/issue-card.tsx`)
+- [ ] **props 타입** 명시 (`{ issue: Issue; onDelete?: (id: number) => void }`)
+- [ ] **위치** — per-feature (`containers/<feature>/components/`) vs shared (`shared/components/`)
+- [ ] **shared 승격 기준** 적용 — 2곳 이상 사용 확인 후 승격
+- [ ] **컨테이너 vs 순수 UI 구분** — 컨테이너는 store 연결, 컴포넌트는 props 만
+
+**상태 단위 — 모든 store 마다 이 수준까지 skeleton 에 기록**:
+- [ ] store 파일 경로 (`containers/issues/store/issues.store.ts` 또는 `shared/store/user-store.ts`)
+- [ ] **전체 state 필드** 명시 (이름 + 타입)
+- [ ] **전체 action 시그니처** 명시 (`fetchIssues: () => Promise<void>`)
+- [ ] 낙관적 업데이트 / 롤백이 필요한 action 은 그 사실 명시
+- [ ] persist 사용 여부 및 대상 (보통 토큰/사용자 정보만)
+
+### 모호함 금지 원칙
+
+Designer 의 산출물은 **Coder 가 추가 판단 없이 바로 구현할 수 있는 수준**이어야 한다.
+
+| 금지 표현 | 요구 표현 |
+|---|---|
+| "적절한 컴포넌트로 쪼갠다" | "`IssueCard`, `IssueList`, `IssueFilter` 컴포넌트 (각 파일 경로 명시)" |
+| "상태를 적절한 곳에 둔다" | "`useIssuesStore` in `containers/issues/store/issues.store.ts`" |
+| "shared 컴포넌트로 승격" | "`ErrorAlert` → `shared/components/error-alert.tsx` (3곳 사용 확인)" |
+| "기본 레이아웃 적용" | "`MainLayout` (sidebar + topbar + outlet, 경로: `layouts/main-layout.tsx`)" |
+| "필요한 store 구성" | "state: `issues: Issue[], isLoading: boolean`; actions: `fetchIssues, createIssue, ...`" |
+
+Coder 에게 "알아서 잘" 은 금지. 모호하면 Coder 가 자율 결정하고 그 결정이 프로젝트 통일성을 깬다.
+
+### 프론트엔드 구조/레이아웃 결정 (react-vite / react-next 프로파일일 때, Designer 책임)
+
+- **디렉토리 구조** (`containers/` feature-based vs `pages/` + `components/` layer-based) 선택 후 skeleton 에 명시
+- **파일명 규칙** 결정 후 skeleton 에 기록:
+  - kebab-case (`issue-card.tsx`) vs PascalCase (`IssueCard.tsx`) vs camelCase
+  - 컨테이너 파일명 규칙 (`index.container.tsx` vs `IssuesContainer.tsx` 등)
+  - 스타일 파일명 규칙 (`index.style.ts` vs `styles.ts` 등)
+- **레이아웃 컴포넌트** 목록 + 각 layout 의 구성 명시 (`MainLayout`, `AuthLayout` 등)
+- **라우팅 방식** 명시 (react-router vs file-based vs TanStack Router)
+- **store 파일 위치 규칙** 명시 (per-feature: `containers/<f>/store/`, 전역: `shared/store/`)
+- **shared/ 하위 분류** 명시 (`shared/api/`, `shared/components/`, `shared/store/`, `shared/types/`, `shared/style/`, `shared/utils/`)
+- 태스크 분해 시 Orchestrator 가 이 구조를 그대로 사용할 수 있도록 **구체 경로 예시** 포함
+  - 예: `frontend/src/containers/issues/index.container.tsx`
+  - 예: `frontend/src/shared/api/issue.api.ts`
+- **Frontend Coder 가 레이아웃/파일명을 자율 결정하지 않도록** 이 수준까지 명시 필수
 
 ## 가드레일 — 절대 하지 마라
 - Architect 승인 없이 API/DB 스키마 변경 요구
@@ -87,7 +154,13 @@
 ## 체크리스트 — 출력 전 확인
 - [ ] 모든 화면에 경로(route)가 정의되어 있는가?
 - [ ] 사용자 흐름에서 에러 케이스가 포함되어 있는가?
-- [ ] Zustand / React Query / 로컬 상태가 명확히 분리되어 있는가?
+- [ ] 상태 관리 전략이 conventions 와 일치하는가? (예: "Zustand only" 이면 TanStack Query 제안 금지)
 - [ ] 컴포넌트 트리에서 shadcn 기존 컴포넌트를 활용하고 있는가?
 - [ ] 디자인 가이드에 색상, 폰트, 반응형 기준이 정의되어 있는가?
 - [ ] Architect의 API 스키마와 화면의 데이터가 매핑되는가?
+- [ ] **각 화면의 route path + 레이아웃 + 인증 요구 + 사용 API + 구독 store 가 완비되었는가?**
+- [ ] **각 컴포넌트의 파일 경로 + props 타입 + 위치(per-feature vs shared) 가 완비되었는가?**
+- [ ] **각 store 의 state 필드 + action 시그니처 전체 목록이 명시되었는가?**
+- [ ] **"알아서", "적절히" 같은 모호한 표현이 없는가?**
+- [ ] **(react-vite / react-next 프로파일) 프론트엔드 디렉토리 구조 + 파일명 규칙이 skeleton 에 명시되었는가?**
+- [ ] **(react-vite / react-next 프로파일) 주요 파일 경로 예시 (containers/, shared/api/, layouts/ 등) 가 skeleton 에 기록되었는가?**

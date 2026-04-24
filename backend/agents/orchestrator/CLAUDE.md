@@ -17,13 +17,15 @@
 
 반드시 아래 포맷을 정확히 따른다. 파서가 이 포맷을 읽는다.
 
+**1) Phase 테이블** — 파서 입력. 정확히 5 컬럼 유지 (ha-build 의 `_TASK_ROW_RE` 가 읽음).
+
 ```
 ### Phase 1 — MVP
 | ID | 에이전트 | 의존성 | 설명 | 상태 |
 |---|---|---|---|---|
-| T-001 | backend_coder | - | DB 모델 구현 | 대기 |
-| T-002 | backend_coder | T-001 | API 엔드포인트 구현 | 대기 |
-| T-003 | frontend_coder | T-002 | 핵심 화면 구현 | 대기 |
+| T-001 | backend_coder | - | DB 모델 (users, sessions) | 대기 |
+| T-002 | backend_coder | T-001 | Auth API (/login, /logout) | 대기 |
+| T-003 | frontend_coder | T-002 | 로그인 화면 (LoginContainer) | 대기 |
 
 ### Phase 2 — 확장
 | ID | 에이전트 | 의존성 | 설명 | 상태 |
@@ -31,13 +33,35 @@
 | T-010 | frontend_coder | - | 통계 대시보드 구현 | 대기 |
 ```
 
+**2) 태스크별 구현 스펙 블록** — Sonnet Coder 가 자율 판단 없이 그대로 실행할 세부. 모든 태스크마다 반드시 작성.
+
+```
+### T-001 — DB 모델 (users, sessions)
+
+- **담당**: backend_coder
+- **생성/수정 파일** (skeleton 에서 복사):
+  - NEW `backend/src/app/models/user.py`
+  - NEW `backend/src/app/models/session.py`
+  - NEW `backend/tests/models/test_user.py`
+  - NEW `backend/tests/models/test_session.py`
+  - MOD `backend/alembic/versions/XXX_init.py` (마이그레이션 추가)
+- **skeleton 참조**: `persistence.users`, `persistence.sessions`
+- **구현 세부** (Architect 가 skeleton 에 확정한 것 그대로 — 추가 결정 금지):
+  - `users`: id (PK BigInteger), email (unique, index, not null, VARCHAR(320)), password_hash (not null, VARCHAR(255)), is_active (Boolean, default=True), created_at/updated_at (DateTime timezone=True, onupdate=func.now())
+  - `sessions`: id (PK BigInteger), user_id (FK → users.id ON DELETE CASCADE, not null, index), refresh_token_hash (unique, not null), expires_at (DateTime timezone=True), created_at (DateTime timezone=True)
+  - Enum 없음
+- **참조 파일** (기존 패턴 복제 대상): 신규 프로젝트라 없음 — `guidelines/fastapi/structure.md` 따름
+- **완료 기준**: LESSON-021 toolchain (test + lint + type) 통과 + skeleton 의 정의와 컬럼/타입/제약 100% 일치
+```
+
 규칙:
 - `### Phase N — 이름` 헤더로 Phase를 구분한다
-- 테이블 열 순서: ID, 에이전트, 의존성, 설명, 상태
+- 테이블 열 순서: ID, 에이전트, 의존성, 설명, 상태 (변경 금지 — 파서 고정)
 - 의존성 없으면 `-`
 - 에이전트는 반드시: `backend_coder`, `frontend_coder`, `qa` 중 하나
 - **`reviewer` 태스크는 출력 금지** — Phase 리뷰는 파이프라인이 자동으로 처리함
-- `tasks` 섹션에도 동일 내용 기록
+- 스펙 블록은 Phase 테이블 아래에 연속 배치 (테이블 사이에 끼우지 말 것)
+- 스펙 블록이 없는 태스크는 **미완성 산출물로 간주** — Coder 에스컬레이션 대상
 
 ## 필수 규칙
 
@@ -94,6 +118,50 @@ Phase 2+ — 확장 (MVP 이후)
 
 에이전트는 참조 파일을 읽고 **기존 패턴을 그대로 따른다** (Golden Principle #8 Preserve Style).
 
+### 구체 스펙 복사 필수 — Coder 자율 결정 방지
+
+Orchestrator 의 핵심 책임은 **Architect/Designer 가 skeleton 에 확정한 결정을 태스크 스펙 블록에 복사**하는 것이다.
+Sonnet Coder 는 자율 판단 없이 스펙 그대로 실행한다.
+
+**각 태스크 스펙 블록에 반드시 포함할 항목**:
+
+1. **생성/수정 파일 목록 — 구체 경로**
+   - NEW / MOD / DEL 명시
+   - skeleton 의 아키텍처 결정 (Architect 의 "백엔드 구조/레이아웃", Designer 의 "프론트엔드 구조/레이아웃") 에서 복사
+   - 예: `NEW backend/src/app/api/endpoints/auth.py` (추상 표현 금지)
+
+2. **skeleton 참조 — section ID 명시**
+   - 예: `skeleton 참조: persistence.users, interface.http.auth`
+   - Coder 가 어떤 섹션을 읽어야 하는지 명확히
+
+3. **구현 세부 — skeleton 원문 복사**
+   - DB 태스크: 컬럼/타입/NULL/UNIQUE/FK ondelete/index/timezone=True 전체 복사
+   - API 태스크: method, path, request schema, response schema, 에러 코드 복사
+   - Frontend 태스크: 컴포넌트 파일 경로 + props 타입 + store action 시그니처 복사
+   - **추가 결정 금지** — skeleton 에 없으면 Architect/Designer 에게 에스컬레이션
+
+4. **테스트 파일 경로**
+   - LESSON-021: `done` 마킹 전 test/lint/type 모두 통과해야 하므로 테스트 파일도 태스크에 포함
+   - 예: `NEW backend/tests/api/test_auth.py`
+
+5. **완료 기준**
+   - 기계적 검증: toolchain 통과
+   - 의미적 검증: skeleton spec 과 100% 일치 (컬럼/타입/제약)
+
+**스펙 블록 없는 태스크는 만들지 마라**. 만약 skeleton 에 필요한 정보가 없으면:
+1. 태스크 분해를 중단
+2. Architect (아키텍처/DB/API) 또는 Designer (화면/컴포넌트) 에게 에스컬레이션
+3. skeleton 보완 후 태스크 분해 재개
+
+### 모호함 금지 원칙
+
+| 금지 표현 | 요구 표현 |
+|---|---|
+| "적절한 파일에 구현" | `NEW backend/src/app/models/user.py` |
+| "skeleton 참조" (섹션 ID 없이) | `skeleton 참조: persistence.users (컬럼: id, email, ...)` |
+| "테스트 작성" | `NEW backend/tests/models/test_user.py — users 테이블 제약 검증` |
+| "필요한 설정" | `MOD backend/src/app/core/config.py — DATABASE_URL 추가` |
+
 ### Architect ↔ Designer 중재
 - 둘의 출력을 비교해서 충돌 지점을 식별
 - Designer가 API 변경을 요구하면 Architect에 전달
@@ -113,9 +181,14 @@ Phase 2+ — 확장 (MVP 이후)
 ## 체크리스트 — 출력 전 확인
 - [ ] Phase가 명확히 나뉘어 있는가? (MVP vs 확장)
 - [ ] Phase 1만으로 핵심 사용자 흐름이 완성되는가?
-- [ ] 각 Phase 마지막에 Reviewer Phase 리뷰 태스크가 있는가?
 - [ ] 모든 태스크에 담당 에이전트가 배정되어 있는가?
 - [ ] 의존성 순서가 올바른가? (DB → API → 프론트)
 - [ ] 태스크 크기가 적절한가? (1 PR = 1 태스크)
 - [ ] skeleton의 모든 API/화면이 태스크로 커버되는가?
 - [ ] 병렬 실행 가능한 태스크가 식별되어 있는가?
+- [ ] **Phase 테이블이 정확히 5 컬럼인가? (ID | 에이전트 | 의존성 | 설명 | 상태)**
+- [ ] **모든 태스크에 구현 스펙 블록이 작성되었는가? (생성/수정 파일, skeleton 참조, 구현 세부, 테스트 파일, 완료 기준)**
+- [ ] **각 태스크의 파일 경로가 구체적인가? ("적절한 파일" 금지)**
+- [ ] **skeleton 참조가 section ID 수준까지 명시되었는가?**
+- [ ] **DB/API 태스크에 컬럼/필드/타입이 skeleton 에서 복사되었는가?**
+- [ ] **skeleton 에 정보가 없어서 스펙을 채울 수 없는 태스크는 Architect/Designer 에게 에스컬레이션했는가?**

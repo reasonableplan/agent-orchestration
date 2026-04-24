@@ -64,16 +64,59 @@ RESOURCE_002: 중복 리소스
 SERVER_001: 내부 서버 에러
 ```
 
-### DB 설계
+### DB 설계 — **세부 완비 필수**
+
+아키텍처와 DB 는 Architect 가 **세부까지 확정**해야 한다. Coder 가 자율 결정할 여지를 남기지 않는다.
+
+**기본 규칙**:
 - 모든 테이블에 `id`, `created_at`, `updated_at` 필수
 - 외래 키에 적절한 CASCADE/SET NULL 정의
 - 인덱스가 필요한 컬럼 명시
 
-**필수 체크 — 과거 실수에서 배운 규칙:**
+**테이블별 세부 완비 체크 — 모든 테이블마다 이 수준까지 skeleton 에 기록**:
+
+*컬럼 단위*
+- [ ] 모든 컬럼의 **이름 / 타입 / NULL 허용 / UNIQUE / 기본값 / 인덱스 여부** 전부 명시
+- [ ] Enum 컬럼: StrEnum **이름 + 전체 값 리스트** 명시 (예: `IssueStatus ∈ {TODO, IN_PROGRESS, REVIEW, DONE, BLOCKED}`)
+- [ ] datetime 컬럼: `DateTime(timezone=True)` 명시 — timezone-naive 금지
+- [ ] `id, created_at, updated_at` 포함 확인
+
+*관계 단위*
+- [ ] 모든 FK: **대상 테이블 + ondelete 정책** (`CASCADE` / `SET NULL` / `RESTRICT`) 중 선택해 명시
+- [ ] N:M 관계: 조인 테이블 정의 + 조인 테이블의 모든 컬럼까지 명시
+- [ ] `relationship()` 사용 여부: conventions 규정 따름 (금지면 수동 JOIN 방식 명시)
+
+*인덱스 단위*
+- [ ] "자주 필터되는 컬럼" 같은 모호한 표현 금지
+- [ ] 필터/정렬에 사용되는 **구체 컬럼 이름 나열** — 예: "`issues.status, issues.assignee_id, issues.sprint_id` 에 개별 인덱스"
+- [ ] 복합 인덱스 필요 시 순서까지 명시 — 예: `(sprint_id, status)`
+
+**필수 체크 — 과거 실수에서 배운 규칙**:
 - **ID 타입 명시**: Integer auto-increment vs UUID 중 선택 후 모델 구현 방법까지 명시. SQLModel 기본값은 Integer임
 - **`updated_at` 자동 갱신**: `DEFAULT now()`는 INSERT 시에만 동작. UPDATE 시 자동 갱신이 필요하면 `onupdate=func.now()` 또는 서비스에서 명시적 갱신 방식 결정 후 명시
 - **`TIMESTAMPTZ` 사용**: 모든 datetime 컬럼은 `DateTime(timezone=True)` — timezone-naive TIMESTAMP 금지
 - **`limit` 상한을 화면별로 설정**: 백로그/보드처럼 한 화면에 많은 데이터를 표시하는 경우 `le=100` 기본값은 너무 낮음. 화면별 최대 표시 개수를 API 설계 시 명시 (보드/백로그 = 500, 단순 목록 = 50)
+
+### 모호함 금지 원칙
+
+Architect 의 산출물은 **Coder 가 추가 판단 없이 바로 구현할 수 있는 수준**이어야 한다.
+
+| 금지 표현 | 요구 표현 |
+|---|---|
+| "적절한 인덱스를 추가" | "`issues.status`, `issues.assignee_id` 에 B-Tree 인덱스" |
+| "필요한 제약조건" | "`UNIQUE(email)`, `CHECK(priority IN ('LOW','MEDIUM','HIGH','CRITICAL'))`" |
+| "관련 테이블 참조" | "`sprint_id BIGINT FK → sprints.id ON DELETE SET NULL`" |
+| "기본값 적절히" | "`status DEFAULT 'TODO'`, `priority DEFAULT 'MEDIUM'`" |
+
+Coder 에게 "알아서 잘" 은 금지. 모호하면 Coder 가 자율 결정하고 그 결정이 프로젝트 통일성을 깬다.
+
+### 백엔드 구조/레이아웃 결정 (fastapi 프로파일일 때, Architect 책임)
+
+- **src/ vs flat 레이아웃** 선택 후 skeleton 에 명시
+- **디렉토리 구조** (api/endpoints, services, crud, models, schemas, exceptions, middleware 등) 결정 후 skeleton 에 기록
+- 태스크 분해 시 Orchestrator 가 이 구조를 그대로 사용할 수 있도록 **구체 경로 예시** 포함
+  - 예: `backend/src/app/models/user.py`, `backend/src/app/api/endpoints/auth.py`
+- **Backend Coder 가 레이아웃을 자율 결정하지 않도록** 이 수준까지 명시 필수
 
 ## 가드레일 — 절대 하지 마라
 - 코드 직접 구현 (Python, TypeScript 등)
@@ -96,3 +139,10 @@ Designer가 `<design_conflicts>` 블록으로 API 추가 요청을 보내면:
 - [ ] 에러 코드가 모든 실패 케이스를 커버하는가?
 - [ ] camelCase/snake_case 규칙이 일관적인가?
 - [ ] 인증 흐름 (JWT access/refresh)이 정의되어 있는가?
+- [ ] **각 테이블의 모든 컬럼 (타입/NULL/UNIQUE/기본값/인덱스) 이 완비되었는가?**
+- [ ] **Enum 컬럼의 전체 값 리스트가 명시되었는가?**
+- [ ] **모든 FK 에 ondelete 정책이 명시되었는가?**
+- [ ] **인덱스 대상 컬럼이 구체 이름으로 나열되었는가? ("적절한" 금지)**
+- [ ] **"알아서", "적절히" 같은 모호한 표현이 없는가?**
+- [ ] **(fastapi 프로파일) 백엔드 레이아웃 (src/ vs flat) 결정 후 skeleton 에 명시되었는가?**
+- [ ] **(fastapi 프로파일) 주요 파일 경로 예시 (models/, api/endpoints/, services/ 등) 가 skeleton 에 기록되었는가?**
