@@ -60,7 +60,9 @@ JSON 출력: profile components, skeleton 섹션 채워짐 여부, orchestrator 
 - core.logic 은 다른 컴포넌트와 병렬 가능
 - 테스트 태스크는 구현 태스크에 `depends_on`
 
-**출력 포맷** (orchestrator/CLAUDE.md 의 표):
+**출력 포맷** (orchestrator/CLAUDE.md 와 동일 — 두 부분 모두 필수):
+
+**1) Phase 테이블** (파서 고정, 정확히 5 컬럼):
 ```markdown
 ### Phase 1 — MVP
 | ID | 에이전트 | 의존성 | 설명 | 상태 |
@@ -68,6 +70,28 @@ JSON 출력: profile components, skeleton 섹션 채워짐 여부, orchestrator 
 | T-001 | backend_coder | - | <component_id>: <설명> | 대기 |
 | T-002 | backend_coder | T-001 | ... | 대기 |
 ```
+
+**2) 태스크별 구현 스펙 블록** (모든 태스크마다 필수 — Coder 자율 결정 방지):
+
+```markdown
+### T-001 — DB 모델 (users)
+
+- **담당**: backend_coder
+- **생성/수정 파일** (skeleton 에서 복사):
+  - NEW `backend/src/app/models/user.py`
+  - NEW `backend/tests/models/test_user.py`
+- **skeleton 참조**: `persistence.users`
+- **구현 세부** (Architect 가 skeleton 에 확정한 것 그대로):
+  - `users`: id (PK), email (unique/index/not null), password_hash (not null), ...
+  - FK: 없음
+  - 인덱스: email (unique)
+- **참조 파일** (기존 패턴 복제 대상): `guidelines/backend/structure.md`
+- **완료 기준**: LESSON-021 toolchain (test + lint + type) 통과 + skeleton 과 컬럼/타입/제약 100% 일치
+```
+
+- 스펙 블록은 모든 Phase 테이블 **아래에 연속 배치**
+- skeleton 에 필요한 정보가 없으면 태스크 분해 중단 → Architect/Designer 에게 에스컬레이션 (skeleton 보완 후 재개)
+- 스펙 블록 없는 태스크는 미완성 산출물로 간주
 
 ### 4. tasks.md 작성 + skeleton 의 tasks 섹션 갱신
 ```bash

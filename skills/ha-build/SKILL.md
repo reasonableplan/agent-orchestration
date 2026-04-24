@@ -36,12 +36,27 @@ JSON 출력: 태스크 정보 (agent, depends_on, description, path), 활성 프
 **병렬 모드**: `--parallel T-001,T-002,T-003` — depends_on 없는 태스크만 허용. run.py 가 검증.
 
 ### 2. 단일 모드 — 직접 구현
-- 태스크의 `agent` 에 따라 `<HARNESS_AI_HOME>/backend/agents/<agent>/CLAUDE.md` 읽음
-- 활성 프로파일 본문 읽음 (실제 컨벤션)
-- 관련 skeleton 섹션 (component 와 매핑) 읽음
-- 기존 코드 (해당 컴포넌트의 파일들) Glob/Read 로 확인
+
+**읽기 순서 (엄수)**:
+
+1. **`docs/tasks.md` 의 해당 T-XXX 스펙 블록** — 가장 먼저 Read
+   - 스펙 블록에 있는 "생성/수정 파일", "skeleton 참조", "구현 세부 (컬럼/props 타입/action 시그니처)" 를 **그대로 사용**
+   - 파일 경로/파일명/필드 **자율 변경 금지** — 스펙이 곧 Architect/Designer 의 결정
+   - 스펙 블록이 **없거나 불완전** (생성 파일 미명시, 필드 미명시 등) 하면:
+     - 구현 중단
+     - `python ~/.claude/skills/ha-build/run.py complete --task T-XXX --status blocked --reason "tasks.md 스펙 블록 <구체 항목> 누락"` 실행
+     - 사용자가 Architect/Designer 에 에스컬레이션 후 skeleton/tasks.md 보완 → 재실행
+   - (하위 호환) 구버전 tasks.md 로 스펙 블록 전체가 없는 프로젝트: skeleton + agent CLAUDE.md 로 구현 가능하되, 파일 경로/필드를 직접 결정하기 전에 skeleton 의 `persistence`/`interface.http`/`view.*` 섹션에 명시되어 있는지 확인. 명시 없으면 위 에스컬레이션.
+2. **`<HARNESS_AI_HOME>/backend/agents/<agent>/CLAUDE.md`** — 에이전트 역할 프롬프트 (권위 순서 + 자율 결정 금지 테이블)
+3. **`docs/conventions.md` + `docs/guidelines/`** — 사용자 스타일 최상위 권위
+4. **스펙 블록이 참조하는 skeleton 섹션** (예: `persistence.users`, `interface.http.auth`) — 세부 구현 정보
+5. **활성 프로파일 본문** — 허용 라이브러리 / toolchain
+6. **기존 코드** — 스펙 블록의 "참조 파일" + 동일 레이어 기존 구현 (패턴 복제)
+
+**구현 흐름**:
 - **테스트 먼저 작성** → 실패 확인 → 구현 → 테스트 통과 → 린트
-- 새 파일/수정 파일 모두 사용자 화이트리스트 외 의존성 추가하지 않을 것
+- 스펙 블록의 "구현 세부" 를 코드에 1:1 매핑 (컬럼 1개 누락 금지, 타입 변경 금지, 추가 필드 임의 추가 금지)
+- 새 파일/수정 파일 모두 프로파일 화이트리스트 + conventions 내에서만
 
 ### 3. 병렬 모드 (Agent 분기)
 지정된 태스크들에 대해 각각 Agent tool 호출 (general-purpose subagent):
