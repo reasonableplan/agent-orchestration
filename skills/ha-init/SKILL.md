@@ -55,17 +55,45 @@ AskUserQuestion 으로:
 답변이 짧고 모호하면 (50자 미만) 추가 질문 1개:
 - "주요 기능 또는 사용자가 누구인지 조금 더 알려주세요."
 
+### 3-2. 6축 인터뷰 — project scaling
+
+수집한 6축 답변은 `harness-plan.md` 의 `scale_axes` 에 구조화 저장된다. Phase 2 의 profile 매트릭스가 활성 섹션 결정에 사용 (현재 Phase 1 — 수집만).
+
+**먼저 분기 질문** (AskUserQuestion):
+- 질문: "프로젝트 규모를 빠르게 정할까요?"
+- options:
+  - `S 프리셋 — 개인 사이드 / 주말 프로젝트`
+  - `M 프리셋 — 스타트업 MVP / 팀 프로젝트`
+  - `L 프리셋 — 엔터프라이즈 / 운영 제품`
+  - `6축 직접 답`
+
+**프리셋 매핑**:
+
+| 프리셋 | user_scale | data_sensitivity | team_size | availability | monetization | lifecycle |
+|---|---|---|---|---|---|---|
+| S | small | none | solo | standard | none | mvp |
+| M | medium | (follow-up) | small | standard | (follow-up) | mvp |
+| L | large | (follow-up) | multi | high | (follow-up) | ga |
+
+`(follow-up)` 표시 축은 프리셋만으로 결정하지 말고 한 번 더 묻는다 (사람마다 다름):
+- AskUserQuestion: "민감 데이터를 다루나요?" → `none` / `pii` (이메일·이름·전화) / `payment` (카드·계좌)
+- AskUserQuestion: "수익 모델은?" → `none` / `ads` / `subscription` / `payment`
+
+**6축 직접 답** (사용자가 "직접" 선택 시) — 각 축마다 AskUserQuestion 1회. 옵션 라벨에 짧은 설명을 같이 보여준다:
+- user_scale: "예상 DAU? — tiny <10 / small <100 / medium <10k / large 10k+"
+- data_sensitivity: "민감 데이터? — none / pii / payment"
+- team_size: "팀 규모? — solo / small 2-5명 / multi 6명+"
+- availability: "가용성 요구? — casual: down 수시간 ok / standard: 99% / high: 99.9%+"
+- monetization: "수익 모델? — none / ads / subscription / payment"
+- lifecycle: "라이프사이클 단계? — poc / mvp / ga"
+
 ### 4. Claude 판단 — 다음을 직접 결정한다
 
 **4-1. 프로젝트 타입 한 줄 요약** (예: "LLM 기반 코드 분석 CLI 도구")
 
-**4-2. 규모 결정**
-- `tiny` — 주말 스크립트, 단일 기능
-- `small` — 개인 도구, 핵심 기능 1~3개
-- `medium` — 다중 모듈 MVP
-- `large` — 멀티 서비스 또는 운영 제품
+**4-2. legacy `scale` 매핑**
 
-판단 기준은 사용자 설명 + 감지된 프로파일의 `required_sections` 수.
+`scale` (기존 1축) 은 3-2 의 `user_scale` 값을 그대로 사용한다 (tiny|small|medium|large). 별도 판단 불필요. 6축 입력 자체로 충분.
 
 **4-3. optional 섹션 포함 여부 결정**
 
@@ -97,7 +125,14 @@ ha-init → ha-design → ha-plan → ha-build (반복) → ha-verify → ha-rev
 === /ha-init 제안 ===
 
 프로젝트 타입: <한 줄>
-규모: <tiny|small|medium|large>
+규모(legacy scale): <tiny|small|medium|large>
+6축 (scale_axes):
+  - user_scale:        <tiny|small|medium|large>
+  - data_sensitivity:  <none|pii|payment>
+  - team_size:         <solo|small|multi>
+  - availability:      <casual|standard|high>
+  - monetization:      <none|ads|subscription|payment>
+  - lifecycle:         <poc|mvp|ga>
 활성 프로파일: <id @ path> [, ...]
 
 skeleton 섹션 (총 N개):
@@ -132,8 +167,16 @@ python ~/.claude/skills/ha-init/run.py write \
   --description "<원본 사용자 설명>" \
   --project-type "<한 줄 요약>" \
   --scale "<tiny|small|medium|large>" \
+  --user-scale "<tiny|small|medium|large>" \
+  --data-sensitivity "<none|pii|payment>" \
+  --team-size "<solo|small|multi>" \
+  --availability "<casual|standard|high>" \
+  --monetization "<none|ads|subscription|payment>" \
+  --lifecycle "<poc|mvp|ga>" \
   --gstack-mode manual
 ```
+
+`--scale` 은 `--user-scale` 과 같은 값으로 전달한다 (legacy 호환). 6축은 모두 default 가 있으므로 일부 누락 시 보수적 값으로 채워진다 (none/solo/standard/none/mvp).
 
 기존 `docs/harness-plan.md` 또는 `docs/skeleton.md` 가 있으면 자동 백업 (`.backup-*`).
 

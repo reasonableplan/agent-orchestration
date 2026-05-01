@@ -17,6 +17,7 @@ from src.orchestrator.plan_manager import (
     PlanNotFoundError,
     PlanSchemaError,
     ProfileRef,
+    ScaleAxes,
     SkeletonSpec,
 )
 
@@ -282,3 +283,128 @@ def test_state_order_constant() -> None:
         "reviewed",
         "shipped",
     )
+
+
+# ── ScaleAxes (6축) ──────────────────────────────────────────────────
+
+
+def test_scale_axes_default_values_on_create() -> None:
+    """scale_axes 미지정 시 기본값으로 채워져야."""
+    plan = _sample_plan()
+    assert plan.scale_axes.user_scale == "small"
+    assert plan.scale_axes.data_sensitivity == "none"
+    assert plan.scale_axes.team_size == "solo"
+    assert plan.scale_axes.availability == "standard"
+    assert plan.scale_axes.monetization == "none"
+    assert plan.scale_axes.lifecycle == "mvp"
+
+
+def test_scale_axes_explicit_values_preserved() -> None:
+    pm = PlanManager()
+    axes = ScaleAxes(
+        user_scale="large",
+        data_sensitivity="payment",
+        team_size="multi",
+        availability="high",
+        monetization="subscription",
+        lifecycle="ga",
+    )
+    plan = pm.create(
+        project_name="X",
+        project_type="x",
+        scale="medium",
+        user_description_original="",
+        profiles=[],
+        skeleton_sections=SkeletonSpec((), (), ()),
+        pipeline_steps=[],
+        scale_axes=axes,
+    )
+    assert plan.scale_axes == axes
+
+
+def test_scale_axes_round_trip(tmp_path: Path) -> None:
+    """save/load 후 6축 값이 보존되어야."""
+    pm = PlanManager()
+    axes = ScaleAxes(
+        user_scale="medium",
+        data_sensitivity="pii",
+        team_size="small",
+        availability="high",
+        monetization="ads",
+        lifecycle="poc",
+    )
+    plan = pm.create(
+        project_name="RoundTrip",
+        project_type="webapp",
+        scale="medium",
+        user_description_original="",
+        profiles=[],
+        skeleton_sections=SkeletonSpec((), (), ()),
+        pipeline_steps=[],
+        scale_axes=axes,
+    )
+    path = tmp_path / "harness-plan.md"
+    pm.save(plan, path)
+    loaded = pm.load(path)
+    assert loaded.scale_axes == axes
+
+
+def test_scale_axes_backward_compat_load_without_field(tmp_path: Path) -> None:
+    """scale_axes 가 없는 기존 frontmatter 도 로드 가능 — 모두 default."""
+    path = tmp_path / "harness-plan.md"
+    path.write_text(
+        "---\n"
+        "harness_version: 2\n"
+        "schema_version: 1\n"
+        "project_name: Legacy\n"
+        "project_type: cli\n"
+        "scale: small\n"
+        "profiles: []\n"
+        "skeleton_sections:\n"
+        "  required: []\n"
+        "  optional: []\n"
+        "  included: []\n"
+        "pipeline:\n"
+        "  steps: []\n"
+        "  current_step: init\n"
+        "  completed_steps: []\n"
+        "  skipped_steps: []\n"
+        "  gstack_mode: manual\n"
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+    pm = PlanManager()
+    loaded = pm.load(path)
+    assert loaded.scale_axes.user_scale == "small"
+    assert loaded.scale_axes.data_sensitivity == "none"
+    assert loaded.scale_axes.team_size == "solo"
+    assert loaded.scale_axes.availability == "standard"
+    assert loaded.scale_axes.monetization == "none"
+    assert loaded.scale_axes.lifecycle == "mvp"
+
+
+@pytest.mark.parametrize(
+    "field,bad_value",
+    [
+        ("user_scale", "huge"),
+        ("data_sensitivity", "secret"),
+        ("team_size", "army"),
+        ("availability", "always"),
+        ("monetization", "donation"),
+        ("lifecycle", "alpha"),
+    ],
+)
+def test_scale_axes_invalid_values_raise(field: str, bad_value: str) -> None:
+    """6축 각각의 잘못된 값에 PlanSchemaError."""
+    kwargs = {
+        "user_scale": "small",
+        "data_sensitivity": "none",
+        "team_size": "solo",
+        "availability": "standard",
+        "monetization": "none",
+        "lifecycle": "mvp",
+    }
+    kwargs[field] = bad_value
+    with pytest.raises(PlanSchemaError, match=field):
+        ScaleAxes(**kwargs)

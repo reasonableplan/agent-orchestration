@@ -35,6 +35,14 @@ STATE_ORDER: tuple[str, ...] = (
 )
 ALLOWED_GSTACK_MODES = {"auto", "manual", "prompt"}
 
+# 6-axis project scaling — drives profile-matrix section activation downstream
+ALLOWED_USER_SCALES = {"tiny", "small", "medium", "large"}
+ALLOWED_DATA_SENSITIVITY = {"none", "pii", "payment"}
+ALLOWED_TEAM_SIZES = {"solo", "small", "multi"}
+ALLOWED_AVAILABILITY = {"casual", "standard", "high"}
+ALLOWED_MONETIZATION = {"none", "ads", "subscription", "payment"}
+ALLOWED_LIFECYCLE = {"poc", "mvp", "ga"}
+
 
 # Data models
 
@@ -78,6 +86,38 @@ class Pipeline:
     gstack_mode: str = "manual"
 
 
+@dataclass(frozen=True)
+class ScaleAxes:
+    """Six-axis project scaling profile collected during /ha-init.
+
+    Each axis is independent. Captured here so the downstream profile-matrix
+    can decide which skeleton sections to activate (Phase 2 work).
+    Defaults are the most conservative / common option for each axis so that
+    legacy plans without this block load cleanly.
+    """
+
+    user_scale: str = "small"  # tiny | small | medium | large
+    data_sensitivity: str = "none"  # none | pii | payment
+    team_size: str = "solo"  # solo | small | multi
+    availability: str = "standard"  # casual | standard | high
+    monetization: str = "none"  # none | ads | subscription | payment
+    lifecycle: str = "mvp"  # poc | mvp | ga
+
+    def __post_init__(self) -> None:
+        for name, val, allowed in (
+            ("user_scale", self.user_scale, ALLOWED_USER_SCALES),
+            ("data_sensitivity", self.data_sensitivity, ALLOWED_DATA_SENSITIVITY),
+            ("team_size", self.team_size, ALLOWED_TEAM_SIZES),
+            ("availability", self.availability, ALLOWED_AVAILABILITY),
+            ("monetization", self.monetization, ALLOWED_MONETIZATION),
+            ("lifecycle", self.lifecycle, ALLOWED_LIFECYCLE),
+        ):
+            if val not in allowed:
+                raise PlanSchemaError(
+                    f"scale_axes.{name} must be one of {sorted(allowed)}, got '{val}'"
+                )
+
+
 @dataclass
 class HarnessPlan:
     """Parsed harness-plan.md contents."""
@@ -89,6 +129,7 @@ class HarnessPlan:
     profiles: list[ProfileRef]
     skeleton_sections: SkeletonSpec
     pipeline: Pipeline
+    scale_axes: ScaleAxes = field(default_factory=ScaleAxes)
     verify_history: list[VerifyRecord] = field(default_factory=list)
     backups: list[dict[str, Any]] = field(default_factory=list)
     created_at: str = ""
@@ -169,6 +210,7 @@ class PlanManager:
         skeleton_sections: SkeletonSpec,
         pipeline_steps: list[str],
         gstack_mode: str = "manual",
+        scale_axes: ScaleAxes | None = None,
         body: str = "",
     ) -> HarnessPlan:
         """Create a new plan. Starts at current_step="init"."""
@@ -194,6 +236,7 @@ class PlanManager:
                 skipped_steps=(),
                 gstack_mode=gstack_mode,
             ),
+            scale_axes=scale_axes or ScaleAxes(),
             created_at=now,
             updated_at=now,
             last_activity=now,
@@ -306,6 +349,7 @@ def _dict_to_plan(data: dict[str, Any], body: str) -> HarnessPlan:
         skeleton_raw = data.get("skeleton_sections") or {}
         profiles_raw = data.get("profiles") or []
         verify_raw = data.get("verify_history") or []
+        scale_axes_raw = data.get("scale_axes") or {}
 
         return HarnessPlan(
             project_name=data["project_name"],
@@ -332,6 +376,14 @@ def _dict_to_plan(data: dict[str, Any], body: str) -> HarnessPlan:
                 completed_steps=tuple(pipeline_raw.get("completed_steps") or []),
                 skipped_steps=tuple(pipeline_raw.get("skipped_steps") or []),
                 gstack_mode=pipeline_raw.get("gstack_mode", "manual"),
+            ),
+            scale_axes=ScaleAxes(
+                user_scale=scale_axes_raw.get("user_scale", "small"),
+                data_sensitivity=scale_axes_raw.get("data_sensitivity", "none"),
+                team_size=scale_axes_raw.get("team_size", "solo"),
+                availability=scale_axes_raw.get("availability", "standard"),
+                monetization=scale_axes_raw.get("monetization", "none"),
+                lifecycle=scale_axes_raw.get("lifecycle", "mvp"),
             ),
             verify_history=[
                 VerifyRecord(
@@ -365,6 +417,14 @@ def _plan_to_dict(plan: HarnessPlan) -> dict[str, Any]:
         "updated_at": plan.updated_at,
         "project_type": plan.project_type,
         "scale": plan.scale,
+        "scale_axes": {
+            "user_scale": plan.scale_axes.user_scale,
+            "data_sensitivity": plan.scale_axes.data_sensitivity,
+            "team_size": plan.scale_axes.team_size,
+            "availability": plan.scale_axes.availability,
+            "monetization": plan.scale_axes.monetization,
+            "lifecycle": plan.scale_axes.lifecycle,
+        },
         "user_description_original": plan.user_description_original,
         "profiles": [{"id": p.id, "path": p.path, "status": p.status} for p in plan.profiles],
         "skeleton_sections": {

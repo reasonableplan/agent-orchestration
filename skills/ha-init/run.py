@@ -31,6 +31,7 @@ from utils import HARNESS_HOME  # noqa: E402, F401, I001
 from src.orchestrator.plan_manager import (  # noqa: E402
     PlanManager,
     ProfileRef,
+    ScaleAxes,
     SkeletonSpec,
 )
 from src.orchestrator.profile_loader import ProfileLoader  # noqa: E402
@@ -162,6 +163,14 @@ def cmd_write(args: argparse.Namespace) -> int:
     out_skeleton.write_text(skeleton_text, encoding="utf-8")
 
     # plan 작성
+    axes = ScaleAxes(
+        user_scale=args.user_scale,
+        data_sensitivity=args.data_sensitivity,
+        team_size=args.team_size,
+        availability=args.availability,
+        monetization=args.monetization,
+        lifecycle=args.lifecycle,
+    )
     pm = PlanManager()
     plan = pm.create(
         project_name=project.name,
@@ -174,18 +183,34 @@ def cmd_write(args: argparse.Namespace) -> int:
             optional=tuple(primary.skeleton_sections.optional),
             included=tuple(ordered_included),
         ),
-        pipeline_steps=(args.pipeline.split(",") if args.pipeline else [
-            "ha-init", "ha-design", "ha-plan",
-            "ha-build", "ha-verify", "ha-review",
-        ]),
+        pipeline_steps=(
+            args.pipeline.split(",")
+            if args.pipeline
+            else [
+                "ha-init",
+                "ha-design",
+                "ha-plan",
+                "ha-build",
+                "ha-verify",
+                "ha-review",
+            ]
+        ),
         gstack_mode=args.gstack_mode,
+        scale_axes=axes,
     )
     plan.body = (
         f"# {project.name}\n\n"
         f"## 원본 설명\n{args.description or '(미입력)'}\n\n"
         f"## 판단 근거\n"
         f"- 타입: {args.project_type or '(미지정)'}\n"
-        f"- 규모: {args.scale}\n"
+        f"- 규모(legacy): {args.scale}\n"
+        f"- 6축:\n"
+        f"  - user_scale: {axes.user_scale}\n"
+        f"  - data_sensitivity: {axes.data_sensitivity}\n"
+        f"  - team_size: {axes.team_size}\n"
+        f"  - availability: {axes.availability}\n"
+        f"  - monetization: {axes.monetization}\n"
+        f"  - lifecycle: {axes.lifecycle}\n"
         f"- 활성 프로파일: {', '.join(p.id + '@' + p.path for p in profiles_for_plan)}\n\n"
         f"## 다음 단계\n- /ha-design — skeleton 채우기\n"
     )
@@ -232,6 +257,39 @@ def main() -> int:
         "--scale",
         choices=["tiny", "small", "medium", "large"],
         default="small",
+        help="overall project complexity (legacy axis — keep for compatibility)",
+    )
+    # 6-axis scaling — fed into plan.scale_axes (see ScaleAxes in plan_manager.py)
+    w.add_argument(
+        "--user-scale",
+        choices=["tiny", "small", "medium", "large"],
+        default="small",
+        help="expected DAU bucket",
+    )
+    w.add_argument(
+        "--data-sensitivity",
+        choices=["none", "pii", "payment"],
+        default="none",
+    )
+    w.add_argument(
+        "--team-size",
+        choices=["solo", "small", "multi"],
+        default="solo",
+    )
+    w.add_argument(
+        "--availability",
+        choices=["casual", "standard", "high"],
+        default="standard",
+    )
+    w.add_argument(
+        "--monetization",
+        choices=["none", "ads", "subscription", "payment"],
+        default="none",
+    )
+    w.add_argument(
+        "--lifecycle",
+        choices=["poc", "mvp", "ga"],
+        default="mvp",
     )
     w.add_argument(
         "--gstack-mode",
