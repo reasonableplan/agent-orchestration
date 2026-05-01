@@ -87,6 +87,7 @@ class GeminiCliProvider(BaseProvider):
         # Windows: installer may ship .exe or .cmd wrapper; let shutil.which resolve.
         if sys.platform == "win32":
             import shutil
+
             cli = shutil.which("gemini") or shutil.which("gemini.cmd") or "gemini.exe"
         else:
             cli = "gemini"

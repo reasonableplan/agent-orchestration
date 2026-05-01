@@ -81,6 +81,7 @@ class ClaudeCliProvider(BaseProvider):
         # consult PATHEXT at spawn time.
         if sys.platform == "win32":
             import shutil
+
             cli = shutil.which("claude") or shutil.which("claude.cmd") or "claude.exe"
         else:
             cli = "claude"
