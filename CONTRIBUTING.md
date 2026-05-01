@@ -32,7 +32,7 @@ cd backend
 uv sync
 
 # 4) 검증
-uv run pytest tests/ --rootdir=.   # 357 tests
+uv run pytest tests/ --rootdir=.   # 361 tests
 uv run ruff check src/             # 0 errors
 uv run pyright src/                # 0 errors (타입 체크)
 python ../harness/bin/harness validate  # 프로파일 스키마 검증
@@ -108,7 +108,7 @@ python ../harness/bin/harness validate  # 프로파일 스키마 검증
 
 제출 전 확인:
 
-- [ ] `cd backend && uv run pytest tests/` — 모두 통과 (현재 357개)
+- [ ] `cd backend && uv run pytest tests/` — 모두 통과 (현재 361개)
 - [ ] `uv run ruff check src/` — 0 errors
 - [ ] `uv run pyright src/` — 0 errors
 - [ ] `python harness/bin/harness validate` — 0 errors
@@ -155,7 +155,7 @@ react-vite) 초기 integrity 4개 false positive → 0.
 
 | 레벨 | 명령 | 역할 |
 |---|---|---|
-| pytest | `uv run pytest tests/` | 357개 단위/통합 테스트 |
+| pytest | `uv run pytest tests/` | 361개 단위/통합 테스트 |
 | ruff | `uv run ruff check src/` | 코드 스타일 |
 | pyright | `uv run pyright src/` | 타입 체크 |
 | harness validate | `python harness/bin/harness validate` | 프로파일/스킬 스키마 |

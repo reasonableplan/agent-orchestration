@@ -16,6 +16,34 @@ AI 를 대체하는 게 아니라 **통제하는** 도구다.
 
 ---
 
+## 🎯 실제로 무엇을 잡아내는가
+
+일반 Claude 가 짜는 코드 — 테스트 통과, 린트 통과, 정상 동작:
+
+```python
+_BACKOFF_SECONDS = (1.0, 2.0, 4.0, 8.0)   # 4개 백오프 단계 선언
+max_retries = 2
+for i in range(max_retries):              # 그런데 2개만 사용
+    time.sleep(_BACKOFF_SECONDS[i])
+```
+
+상수는 4개를 선언했는데 루프는 2개만 읽는다. 어떤 테스트도 못 잡는 dead code — 프로그램이 정상 동작하기 때문. 실제 사례 — dogfooding 로그의 [LESSON-018](docs/benchmarks/dogfooding-catches.md).
+
+`/ha-review` 의 `ai-slop` 훅(9개 게이트 중 7번째) 이 잡아낸다:
+
+```json
+{
+  "hook": "ai-slop",
+  "severity": "WARN",
+  "message": "dead 상수 의심 (LESSON-018) — 상수 정의 범위 vs 실제 사용 범위 확인",
+  "snippet": "_BACKOFF_SECONDS = (1.0, 2.0, 4.0, 8.0)\n+max_retries = 2"
+}
+```
+
+LLM 이 자주 만드는데 사람 리뷰에서 놓치는 종류의 실수. **35개 fixture** 에서 9개 게이트가 **precision 100% / recall 100%** — [gate-coverage.md](docs/benchmarks/gate-coverage.md).
+
+---
+
 ## 🚀 30초 사용법
 
 ```bash
@@ -205,7 +233,7 @@ observability · deployment · tasks · notes
 - **패키지**: uv
 - **에이전트 실행**: Claude CLI subprocess (Gemini/로컬 LLM 교체 가능)
 - **상태**: `docs/harness-plan.md` (YAML frontmatter) + `.orchestra/` JSON (DB 없음)
-- **테스트**: pytest **357개** backend + **12개** install 스냅샷 (회귀 0건)
+- **테스트**: pytest **361개** backend + **12개** install 스냅샷 (회귀 0건)
 - **타입 체크**: pyright **0 errors** (`src/` 전수)
 - **게이트 커버리지 (자기 검증)**: 9개 게이트 중 정규식/AST 기반 7개를 35 fixtures (positive/negative) 로 측정 → **precision 100% / recall 100% / accuracy 100%**. 나머지 2개 (test-distribution, skeleton-integrity) 는 filesystem fixture 로 별도 회귀 테스트. 상세 한계/방법: [gate-coverage.md](docs/benchmarks/gate-coverage.md)
 - **성능** (30 iter, LLM 제외): profile 감지 **~5 ms**, skeleton 조립 **<1 ms**, `harness validate` **~150 ms**, `harness integrity` **~104 ms**. [docs/benchmarks/](docs/benchmarks/)
@@ -226,7 +254,7 @@ backend/
   docs/shared-lessons.md      21 LESSONs
   src/orchestrator/           profile_loader / skeleton_assembler /
                               plan_manager / security_hooks / runner
-  tests/                      357 pytest + skills/ 회귀 방지
+  tests/                      361 pytest + skills/ 회귀 방지
 
 docs/
   ARCHITECTURE.md             시스템 구조 30분 이해
@@ -240,7 +268,7 @@ docs/
 ```bash
 cd backend
 uv sync
-uv run pytest tests/ --rootdir=.      # 357 tests
+uv run pytest tests/ --rootdir=.      # 361 tests
 uv run ruff check src/                 # 0 errors
 uv run pyright src/                    # 0 errors (타입 체크)
 uv run python -m src.main              # dashboard 서버 (포트 3002)

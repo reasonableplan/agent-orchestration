@@ -2,7 +2,7 @@
 
 🌐 **English** · [한국어](README.ko.md)
 
-![tests](https://img.shields.io/badge/tests-357%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-361%20passing-brightgreen)
 ![pyright](https://img.shields.io/badge/pyright-0%20errors-brightgreen)
 ![ruff](https://img.shields.io/badge/ruff-clean-brightgreen)
 ![gate coverage](https://img.shields.io/badge/gate%20coverage-100%25-brightgreen)
@@ -20,6 +20,34 @@ HarnessAI closes that loop:
 3. **Nine quality gates** automatically block contract violations — 6 security hooks + ai-slop detection + test distribution + skeleton-integrity.
 
 HarnessAI doesn't replace the AI. It **controls** it.
+
+---
+
+## 🎯 What it actually catches
+
+Plain Claude writes this — tests pass, lint passes, code runs:
+
+```python
+_BACKOFF_SECONDS = (1.0, 2.0, 4.0, 8.0)   # declares 4 backoff steps
+max_retries = 2
+for i in range(max_retries):              # but only consumes 2
+    time.sleep(_BACKOFF_SECONDS[i])
+```
+
+The constant declares 4 elements; the loop reads 2. Dead code that no test catches because the program runs fine. This is real — [LESSON-018](docs/benchmarks/dogfooding-catches.md) from this repo's own dogfooding log.
+
+`/ha-review` flags it via the `ai-slop` hook (the 7th gate):
+
+```json
+{
+  "hook": "ai-slop",
+  "severity": "WARN",
+  "message": "dead 상수 의심 (LESSON-018) — 상수 정의 범위 vs 실제 사용 범위 확인",
+  "snippet": "_BACKOFF_SECONDS = (1.0, 2.0, 4.0, 8.0)\n+max_retries = 2"
+}
+```
+
+This is the kind of error LLMs reliably introduce and humans miss in review. Across **35 fixture cases**, the 9 gates score **precision 100% / recall 100%** — see [gate-coverage.md](docs/benchmarks/gate-coverage.md).
 
 ---
 
@@ -213,7 +241,7 @@ Each agent's rules live in `backend/agents/<role>/CLAUDE.md` — editable.
 - **Package manager**: uv
 - **Agent execution**: Claude CLI subprocess (swappable — Gemini / local LLM)
 - **State**: `docs/harness-plan.md` (YAML frontmatter) + `.orchestra/` JSON (no DB)
-- **Tests**: **357** backend pytest + **12** install-snapshot assertions (0 regressions)
+- **Tests**: **361** backend pytest + **12** install-snapshot assertions (0 regressions)
 - **Type check**: pyright **0 errors** on `src/`
 - **Gate coverage** (self-test): 7 of the 9 gates measured on 35 fixtures (positive / negative) → **precision 100% / recall 100% / accuracy 100%**. The other 2 (test-distribution, skeleton-integrity) are covered by filesystem-level pytest fixtures. Details: [gate-coverage.md](docs/benchmarks/gate-coverage.md)
 - **Latency** (30-iter median, no LLM calls): profile detect **~5 ms**, skeleton assemble **<1 ms**, `harness validate` **~150 ms**, `harness integrity` **~104 ms**. Details: [benchmarks/](docs/benchmarks/)
@@ -234,7 +262,7 @@ backend/
   docs/shared-lessons.md      21 LESSONs
   src/orchestrator/           profile_loader / skeleton_assembler /
                               plan_manager / security_hooks / runner
-  tests/                      357 pytest + skills/ regression guards
+  tests/                      361 pytest + skills/ regression guards
 
 docs/
   ARCHITECTURE.md             System structure — read this first
@@ -250,7 +278,7 @@ docs/
 ```bash
 cd backend
 uv sync
-uv run pytest tests/ --rootdir=.      # 357 tests
+uv run pytest tests/ --rootdir=.      # 361 tests
 uv run ruff check src/                 # 0 errors
 uv run pyright src/                    # 0 errors
 uv run python -m src.main              # dashboard server (port 3002)
