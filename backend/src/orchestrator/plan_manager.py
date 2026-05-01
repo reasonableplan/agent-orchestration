@@ -218,8 +218,10 @@ class PlanManager:
             raise PlanSchemaError(
                 f"gstack_mode must be one of {sorted(ALLOWED_GSTACK_MODES)}, got '{gstack_mode}'"
             )
-        if scale not in {"tiny", "small", "medium", "large"}:
-            raise PlanSchemaError(f"scale must be tiny|small|medium|large, got '{scale}'")
+        if scale not in ALLOWED_USER_SCALES:
+            raise PlanSchemaError(
+                f"scale must be one of {sorted(ALLOWED_USER_SCALES)}, got '{scale}'"
+            )
 
         now = _now_iso()
         return HarnessPlan(

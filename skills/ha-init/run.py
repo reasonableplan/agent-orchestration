@@ -162,7 +162,8 @@ def cmd_write(args: argparse.Namespace) -> int:
         print(f"[backup] 기존 skeleton.md → {backup.name}", file=sys.stderr)
     out_skeleton.write_text(skeleton_text, encoding="utf-8")
 
-    # plan 작성
+    # plan 작성 — legacy `scale` 은 6축의 user_scale 과 강제 동기화 (불일치 방지)
+    args.scale = args.user_scale
     axes = ScaleAxes(
         user_scale=args.user_scale,
         data_sensitivity=args.data_sensitivity,

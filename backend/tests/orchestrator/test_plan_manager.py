@@ -408,3 +408,76 @@ def test_scale_axes_invalid_values_raise(field: str, bad_value: str) -> None:
     kwargs[field] = bad_value
     with pytest.raises(PlanSchemaError, match=field):
         ScaleAxes(**kwargs)
+
+
+def test_scale_axes_load_with_partial_fields_uses_defaults(tmp_path: Path) -> None:
+    """frontmatter 의 scale_axes 가 일부 축만 가지고 있어도 누락분은 default 로 채움."""
+    path = tmp_path / "harness-plan.md"
+    path.write_text(
+        "---\n"
+        "harness_version: 2\n"
+        "schema_version: 1\n"
+        "project_name: Partial\n"
+        "scale: small\n"
+        "scale_axes:\n"
+        "  user_scale: large\n"
+        "  monetization: payment\n"
+        "profiles: []\n"
+        "skeleton_sections:\n"
+        "  required: []\n"
+        "  optional: []\n"
+        "  included: []\n"
+        "pipeline:\n"
+        "  steps: []\n"
+        "  current_step: init\n"
+        "  completed_steps: []\n"
+        "  skipped_steps: []\n"
+        "  gstack_mode: manual\n"
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+    pm = PlanManager()
+    loaded = pm.load(path)
+    # 명시된 두 축은 그대로
+    assert loaded.scale_axes.user_scale == "large"
+    assert loaded.scale_axes.monetization == "payment"
+    # 누락된 네 축은 default
+    assert loaded.scale_axes.data_sensitivity == "none"
+    assert loaded.scale_axes.team_size == "solo"
+    assert loaded.scale_axes.availability == "standard"
+    assert loaded.scale_axes.lifecycle == "mvp"
+
+
+def test_scale_axes_load_with_invalid_value_raises(tmp_path: Path) -> None:
+    """frontmatter 에 invalid scale_axes 값이 저장돼 있으면 load 시 PlanSchemaError.
+
+    수동 편집된 YAML 이 잘못된 값을 가진 채 침묵 통과하면 위험 — strict 거부.
+    """
+    path = tmp_path / "harness-plan.md"
+    path.write_text(
+        "---\n"
+        "harness_version: 2\n"
+        "schema_version: 1\n"
+        "project_name: BadAxis\n"
+        "scale: small\n"
+        "scale_axes:\n"
+        "  user_scale: huge\n"  # invalid
+        "profiles: []\n"
+        "skeleton_sections:\n"
+        "  required: []\n"
+        "  optional: []\n"
+        "  included: []\n"
+        "pipeline:\n"
+        "  steps: []\n"
+        "  current_step: init\n"
+        "  completed_steps: []\n"
+        "  skipped_steps: []\n"
+        "  gstack_mode: manual\n"
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+    pm = PlanManager()
+    with pytest.raises(PlanSchemaError, match="user_scale"):
+        pm.load(path)

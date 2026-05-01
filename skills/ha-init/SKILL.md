@@ -176,7 +176,7 @@ python ~/.claude/skills/ha-init/run.py write \
   --gstack-mode manual
 ```
 
-`--scale` 은 `--user-scale` 과 같은 값으로 전달한다 (legacy 호환). 6축은 모두 default 가 있으므로 일부 누락 시 보수적 값으로 채워진다 (none/solo/standard/none/mvp).
+`--scale` 은 `--user-scale` 과 같은 값으로 전달한다 (legacy 호환). 만약 둘이 다르더라도 `cmd_write` 가 `--user-scale` 값으로 자동 동기화하므로 안전하지만, 혼동 방지를 위해 같은 값 전달을 권장. 6축은 모두 default 가 있으므로 일부 누락 시 보수적 값으로 채워진다 (none/solo/standard/none/mvp).
 
 기존 `docs/harness-plan.md` 또는 `docs/skeleton.md` 가 있으면 자동 백업 (`.backup-*`).
 
