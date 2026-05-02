@@ -34,7 +34,7 @@ from src.orchestrator.plan_manager import (  # noqa: E402
     ScaleAxes,
     SkeletonSpec,
 )
-from src.orchestrator.profile_loader import ProfileLoader  # noqa: E402
+from src.orchestrator.profile_loader import Profile, ProfileLoader  # noqa: E402
 from src.orchestrator.skeleton_assembler import SkeletonAssembler  # noqa: E402
 
 
@@ -106,7 +106,7 @@ def cmd_write(args: argparse.Namespace) -> int:
     # 프로파일 로드 + match 정보 (path 결정용)
     matches = {m.profile.id: m for m in loader.detect()}
     profiles_for_plan: list[ProfileRef] = []
-    profile_objs: list = []  # Profile (for compute_active_sections)
+    profile_objs: list[Profile] = []  # for compute_active_sections
     for pid in profile_ids:
         if pid not in matches:
             # detect 안 된 프로파일도 로드 시도 (사용자가 수동 선택한 경우)
@@ -145,6 +145,8 @@ def cmd_write(args: argparse.Namespace) -> int:
     included_raw = args.included.strip()
     if included_raw in ("", "auto"):
         # auto: 6축 + profile.skeleton_sections → fragment.required_when 평가
+        # utils.py 가 import 시점에 HARNESS_HOME None 이면 sys.exit(3) 하므로 정상
+        # 도달 경로엔 None 이 아님. 이중 가드는 type 안전성 + utils 거동 변경 대비.
         fragments_dir_hint: Path | None = None
         if HARNESS_HOME is not None:
             candidate = HARNESS_HOME / "harness" / "templates" / "skeleton"
