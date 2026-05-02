@@ -46,6 +46,8 @@ LLM 이 자주 만드는데 사람 리뷰에서 놓치는 종류의 실수. **35
 
 ## 🎯 실제로 어떻게 맞춤되는가
 
+![데모 — 5초 재현](docs/demo-adapt.gif)
+
 같은 `python-cli` 프로파일, 두 가지 인터뷰 답변 → 다른 skeleton.
 
 **기본선 — `data_sensitivity=none / lifecycle=poc / availability=casual` → 13 섹션**

@@ -53,6 +53,8 @@ This is the kind of error LLMs reliably introduce and humans miss in review. Acr
 
 ## 🎯 What it actually adapts
 
+![demo — 5 second reproduce](docs/demo-adapt.gif)
+
 Same `python-cli` profile, two interview answers — different skeleton.
 
 **Baseline — `data_sensitivity=none / lifecycle=poc / availability=casual` → 13 sections**
