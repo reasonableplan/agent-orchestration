@@ -9,9 +9,15 @@ import pytest
 
 from src.orchestrator.plan_manager import ScaleAxes
 from src.orchestrator.scale_expression import (
+    And,
+    Atom,
+    Compare,
     EvalContext,
     ExpressionParseError,
+    Membership,
+    Or,
     evaluate,
+    parse,
 )
 
 
@@ -225,3 +231,41 @@ def test_six_axis_names_all_recognized() -> None:
         ("lifecycle", "mvp"),
     ]:
         assert evaluate(f"{axis} == {default}", ctx) is True
+
+
+# ── parse() public API — AST 반환 타입 검증 ──────────────────────────
+
+
+def test_parse_returns_atom_for_always() -> None:
+    node = parse("always")
+    assert isinstance(node, Atom)
+    assert node.token == "always"
+
+
+def test_parse_returns_compare_for_eq() -> None:
+    node = parse("data_sensitivity == pii")
+    assert isinstance(node, Compare)
+    assert node.axis == "data_sensitivity"
+    assert node.value == "pii"
+
+
+def test_parse_returns_membership_for_in() -> None:
+    node = parse("lifecycle in [mvp, ga]")
+    assert isinstance(node, Membership)
+    assert node.axis == "lifecycle"
+    assert node.values == ("mvp", "ga")
+
+
+def test_parse_returns_or_for_or_combinator() -> None:
+    node = parse("data_sensitivity == pii or availability == high")
+    assert isinstance(node, Or)
+    assert isinstance(node.left, Compare)
+    assert isinstance(node.right, Compare)
+
+
+def test_parse_and_binds_tighter_than_or_in_ast() -> None:
+    """`a or b and c` AST: Or(a, And(b, c))"""
+    node = parse("data_sensitivity == pii or availability == high and lifecycle == ga")
+    assert isinstance(node, Or)
+    assert isinstance(node.left, Compare)
+    assert isinstance(node.right, And)
