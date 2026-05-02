@@ -2,7 +2,7 @@
 
 🌐 **English** · [한국어](README.ko.md)
 
-![tests](https://img.shields.io/badge/tests-361%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-420%20passing-brightgreen)
 ![pyright](https://img.shields.io/badge/pyright-0%20errors-brightgreen)
 ![ruff](https://img.shields.io/badge/ruff-clean-brightgreen)
 ![gate coverage](https://img.shields.io/badge/gate%20coverage-100%25-brightgreen)
@@ -15,7 +15,7 @@ Claude / Cursor / Copilot will write working code, but they don't write it **you
 
 HarnessAI closes that loop:
 
-1. **A contract** (`skeleton.md` with 20 standard section IDs) declares what will be built before any code exists.
+1. **A contract** (`skeleton.md` with 30 standard section IDs, **auto-selected by 6-axis project answers**) declares what will be built before any code exists.
 2. **Seven agents** (Architect · Designer · Orchestrator · Backend/Frontend Coder · Reviewer · QA) implement the declaration.
 3. **Nine quality gates** automatically block contract violations — 6 security hooks + ai-slop detection + test distribution + skeleton-integrity.
 
@@ -48,6 +48,23 @@ The constant declares 4 elements; the loop reads 2. Dead code that no test catch
 ```
 
 This is the kind of error LLMs reliably introduce and humans miss in review. Across **35 fixture cases**, the 9 gates score **precision 100% / recall 100%** — see [gate-coverage.md](docs/benchmarks/gate-coverage.md).
+
+---
+
+## 🎯 What it actually adapts
+
+Same project, different answers — different skeleton:
+
+| `/ha-init` interview | "Sensitive data?" | "Lifecycle stage?" | Result |
+|---|---|---|---|
+| Answer A | `pii` / `payment` | `mvp` | `audit_log`, `threat_model`, `test_strategy`, `ci_cd`, `slo` automatically included |
+| Answer B | `none` | `poc` | All five excluded — POC scaffolding stays light |
+
+`/ha-init` captures **6 axes** (`user_scale` / `data_sensitivity` / `team_size` / `availability` / `monetization` / `lifecycle`) → `ProfileLoader.compute_active_sections` evaluates each fragment's `required_when` (e.g. `data_sensitivity in [pii, payment] or availability == high`) → `skeleton.md` only contains sections that fit the project.
+
+Real smoke run, same `python-cli` profile, opposite ends of the matrix:
+- PII + mvp → **18 sections**
+- none + poc → **13 sections**
 
 ---
 
@@ -118,14 +135,18 @@ Five profiles ship by default: `fastapi`, `react-vite`, `python-cli`, `python-li
 
 ### 2. Skeleton — the project contract
 
-Twenty standard section IDs; profiles pick which ones apply:
+Thirty standard section IDs; profiles pick which ones apply, and **6-axis user answers** further narrow to project-fit sections:
 
 ```
 overview · requirements · stack · configuration · errors · auth ·
 persistence · integrations · interface.{http,cli,ipc,sdk} ·
 view.{screens,components} · state.flow · core.logic ·
-observability · deployment · tasks · notes
+observability · deployment · tasks · notes ·
+data_model · threat_model · audit_log · slo · runbook ·
+test_strategy · user_journey · authorization_matrix · ci_cd · external_deps
 ```
+
+The last 10 (data_model … external_deps) are activated by `required_when` expressions evaluated against the 6 axes — see [What it actually adapts](#-what-it-actually-adapts) below.
 
 The section content **is the contract**. `/ha-verify` checks that declared filesystem paths actually exist, and that placeholders (`<pkg>`, `<cmd_a>`) were replaced.
 
@@ -241,7 +262,7 @@ Each agent's rules live in `backend/agents/<role>/CLAUDE.md` — editable.
 - **Package manager**: uv
 - **Agent execution**: Claude CLI subprocess (swappable — Gemini / local LLM)
 - **State**: `docs/harness-plan.md` (YAML frontmatter) + `.orchestra/` JSON (no DB)
-- **Tests**: **361** backend pytest + **12** install-snapshot assertions (0 regressions)
+- **Tests**: **420** backend pytest + **12** install-snapshot assertions (0 regressions)
 - **Type check**: pyright **0 errors** on `src/`
 - **Gate coverage** (self-test): 7 of the 9 gates measured on 35 fixtures (positive / negative) → **precision 100% / recall 100% / accuracy 100%**. The other 2 (test-distribution, skeleton-integrity) are covered by filesystem-level pytest fixtures. Details: [gate-coverage.md](docs/benchmarks/gate-coverage.md)
 - **Latency** (30-iter median, no LLM calls): profile detect **~5 ms**, skeleton assemble **<1 ms**, `harness validate` **~150 ms**, `harness integrity` **~104 ms**. Details: [benchmarks/](docs/benchmarks/)
@@ -262,7 +283,7 @@ backend/
   docs/shared-lessons.md      21 LESSONs
   src/orchestrator/           profile_loader / skeleton_assembler /
                               plan_manager / security_hooks / runner
-  tests/                      361 pytest + skills/ regression guards
+  tests/                      420 pytest + skills/ regression guards
 
 docs/
   ARCHITECTURE.md             System structure — read this first
@@ -278,7 +299,7 @@ docs/
 ```bash
 cd backend
 uv sync
-uv run pytest tests/ --rootdir=.      # 361 tests
+uv run pytest tests/ --rootdir=.      # 420 tests
 uv run ruff check src/                 # 0 errors
 uv run pyright src/                    # 0 errors
 uv run python -m src.main              # dashboard server (port 3002)

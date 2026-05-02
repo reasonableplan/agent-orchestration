@@ -21,7 +21,7 @@ labels: profile-request
 -->
 
 ## skeleton_sections
-<!-- Which of the 20 standard section IDs does this stack need? Any new sections? -->
+<!-- Which of the 30 standard section IDs does this stack need? Any new sections? -->
 
 ## toolchain
 <!--

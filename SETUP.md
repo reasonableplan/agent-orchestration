@@ -245,7 +245,7 @@ HarnessAI v2 는 프로파일 + 재사용 가능한 skeleton 조각 구조.
 **1. 프로파일** (`~/.claude/harness/profiles/<stack>.md`) — 스택별 규칙 전체:
 - 감지 규칙, 컴포넌트, `skeleton_sections.required/optional/order`, `toolchain`, `whitelist`, `lessons_applied`
 
-**2. Skeleton 조각** (`~/.claude/harness/templates/skeleton/<section_id>.md`) — 20개 표준 섹션 템플릿:
+**2. Skeleton 조각** (`~/.claude/harness/templates/skeleton/<section_id>.md`) — 30개 표준 섹션 템플릿:
 - `overview.md`, `interface.http.md`, `core.logic.md`, `persistence.md` 등
 
 **예시 — 새 스택 지원 추가:**
@@ -280,7 +280,7 @@ python ~/.claude/harness/bin/harness validate   # 프로파일 스키마 체크
 [ ] 프로파일 whitelist 업데이트 (라이브러리 변경 시)
 [ ] agents.yaml 모델/타임아웃 조정 (필요 시)
 [ ] harness validate — 27 files, 0 errors
-[ ] cd backend && uv run pytest tests/ — 361 pass
+[ ] cd backend && uv run pytest tests/ — 420 pass
 ```
 
 ---
