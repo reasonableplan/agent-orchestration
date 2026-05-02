@@ -7,6 +7,72 @@ HarnessAI 의 모든 주요 변경 사항. 형식은 [Keep a Changelog](https://
 ## [Unreleased]
 
 ### Added
+- (항목 추가되는대로)
+
+### Changed
+- (항목 추가되는대로)
+
+### Fixed
+- (항목 추가되는대로)
+
+---
+
+## [0.5.0] — 2026-05-02 — "auto-fit skeleton"
+
+Final verification snapshot at release time:
+**pytest 420 pass / ruff 0 / pyright 0 / harness validate 37 files 0 errors / install snapshot 12/12 PASSED / CI green**.
+
+핵심: 사용자가 6축만 답하면 적합한 skeleton 섹션이 자동 활성화. PII+mvp →
+audit_log/threat_model/test_strategy/ci_cd/slo 자동 포함, none+poc → 모두
+정확히 제외 (POC 비계 가볍게 유지). 표준 섹션 20 → 30, backend tests
+357 → 420 (+ 신규 63), skeleton fragment 신규 10개.
+
+### Added
+- **scale_axes 6축 + /ha-init 자동 맞춤 skeleton** (Phase 1+2, `c33197a` →
+  `36a0451`) — 사용자가 6축 (user_scale / data_sensitivity / team_size /
+  availability / monetization / lifecycle) 만 답하면 적합한 fragment 가
+  자동 활성화 → "맞춤 skeleton" 이 실제로 동작.
+  - **Phase 1 — scale_axes 데이터 모델** (`c33197a`, `47212fb`):
+    `ScaleAxes` frozen dataclass + `HarnessPlan.scale_axes` 필드 + frontmatter
+    `scale_axes:` 직렬화. 하위 호환 (legacy frontmatter 도 default 로 로드).
+    `/ha-init` 인터뷰 단계 추가 — S/M/L 프리셋 분기 + 6축 직접 답. argparse
+    6개 인자 + cmd_write 통합. `--scale` 은 `--user-scale` 로 강제 동기화.
+    `_AXIS_NAMES_CLI` ↔ `ScaleAxes` drift 방지 sync 테스트.
+  - **Phase 2-a — 신규 skeleton fragment 10개** (`34359e4`):
+    `data_model` (ERD Mermaid + PII + cascade + 마이그레이션 정책),
+    `threat_model` (STRIDE/OWASP), `audit_log` (compliance), `slo`
+    (p50/p95/p99 + 가용성 + RPS), `runbook` (알람→대응),
+    `test_strategy` (Test pyramid + contract test), `user_journey`
+    (Mermaid sequence/state), `authorization_matrix` (역할×리소스×액션),
+    `ci_cd` (파이프라인+환경+롤백), `external_deps` (3rd-party SLA+폴백+
+    webhook idempotency). 표준 섹션 20 → 30.
+  - **Phase 2-b-1 — scale_expression 파서/평가기** (`077dcdc`, `7ce07a6`):
+    `backend/src/orchestrator/scale_expression.py` 신규 — AST + tokenizer +
+    재귀 하강 parser + evaluator. `data_sensitivity in [pii, payment] or
+    availability == high` 같은 표현식을 ScaleAxes 인스턴스에 평가. 6축 axis
+    이름은 `dataclasses.fields(ScaleAxes)` 동적 추출 → 새 axis 자동 인식.
+    24+5 unit tests (atom/comparison/membership/boolean/precedence/error/
+    parse-AST).
+  - **Phase 2-b-2 — harness validator vocabulary 확장** (`ff6d8d0`):
+    CLI validator 가 6축 표현식 syntax 인정 (atom + or/and/+ 결합 + 정규식
+    sanity). 9 fragment 의 `required_when` 을 description 의 의도 표현식
+    그대로 교체 (`always` → `data_sensitivity in [pii, payment]` 등).
+    괄호 표현식은 명시적 reject (validator 신뢰성 보존, 정식 평가는
+    backend parser).
+  - **Phase 2-b-3 — ProfileLoader 활성 섹션 결정** (`b4952a0`):
+    `compute_active_sections` / `compute_has_keys` / `compute_scale_tokens` /
+    `load_fragments_metadata` 4개 method. `_SECTION_TO_HAS_KEY` (19개
+    매핑) + `_USER_SCALE_TO_TOKENS` (cumulative). 17 unit tests.
+  - **Phase 2-b-4 — /ha-init cmd_write auto-determine** (`b2682e1`,
+    `4e8da81`): `--included` optional. 빈 값/`auto` 면 `compute_active_sections`
+    호출 → 활성 섹션 자동 결정. SkeletonAssembler 의 `harness_dir` 통일
+    (dev mode + install mode 둘 다 안전). `view.components` 의 `+` → `and`
+    (parser 일관). Smoke 검증: PII+mvp → 18 sections / none+poc →
+    13 sections (audit_log/threat_model/test_strategy/ci_cd/slo 자동
+    포함 vs 정확히 제외).
+  - **README 노출** (`36a0451`): "What it actually adapts" 섹션 추가
+    (PII vs none 비교표 + 실 smoke 결과). 30개 섹션 ID 목록 + 6축 anchor
+    링크. test count 361 → 420 동기화 (.md 9개).
 - **결정권 분리 원칙 전면 적용** (`36c026d`, `8dd11f7`) — Architect/Designer 는
   skeleton 에 DB/화면/레이아웃 세부까지 확정, Orchestrator 는 tasks.md 에 태스크별
   구현 스펙 블록 작성, Coder 는 자율 결정 금지 + 미정의 시 `--status blocked`
