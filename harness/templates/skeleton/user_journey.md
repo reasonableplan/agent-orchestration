@@ -1,8 +1,8 @@
 ---
 id: user_journey
 name: 사용자 시나리오 (User Journey)
-required_when: has.users
-description: 페르소나 + 핵심 시나리오 + 화면 전이. view.flow 가 컴포넌트 상태라면 user_journey 는 비즈니스 가치 흐름. Phase 2-b 활성 조건 — lifecycle in [mvp, ga].
+required_when: has.users and lifecycle in [mvp, ga]
+description: 페르소나 + 핵심 시나리오 + 화면 전이. view.flow 가 컴포넌트 상태라면 user_journey 는 비즈니스 가치 흐름.
 ---
 
 ## {{section_number}}. 사용자 시나리오 (User Journey)

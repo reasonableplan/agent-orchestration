@@ -73,6 +73,21 @@ REQUIRED_WHEN_ATOMS = {
     "scale.small_or_larger", "scale.medium_or_larger", "scale.large",
 }
 
+# 6-axis names — KEEP IN SYNC with backend ScaleAxes fields.
+# backend/src/orchestrator/plan_manager.py 의 ScaleAxes 필드와 동기.
+# drift 발생 시 backend pytest test_six_axis_names_all_recognized 실패.
+_AXIS_NAMES_CLI = frozenset({
+    "user_scale", "data_sensitivity", "team_size",
+    "availability", "monetization", "lifecycle",
+})
+
+# 6-axis 표현식 sanity patterns (Phase 2-b)
+# 실제 evaluate 는 backend/scale_expression.py 가 담당. 이 validator 는 syntax 만.
+_AXIS_COMPARE_RE = re.compile(r"^([a-z_][a-z0-9_]*)\s*==\s*([a-z_][a-z0-9_]*)$")
+_AXIS_MEMBERSHIP_RE = re.compile(
+    r"^([a-z_][a-z0-9_]*)\s+in\s+\[\s*([a-z_][a-z0-9_]*(?:\s*,\s*[a-z_][a-z0-9_]*)*)\s*\]$"
+)
+
 # detect 블록 허용 연산자
 DETECT_OPERATORS = {"files", "contains", "contains_any", "not_contains"}
 
@@ -370,14 +385,9 @@ def validate_fragment(path: Path, report: Report) -> None:
     # required_when vocabulary 검증
     rw = data.get("required_when")
     if isinstance(rw, str):
-        # AND 조합은 '+' 로 분리
-        atoms = [a.strip() for a in rw.split("+")]
-        for atom in atoms:
-            if atom not in REQUIRED_WHEN_ATOMS:
-                report.error(
-                    name,
-                    f"required_when='{rw}' — '{atom}' 는 표준 vocabulary 외 (허용: {sorted(REQUIRED_WHEN_ATOMS)})",
-                )
+        err = _validate_required_when_expression(rw)
+        if err:
+            report.error(name, f"required_when='{rw}' — {err}")
 
     # 본문에 {{section_number}} 플레이스홀더 있는지 확인
     try:
@@ -388,6 +398,56 @@ def validate_fragment(path: Path, report: Report) -> None:
     body = FRONTMATTER_RE.sub("", text, count=1).strip()
     if "{{section_number}}" not in body:
         report.warn(name, "본문에 {{section_number}} 플레이스홀더 없음")
+
+
+def _validate_required_when_expression(rw: str) -> str | None:
+    """required_when 표현식 syntax 검증. 통과 시 None, 실패 시 에러 메시지.
+
+    허용 형태:
+      - 표준 atom: always / has.* / scale.*
+      - 6축 비교: <axis> == <value>
+      - 6축 멤버십: <axis> in [<v1>, <v2>, ...]
+      - 위 셋의 or/and/+/괄호 결합
+
+    의도적으로 syntax 만 검증 — 실제 평가는 ProfileLoader (Phase 2-b-3) 가 담당.
+    precedence 검증은 안 함 (사용자 작성 표현식이 단순하다는 가정 + backend
+    scale_expression.py 의 정식 파서가 더 엄격하게 검증).
+    """
+    expr = rw.strip()
+    if not expr:
+        return "빈 표현식"
+    # or / and / + 로 분리 + 괄호 제거 → 각 piece 가 atom 또는 6축 표현식
+    pieces = re.split(r"\s+(?:or|and)\s+|\s*\+\s*", expr)
+    for piece in pieces:
+        atom = piece.strip().strip("()").strip()
+        if not atom:
+            return "빈 atom 발견"
+        if atom in REQUIRED_WHEN_ATOMS:
+            continue
+        m = _AXIS_COMPARE_RE.match(atom)
+        if m:
+            axis = m.group(1)
+            if axis not in _AXIS_NAMES_CLI:
+                return (
+                    f"unknown axis '{axis}' in '{atom}' "
+                    f"(allowed: {sorted(_AXIS_NAMES_CLI)})"
+                )
+            continue
+        m = _AXIS_MEMBERSHIP_RE.match(atom)
+        if m:
+            axis = m.group(1)
+            if axis not in _AXIS_NAMES_CLI:
+                return (
+                    f"unknown axis '{axis}' in '{atom}' "
+                    f"(allowed: {sorted(_AXIS_NAMES_CLI)})"
+                )
+            continue
+        return (
+            f"'{atom}' 은 표준 vocab 외이고 6축 표현식 syntax 도 아님. "
+            f"허용: {sorted(REQUIRED_WHEN_ATOMS)} 또는 '<axis> == <value>' "
+            f"또는 '<axis> in [<v1>, ...]'"
+        )
+    return None
 
 
 # ── 검증: _registry.yaml ──────────────────────────────────────────────

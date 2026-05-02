@@ -1,8 +1,8 @@
 ---
 id: threat_model
 name: 위협 모델 (Threat Model)
-required_when: always
-description: STRIDE / OWASP 위협 시나리오 + 완화 + 수용 위험. auth 가 "어떻게 인증" / threat_model 은 "무엇을 막을지". Phase 2-b 활성 조건 (vocabulary 확장 후) — data_sensitivity in [pii, payment] or availability == high.
+required_when: data_sensitivity in [pii, payment] or availability == high
+description: STRIDE / OWASP 위협 시나리오 + 완화 + 수용 위험. auth 가 "어떻게 인증" / threat_model 은 "무엇을 막을지".
 ---
 
 ## {{section_number}}. 위협 모델 (Threat Model)

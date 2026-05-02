@@ -2,7 +2,7 @@
 id: external_deps
 name: 외부 의존 (External Dependencies)
 required_when: has.external_deps
-description: 3rd-party 서비스 SLA + 폴백 정책 + 계약. 외부 의존 1개 죽으면 우리도 죽는지 / graceful degrade 인지. Phase 2-b 활성 조건 — has.external_deps (변동 없음, 표준 vocab 와 일치).
+description: 3rd-party 서비스 SLA + 폴백 정책 + 계약. 외부 의존 1개 죽으면 우리도 죽는지 / graceful degrade 인지.
 ---
 
 ## {{section_number}}. 외부 의존 (External Dependencies)

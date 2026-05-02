@@ -1,8 +1,8 @@
 ---
 id: test_strategy
 name: 테스트 전략
-required_when: always
-description: Test pyramid + 데이터 전략 + 계약 테스트 + CI 통합. "테스트가 있냐" 가 아니라 "테스트 전략이 있냐". Phase 2-b 활성 조건 — lifecycle in [mvp, ga] (poc 는 비활성).
+required_when: lifecycle in [mvp, ga]
+description: Test pyramid + 데이터 전략 + 계약 테스트 + CI 통합. "테스트가 있냐" 가 아니라 "테스트 전략이 있냐". poc 단계엔 비활성.
 ---
 
 ## {{section_number}}. 테스트 전략

@@ -1,8 +1,8 @@
 ---
 id: runbook
 name: 운영 Runbook
-required_when: has.production_concerns
-description: 알람 → 대응 절차 매트릭스. observability 가 "무엇을 보는가" 라면 runbook 은 "신호가 떴을 때 무엇을 하는가". Phase 2-b 활성 조건 — availability == high.
+required_when: availability == high
+description: 알람 → 대응 절차 매트릭스. observability 가 "무엇을 보는가" 라면 runbook 은 "신호가 떴을 때 무엇을 하는가".
 ---
 
 ## {{section_number}}. 운영 Runbook

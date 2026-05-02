@@ -1,8 +1,8 @@
 ---
 id: audit_log
 name: 감사 로그 (Audit Log)
-required_when: always
-description: 누가 / 언제 / 무엇을 / 결과 — 컴플라이언스 + 보안 사고 조사용. 출시 후 retrofit 거의 불가능. Phase 2-b 활성 조건 — data_sensitivity in [pii, payment].
+required_when: data_sensitivity in [pii, payment]
+description: 누가 / 언제 / 무엇을 / 결과 — 컴플라이언스 + 보안 사고 조사용. 출시 후 retrofit 거의 불가능.
 ---
 
 ## {{section_number}}. 감사 로그 (Audit Log)

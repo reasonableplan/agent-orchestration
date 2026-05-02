@@ -2,7 +2,7 @@
 id: authorization_matrix
 name: 권한 행렬 (Authorization Matrix)
 required_when: has.users
-description: 인증(auth)과 분리된 "역할 × 리소스 × 액션" 행렬. 누가 무엇을 할 수 있는지 명시. 후반 retrofit 비용 가장 큰 영역. Phase 2-b 활성 조건 — data_sensitivity in [pii, payment] or has.auth.
+description: 인증(auth)과 분리된 "역할 × 리소스 × 액션" 행렬. 누가 무엇을 할 수 있는지 명시. 후반 retrofit 비용 가장 큰 영역. 민감 데이터 (pii / payment) 다룰 때 critical.
 ---
 
 ## {{section_number}}. 권한 행렬 (Authorization Matrix)

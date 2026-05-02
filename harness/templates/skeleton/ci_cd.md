@@ -1,8 +1,8 @@
 ---
 id: ci_cd
 name: CI/CD 파이프라인
-required_when: has.production_concerns
-description: 빌드 → 검증 → 배포 단계 + 환경 분리 + 롤백. deployment 가 "어디에" 라면 ci_cd 는 "어떻게 거기까지". Phase 2-b 활성 조건 — lifecycle in [mvp, ga] (poc 는 비활성).
+required_when: lifecycle in [mvp, ga]
+description: 빌드 → 검증 → 배포 단계 + 환경 분리 + 롤백. deployment 가 "어디에" 라면 ci_cd 는 "어떻게 거기까지". poc 단계엔 비활성.
 ---
 
 ## {{section_number}}. CI/CD 파이프라인
