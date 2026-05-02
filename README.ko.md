@@ -71,22 +71,10 @@ integrations · requirements · tasks · notes
 **재현** (clean clone 에서, 에이전트 호출 없이):
 
 ```bash
-cd backend && uv run python -c "
-from pathlib import Path
-from src.orchestrator.profile_loader import ProfileLoader
-from src.orchestrator.plan_manager import ScaleAxes
-
-loader = ProfileLoader(harness_dir=Path('../harness'))
-profile = loader.load('python-cli')
-fragments = Path('../harness/templates/skeleton')
-
-a = ScaleAxes(data_sensitivity='pii', lifecycle='mvp', availability='standard')
-b = ScaleAxes(data_sensitivity='none', lifecycle='poc', availability='casual')
-print('A pii+mvp:', len(loader.compute_active_sections(a, [profile], fragments)))
-print('B none+poc:', len(loader.compute_active_sections(b, [profile], fragments)))
-"
-# A pii+mvp: 18
-# B none+poc: 13
+cd backend && uv run python ../scripts/show_adapt_diff.py
+# A  pii + mvp + standard  ->  18 sections
+# B  none + poc + casual   ->  13 sections
+# diff (A only)            ->  ['audit_log', 'ci_cd', 'slo', 'test_strategy', 'threat_model']
 ```
 
 ---
