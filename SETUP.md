@@ -279,7 +279,7 @@ python ~/.claude/harness/bin/harness validate   # 프로파일 스키마 체크
 [ ] agents/[에이전트]/CLAUDE.md 수정 완료
 [ ] 프로파일 whitelist 업데이트 (라이브러리 변경 시)
 [ ] agents.yaml 모델/타임아웃 조정 (필요 시)
-[ ] harness validate — 27 files, 0 errors
+[ ] harness validate — 37 files, 0 errors
 [ ] cd backend && uv run pytest tests/ — 420 pass
 ```
 

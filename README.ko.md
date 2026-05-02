@@ -302,7 +302,7 @@ install 스크립트 회귀 테스트:
 
 harness 스키마 검증:
 ```bash
-python harness/bin/harness validate           # 27 files, 0 errors
+python harness/bin/harness validate           # 37 files, 0 errors
 python harness/bin/harness integrity --project .   # skeleton ↔ FS 정합성
 ```
 

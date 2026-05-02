@@ -312,7 +312,7 @@ Install-script regression test:
 
 Harness schema validation:
 ```bash
-python harness/bin/harness validate                 # 27 files, 0 errors
+python harness/bin/harness validate                 # 37 files, 0 errors
 python harness/bin/harness integrity --project .    # skeleton ↔ FS integrity
 ```
 
