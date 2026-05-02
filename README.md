@@ -53,18 +53,48 @@ This is the kind of error LLMs reliably introduce and humans miss in review. Acr
 
 ## 🎯 What it actually adapts
 
-Same project, different answers — different skeleton:
+Same `python-cli` profile, two interview answers — different skeleton.
 
-| `/ha-init` interview | "Sensitive data?" | "Lifecycle stage?" | Result |
-|---|---|---|---|
-| Answer A | `pii` / `payment` | `mvp` | `audit_log`, `threat_model`, `test_strategy`, `ci_cd`, `slo` automatically included |
-| Answer B | `none` | `poc` | All five excluded — POC scaffolding stays light |
+**Baseline — `data_sensitivity=none / lifecycle=poc / availability=casual` → 13 sections**
 
-`/ha-init` captures **6 axes** (`user_scale` / `data_sensitivity` / `team_size` / `availability` / `monetization` / `lifecycle`) → `ProfileLoader.compute_active_sections` evaluates each fragment's `required_when` (e.g. `data_sensitivity in [pii, payment] or availability == high`) → `skeleton.md` only contains sections that fit the project.
+```
+overview · stack · errors · interface.cli · core.logic ·
+configuration · persistence · data_model · external_deps ·
+integrations · requirements · tasks · notes
+```
 
-Real smoke run, same `python-cli` profile, opposite ends of the matrix:
-- PII + mvp → **18 sections**
-- none + poc → **13 sections**
+**Bumped — `data_sensitivity=pii / lifecycle=mvp / availability=standard` → 18 sections** (baseline 13 **+** these 5):
+
+| + Section        | `required_when` rule                                                | Why this answer triggered it                  |
+|------------------|---------------------------------------------------------------------|------------------------------------------------|
+| `audit_log`      | `data_sensitivity in [pii, payment]`                                 | sensitive data → compliance log                |
+| `threat_model`   | `data_sensitivity in [pii, payment] or availability == high`         | sensitive data → STRIDE/OWASP                  |
+| `ci_cd`          | `lifecycle in [mvp, ga]`                                             | mvp+ → pipeline / rollback                     |
+| `test_strategy`  | `lifecycle in [mvp, ga]`                                             | mvp+ → test pyramid / contract test            |
+| `slo`            | `user_scale in [medium, large] or availability in [standard, high]`  | even "standard" availability → p50/p95/p99 budgets |
+
+The 6 axes (`user_scale` / `data_sensitivity` / `team_size` / `availability` / `monetization` / `lifecycle`) are captured by `/ha-init`. Each fragment's expression is parsed by [`scale_expression.py`](backend/src/orchestrator/scale_expression.py), evaluated against the axes, and `ProfileLoader.compute_active_sections` returns the section list. The rules live in `harness/templates/skeleton/*.md` frontmatter — full transparency, change them and the loader picks it up.
+
+**Reproduce** (from a fresh clone, no agent calls):
+
+```bash
+cd backend && uv run python -c "
+from pathlib import Path
+from src.orchestrator.profile_loader import ProfileLoader
+from src.orchestrator.plan_manager import ScaleAxes
+
+loader = ProfileLoader(harness_dir=Path('../harness'))
+profile = loader.load('python-cli')
+fragments = Path('../harness/templates/skeleton')
+
+a = ScaleAxes(data_sensitivity='pii', lifecycle='mvp', availability='standard')
+b = ScaleAxes(data_sensitivity='none', lifecycle='poc', availability='casual')
+print('A pii+mvp:', len(loader.compute_active_sections(a, [profile], fragments)))
+print('B none+poc:', len(loader.compute_active_sections(b, [profile], fragments)))
+"
+# A pii+mvp: 18
+# B none+poc: 13
+```
 
 ---
 

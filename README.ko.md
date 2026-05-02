@@ -46,18 +46,48 @@ LLM 이 자주 만드는데 사람 리뷰에서 놓치는 종류의 실수. **35
 
 ## 🎯 실제로 어떻게 맞춤되는가
 
-같은 프로젝트라도 답변에 따라 다른 skeleton:
+같은 `python-cli` 프로파일, 두 가지 인터뷰 답변 → 다른 skeleton.
 
-| `/ha-init` 인터뷰 | "민감 데이터?" | "라이프사이클?" | 결과 |
-|---|---|---|---|
-| 답변 A | `pii` / `payment` | `mvp` | `audit_log`, `threat_model`, `test_strategy`, `ci_cd`, `slo` 자동 포함 |
-| 답변 B | `none` | `poc` | 위 다섯 모두 제외 — POC 비계 가볍게 유지 |
+**기본선 — `data_sensitivity=none / lifecycle=poc / availability=casual` → 13 섹션**
 
-`/ha-init` 가 **6축** (`user_scale` / `data_sensitivity` / `team_size` / `availability` / `monetization` / `lifecycle`) 을 받음 → `ProfileLoader.compute_active_sections` 가 각 fragment 의 `required_when` (예: `data_sensitivity in [pii, payment] or availability == high`) 평가 → `skeleton.md` 에 적합한 섹션만 포함.
+```
+overview · stack · errors · interface.cli · core.logic ·
+configuration · persistence · data_model · external_deps ·
+integrations · requirements · tasks · notes
+```
 
-실제 실행 결과, 같은 `python-cli` 프로파일, 매트릭스 양 끝:
-- PII + mvp → **18 섹션**
-- none + poc → **13 섹션**
+**상향 — `data_sensitivity=pii / lifecycle=mvp / availability=standard` → 18 섹션** (기본선 13 **+** 아래 5):
+
+| + 섹션           | `required_when` 룰                                                  | 이 답변이 활성화한 이유                          |
+|------------------|---------------------------------------------------------------------|--------------------------------------------------|
+| `audit_log`      | `data_sensitivity in [pii, payment]`                                 | 민감 데이터 → compliance 로그                    |
+| `threat_model`   | `data_sensitivity in [pii, payment] or availability == high`         | 민감 데이터 → STRIDE/OWASP                       |
+| `ci_cd`          | `lifecycle in [mvp, ga]`                                             | mvp 이상 → 파이프라인 / 롤백                     |
+| `test_strategy`  | `lifecycle in [mvp, ga]`                                             | mvp 이상 → 테스트 피라미드 / 컨트랙트 테스트     |
+| `slo`            | `user_scale in [medium, large] or availability in [standard, high]`  | "standard" 가용성만 돼도 → p50/p95/p99 예산      |
+
+6축 (`user_scale` / `data_sensitivity` / `team_size` / `availability` / `monetization` / `lifecycle`) 은 `/ha-init` 가 받음. 각 fragment 의 표현식은 [`scale_expression.py`](backend/src/orchestrator/scale_expression.py) 가 파싱 → 6축에 평가 → `ProfileLoader.compute_active_sections` 가 활성 섹션 목록 반환. 룰은 `harness/templates/skeleton/*.md` frontmatter 에 — 완전 투명, 바꾸면 로더가 즉시 반영.
+
+**재현** (clean clone 에서, 에이전트 호출 없이):
+
+```bash
+cd backend && uv run python -c "
+from pathlib import Path
+from src.orchestrator.profile_loader import ProfileLoader
+from src.orchestrator.plan_manager import ScaleAxes
+
+loader = ProfileLoader(harness_dir=Path('../harness'))
+profile = loader.load('python-cli')
+fragments = Path('../harness/templates/skeleton')
+
+a = ScaleAxes(data_sensitivity='pii', lifecycle='mvp', availability='standard')
+b = ScaleAxes(data_sensitivity='none', lifecycle='poc', availability='casual')
+print('A pii+mvp:', len(loader.compute_active_sections(a, [profile], fragments)))
+print('B none+poc:', len(loader.compute_active_sections(b, [profile], fragments)))
+"
+# A pii+mvp: 18
+# B none+poc: 13
+```
 
 ---
 
