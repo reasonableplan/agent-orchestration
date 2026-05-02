@@ -24,9 +24,9 @@ except (AttributeError, OSError):
     pass
 
 # _ha_shared/utils.py 의 HARNESS_HOME 탐지 재사용 — 다른 스킬들과 일관성 유지.
-# import 자체가 side effect (sys.path 에 backend 추가) 이므로 이름 안 써도 제거 금지.
+# import 자체가 side effect (sys.path 에 backend 추가). cmd_write 가 직접 사용도 함.
 sys.path.insert(0, str(Path(__file__).parent.parent / "_ha_shared"))
-from utils import HARNESS_HOME  # noqa: E402, F401, I001
+from utils import HARNESS_HOME  # noqa: E402, I001
 
 from src.orchestrator.plan_manager import (  # noqa: E402
     PlanManager,
@@ -97,12 +97,8 @@ def cmd_write(args: argparse.Namespace) -> int:
         return 1
 
     profile_ids = [p.strip() for p in args.profiles.split(",") if p.strip()]
-    included = [s.strip() for s in args.included.split(",") if s.strip()]
     if not profile_ids:
         print("[FAIL] --profiles 비어 있음", file=sys.stderr)
-        return 2
-    if not included:
-        print("[FAIL] --included 비어 있음", file=sys.stderr)
         return 2
 
     loader = ProfileLoader(project_dir=project)
@@ -110,12 +106,14 @@ def cmd_write(args: argparse.Namespace) -> int:
     # 프로파일 로드 + match 정보 (path 결정용)
     matches = {m.profile.id: m for m in loader.detect()}
     profiles_for_plan: list[ProfileRef] = []
+    profile_objs: list = []  # Profile (for compute_active_sections)
     for pid in profile_ids:
         if pid not in matches:
             # detect 안 된 프로파일도 로드 시도 (사용자가 수동 선택한 경우)
             try:
                 p = loader.load(pid)
                 profiles_for_plan.append(ProfileRef(id=p.id, path=".", status=p.status))
+                profile_objs.append(p)
             except Exception as exc:
                 print(f"[FAIL] 프로파일 '{pid}' 로드 실패: {exc}", file=sys.stderr)
                 return 1
@@ -124,6 +122,7 @@ def cmd_write(args: argparse.Namespace) -> int:
             profiles_for_plan.append(
                 ProfileRef(id=m.profile.id, path=m.path, status=m.profile.status)
             )
+            profile_objs.append(m.profile)
 
     primary_id = profile_ids[0]
     primary = (
@@ -131,7 +130,40 @@ def cmd_write(args: argparse.Namespace) -> int:
     )
     primary_path = profiles_for_plan[0].path
 
-    # skeleton 조립 — 사용자가 included 로 지정한 섹션만, primary 의 order 유지
+    # 6축 — auto-determine 보다 위로 (axes 가 입력 중 하나라서)
+    args.scale = args.user_scale  # legacy `scale` 강제 동기화
+    axes = ScaleAxes(
+        user_scale=args.user_scale,
+        data_sensitivity=args.data_sensitivity,
+        team_size=args.team_size,
+        availability=args.availability,
+        monetization=args.monetization,
+        lifecycle=args.lifecycle,
+    )
+
+    # included 결정 — 명시 vs auto (Phase 2-b-4)
+    included_raw = args.included.strip()
+    if included_raw in ("", "auto"):
+        # auto: 6축 + profile.skeleton_sections → fragment.required_when 평가
+        fragments_dir_hint: Path | None = None
+        if HARNESS_HOME is not None:
+            candidate = HARNESS_HOME / "harness" / "templates" / "skeleton"
+            if candidate.exists():
+                fragments_dir_hint = candidate
+        included = loader.compute_active_sections(axes, profile_objs, fragments_dir_hint)
+        if not included:
+            print(
+                "[FAIL] auto-determine 결과 활성 섹션 0 — 6축 답변 또는 profile 확인 필요",
+                file=sys.stderr,
+            )
+            return 1
+    else:
+        included = [s.strip() for s in included_raw.split(",") if s.strip()]
+        if not included:
+            print("[FAIL] --included 빈 결과", file=sys.stderr)
+            return 2
+
+    # skeleton 조립 — included 를 primary 의 order 에 따라 정렬 + 외부는 끝에 append
     primary_order = list(primary.skeleton_sections.order)
     seen: set[str] = set()
     ordered_included: list[str] = []
@@ -147,7 +179,12 @@ def cmd_write(args: argparse.Namespace) -> int:
     docs_dir = _docs_dir(project, primary_path)
     docs_dir.mkdir(parents=True, exist_ok=True)
 
-    assembler = SkeletonAssembler(project_dir=project)
+    # SkeletonAssembler 의 harness_dir 을 HARNESS_HOME/harness 로 명시 — ProfileLoader
+    # 가 본 fragments_dir 과 일치시켜 신규 fragment (Phase 2-a) 도 dev 모드에서 로드.
+    assembler_harness_dir = (HARNESS_HOME / "harness") if HARNESS_HOME else None
+    assembler = SkeletonAssembler(
+        harness_dir=assembler_harness_dir, project_dir=project
+    )
     title = f"Project Skeleton — {project.name}"
     try:
         skeleton_text = assembler.assemble(ordered_included, title=title)
@@ -162,16 +199,7 @@ def cmd_write(args: argparse.Namespace) -> int:
         print(f"[backup] 기존 skeleton.md → {backup.name}", file=sys.stderr)
     out_skeleton.write_text(skeleton_text, encoding="utf-8")
 
-    # plan 작성 — legacy `scale` 은 6축의 user_scale 과 강제 동기화 (불일치 방지)
-    args.scale = args.user_scale
-    axes = ScaleAxes(
-        user_scale=args.user_scale,
-        data_sensitivity=args.data_sensitivity,
-        team_size=args.team_size,
-        availability=args.availability,
-        monetization=args.monetization,
-        lifecycle=args.lifecycle,
-    )
+    # plan 작성 (axes 는 위에서 이미 만들어짐)
     pm = PlanManager()
     plan = pm.create(
         project_name=project.name,
@@ -251,7 +279,14 @@ def main() -> int:
     w = sub.add_parser("write", help="harness-plan.md + skeleton.md 작성")
     w.add_argument("--project", required=True, help="프로젝트 루트")
     w.add_argument("--profiles", required=True, help="콤마 구분 프로파일 ID")
-    w.add_argument("--included", required=True, help="콤마 구분 섹션 ID (포함할 것)")
+    w.add_argument(
+        "--included",
+        default="",
+        help=(
+            "콤마 구분 섹션 ID (포함할 것). 빈 값 또는 'auto' 면 6축 + profile components "
+            "로부터 ProfileLoader.compute_active_sections 가 자동 결정 (Phase 2-b-4)."
+        ),
+    )
     w.add_argument("--description", default="", help="사용자 설명 원문")
     w.add_argument("--project-type", default="", help="프로젝트 타입 한 줄 요약")
     w.add_argument(

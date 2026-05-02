@@ -1,7 +1,7 @@
 ---
 id: view.components
 name: 컴포넌트 트리
-required_when: has.ui + scale.small_or_larger
+required_when: has.ui and scale.small_or_larger
 description: App 컴포넌트 계층, 공용 컴포넌트, 디자인 가이드
 ---
 

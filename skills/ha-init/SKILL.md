@@ -135,9 +135,11 @@ ha-init → ha-design → ha-plan → ha-build (반복) → ha-verify → ha-rev
   - lifecycle:         <poc|mvp|ga>
 활성 프로파일: <id @ path> [, ...]
 
-skeleton 섹션 (총 N개):
-  required (M):  <목록>
-  optional (K):  <목록>
+skeleton 섹션 (총 N개, auto-determined by 6축 + profile):
+  active (N):    <목록 — ProfileLoader.compute_active_sections 결과>
+  (참고)
+  required (M):  <profile 의 declared required>
+  optional (K):  <profile 의 declared optional>
 
 파이프라인:
   1. /ha-init     ✅ (방금)
@@ -163,10 +165,8 @@ AskUserQuestion 으로 승인:
 python ~/.claude/skills/ha-init/run.py write \
   --project "$PROJECT_ROOT" \
   --profiles "<comma-separated profile IDs>" \
-  --included "<comma-separated section IDs in order>" \
   --description "<원본 사용자 설명>" \
   --project-type "<한 줄 요약>" \
-  --scale "<tiny|small|medium|large>" \
   --user-scale "<tiny|small|medium|large>" \
   --data-sensitivity "<none|pii|payment>" \
   --team-size "<solo|small|multi>" \
@@ -176,7 +176,9 @@ python ~/.claude/skills/ha-init/run.py write \
   --gstack-mode manual
 ```
 
-`--scale` 은 `--user-scale` 과 같은 값으로 전달한다 (legacy 호환). 만약 둘이 다르더라도 `cmd_write` 가 `--user-scale` 값으로 자동 동기화하므로 안전하지만, 혼동 방지를 위해 같은 값 전달을 권장. 6축은 모두 default 가 있으므로 일부 누락 시 보수적 값으로 채워진다 (none/solo/standard/none/mvp).
+**Phase 2-b-4 부터 `--included` 는 optional**. 미지정 시 6축 + profile.skeleton_sections 로부터 `ProfileLoader.compute_active_sections` 가 활성 섹션을 자동 결정 (예: PII + mvp → audit_log/threat_model/test_strategy/ci_cd 등 자동 포함). 명시 시 (`--included "overview,stack,..."`) 그대로 사용 (override).
+
+`--scale` 도 omit 가능 (`--user-scale` 값으로 자동 동기화). 6축 default: none/solo/standard/none/mvp. 명시적 6축 전달 권장 — 보수적 default 라 활성 섹션 부족 가능.
 
 기존 `docs/harness-plan.md` 또는 `docs/skeleton.md` 가 있으면 자동 백업 (`.backup-*`).
 
