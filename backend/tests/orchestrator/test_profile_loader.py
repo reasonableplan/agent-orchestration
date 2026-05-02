@@ -10,10 +10,15 @@ from textwrap import dedent
 
 import pytest
 
+from src.orchestrator.plan_manager import ScaleAxes
 from src.orchestrator.profile_loader import (
     CyclicInheritanceError,
+    Profile,
     ProfileLoader,
     ProfileNotFoundError,
+    SkeletonSections,
+    Toolchain,
+    Whitelist,
 )
 
 
@@ -409,3 +414,215 @@ def test_detect_not_contains_excludes(tmp_path: Path) -> None:
     (project / "pyproject.toml").write_text("just-a-lib", encoding="utf-8")
     loader2 = ProfileLoader(harness_dir=harness, project_dir=project)
     assert len(loader2.detect()) == 1
+
+
+# ── Phase 2-b-3: 6축 답변 → 활성 섹션 결정 ─────────────────────────
+
+
+def _make_profile(
+    *,
+    profile_id: str = "test",
+    required: list[str] | None = None,
+    optional: list[str] | None = None,
+) -> Profile:
+    """Profile 객체 직접 생성 — compute_has_keys 등 단위 테스트용."""
+    req = tuple(required or [])
+    opt = tuple(optional or [])
+    return Profile(
+        id=profile_id,
+        name=profile_id.title(),
+        status="confirmed",
+        version=1,
+        extends=None,
+        paths=(),
+        detect={},
+        components=(),
+        skeleton_sections=SkeletonSections(required=req, optional=opt, order=req + opt),
+        toolchain=Toolchain(install=None, test=None, lint=None, type=None, format=None),
+        whitelist=Whitelist(runtime=(), dev=(), prefix_allowed=()),
+        file_structure="",
+        gstack_mode="manual",
+        gstack_recommended={},
+        lessons_applied=(),
+        body="",
+        raw={},
+    )
+
+
+def _write_fragment(
+    dir_: Path,
+    frag_id: str,
+    required_when: str,
+    *,
+    name: str | None = None,
+) -> Path:
+    """Fragment .md 파일 작성 — load_fragments_metadata 테스트용."""
+    dir_.mkdir(parents=True, exist_ok=True)
+    body = dedent(f"""\
+        ---
+        id: {frag_id}
+        name: {name or frag_id}
+        required_when: {required_when}
+        description: test fragment
+        ---
+
+        ## {{{{section_number}}}}. {name or frag_id}
+        """)
+    path = dir_ / f"{frag_id}.md"
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+# compute_has_keys
+
+
+def test_compute_has_keys_persistence_to_storage() -> None:
+    profile = _make_profile(required=["persistence"])
+    loader = ProfileLoader()
+    assert loader.compute_has_keys([profile]) == frozenset({"storage"})
+
+
+def test_compute_has_keys_auth_to_users() -> None:
+    profile = _make_profile(required=["auth"])
+    loader = ProfileLoader()
+    assert loader.compute_has_keys([profile]) == frozenset({"users"})
+
+
+def test_compute_has_keys_multi_profile_union() -> None:
+    p1 = _make_profile(profile_id="api", required=["interface.http", "persistence"])
+    p2 = _make_profile(profile_id="cli", required=["interface.cli", "configuration"])
+    loader = ProfileLoader()
+    assert loader.compute_has_keys([p1, p2]) == frozenset(
+        {"http_server", "storage", "cli_entrypoint", "env_config"}
+    )
+
+
+def test_compute_has_keys_unmapped_section_ignored() -> None:
+    """매핑에 없는 섹션은 silently skip — has 키 추가 안 됨."""
+    profile = _make_profile(required=["overview", "stack", "tasks", "notes"])
+    loader = ProfileLoader()
+    assert loader.compute_has_keys([profile]) == frozenset()
+
+
+def test_compute_has_keys_optional_sections_also_count() -> None:
+    profile = _make_profile(optional=["persistence", "auth"])
+    loader = ProfileLoader()
+    assert loader.compute_has_keys([profile]) == frozenset({"storage", "users"})
+
+
+# compute_scale_tokens
+
+
+def test_compute_scale_tokens_tiny_empty() -> None:
+    loader = ProfileLoader()
+    axes = ScaleAxes(user_scale="tiny")
+    assert loader.compute_scale_tokens(axes) == frozenset()
+
+
+def test_compute_scale_tokens_small() -> None:
+    loader = ProfileLoader()
+    axes = ScaleAxes(user_scale="small")
+    assert loader.compute_scale_tokens(axes) == frozenset({"small_or_larger"})
+
+
+def test_compute_scale_tokens_medium_includes_small() -> None:
+    loader = ProfileLoader()
+    axes = ScaleAxes(user_scale="medium")
+    assert loader.compute_scale_tokens(axes) == frozenset({"small_or_larger", "medium_or_larger"})
+
+
+def test_compute_scale_tokens_large_includes_all() -> None:
+    loader = ProfileLoader()
+    axes = ScaleAxes(user_scale="large")
+    assert loader.compute_scale_tokens(axes) == frozenset(
+        {"small_or_larger", "medium_or_larger", "large"}
+    )
+
+
+# load_fragments_metadata
+
+
+def test_load_fragments_metadata_basic(tmp_path: Path) -> None:
+    fragments_dir = tmp_path / "skeleton"
+    _write_fragment(fragments_dir, "alpha", "always")
+    _write_fragment(fragments_dir, "beta", "has.storage")
+    loader = ProfileLoader()
+    meta = loader.load_fragments_metadata(fragments_dir)
+    assert meta == {"alpha": "always", "beta": "has.storage"}
+
+
+def test_load_fragments_metadata_skips_files_without_frontmatter(tmp_path: Path) -> None:
+    fragments_dir = tmp_path / "skeleton"
+    fragments_dir.mkdir()
+    (fragments_dir / "no_fm.md").write_text("# Just a heading\n", encoding="utf-8")
+    _write_fragment(fragments_dir, "good", "always")
+    loader = ProfileLoader()
+    meta = loader.load_fragments_metadata(fragments_dir)
+    assert meta == {"good": "always"}
+
+
+def test_load_fragments_metadata_returns_empty_when_dir_missing(tmp_path: Path) -> None:
+    loader = ProfileLoader()
+    assert loader.load_fragments_metadata(tmp_path / "nonexistent") == {}
+
+
+# compute_active_sections
+
+
+def test_compute_active_sections_pii_activates_audit_log(tmp_path: Path) -> None:
+    fragments_dir = tmp_path / "skeleton"
+    _write_fragment(fragments_dir, "audit_log", "data_sensitivity in [pii, payment]")
+    _write_fragment(fragments_dir, "overview", "always")
+    loader = ProfileLoader()
+    profile = _make_profile()
+    axes = ScaleAxes(data_sensitivity="pii")
+    active = loader.compute_active_sections(axes, [profile], fragments_dir)
+    assert "audit_log" in active
+    assert "overview" in active
+
+
+def test_compute_active_sections_no_pii_excludes_audit_log(tmp_path: Path) -> None:
+    fragments_dir = tmp_path / "skeleton"
+    _write_fragment(fragments_dir, "audit_log", "data_sensitivity in [pii, payment]")
+    _write_fragment(fragments_dir, "overview", "always")
+    loader = ProfileLoader()
+    profile = _make_profile()
+    axes = ScaleAxes(data_sensitivity="none")
+    active = loader.compute_active_sections(axes, [profile], fragments_dir)
+    assert "audit_log" not in active
+    assert "overview" in active
+
+
+def test_compute_active_sections_lifecycle_poc_excludes_test_strategy(
+    tmp_path: Path,
+) -> None:
+    fragments_dir = tmp_path / "skeleton"
+    _write_fragment(fragments_dir, "test_strategy", "lifecycle in [mvp, ga]")
+    _write_fragment(fragments_dir, "overview", "always")
+    loader = ProfileLoader()
+    axes = ScaleAxes(lifecycle="poc")
+    active = loader.compute_active_sections(axes, [_make_profile()], fragments_dir)
+    assert "test_strategy" not in active
+    assert "overview" in active
+
+
+def test_compute_active_sections_has_keys_from_profile(tmp_path: Path) -> None:
+    """profile 의 declared persistence → has.storage atom 활성."""
+    fragments_dir = tmp_path / "skeleton"
+    _write_fragment(fragments_dir, "data_model", "has.storage")
+    profile = _make_profile(required=["persistence"])
+    loader = ProfileLoader()
+    axes = ScaleAxes()
+    active = loader.compute_active_sections(axes, [profile], fragments_dir)
+    assert active == ["data_model"]
+
+
+def test_compute_active_sections_invalid_expression_conservative_activate(
+    tmp_path: Path,
+) -> None:
+    """invalid required_when → 보수적 활성화 (False positive)."""
+    fragments_dir = tmp_path / "skeleton"
+    _write_fragment(fragments_dir, "broken", "this is not a valid expression !!")
+    loader = ProfileLoader()
+    active = loader.compute_active_sections(ScaleAxes(), [_make_profile()], fragments_dir)
+    assert "broken" in active
